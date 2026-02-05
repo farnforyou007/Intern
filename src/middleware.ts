@@ -21,7 +21,14 @@ export async function middleware(request: NextRequest) {
                     response = NextResponse.next({
                         request: { headers: request.headers },
                     })
-                    response.cookies.set({ name, value, ...options })
+                    // เพิ่มการตั้งค่าเพื่อความปลอดภัยบน HTTPS
+                    response.cookies.set({ 
+                        name, 
+                        value, 
+                        ...options,
+                        sameSite: 'lax',
+                        secure: true // บังคับใช้บน Vercel (HTTPS)
+                    })
                 },
                 remove(name: string, options: CookieOptions) {
                     request.cookies.set({ name, value: '', ...options })
@@ -34,43 +41,15 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-    // ใช้ getUser() เพื่อความปลอดภัยและเสถียรที่สุดในการเช็ก Server-side
     const { data: { user } } = await supabase.auth.getUser()
     const { pathname } = request.nextUrl
 
-    if (user) {
-    // ดึงข้อมูล role จากตารางที่เราสร้างไว้
-    const { data: profile } = await supabase
-        .from('supervisors')
-        .select('role') // สมมติว่ามีคอลัมน์ role
-        .eq('id', user.id)
-        .single()
-
-    // ถ้าจะเข้าหน้า /admin แต่ role ไม่ใช่ admin ให้เตะออก
-    if (pathname.startsWith('/admin') && profile?.role !== 'admin') {
-        return NextResponse.redirect(new URL('/unauthorized', request.url))
-    }
-}
-
-    // --- 1. ป้องกันหน้า Admin ---
+    // ตรวจสอบสิทธิ์การเข้าถึงโฟลเดอร์ต่างๆ
     if (pathname.startsWith('/admin') && !user) {
-        return NextResponse.redirect(new URL('/auth/login', request.url))
+        return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // --- 2. ป้องกันหน้า Teacher (อาจารย์) ---
-    if (pathname.startsWith('/teacher') && !user) {
-        return NextResponse.redirect(new URL('/auth/login', request.url))
-    }
-
-    // --- 3. ป้องกันหน้า Supervisor (พี่เลี้ยง) ---
-    // ยกเว้นหน้า /supervisor/register ที่ให้คนทั่วไปเข้าถึงได้เพื่อลงทะเบียน
-    if (pathname.startsWith('/supervisor') && !pathname.includes('/register') && !user) {
-        return NextResponse.redirect(new URL('/auth/login', request.url))
-    }
-
-    // --- 4. ถ้าล็อกอินแล้ว ห้ามกลับไปหน้า Login ---
-    if (user && pathname === '/auth/login') {
-        // เช็กสิทธิ์เบื้องต้นเพื่อส่งไปหน้าเริ่มต้นที่ถูกต้อง (ในอนาคตปรับตาม metadata ของ user ได้)
+    if (user && pathname === '/login') {
         return NextResponse.redirect(new URL('/admin/supervisors', request.url))
     }
 
@@ -78,10 +57,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: [
-        /*
-         * ครอบคลุมทุกหน้ายกเว้นไฟล์ static, รูปภาพ และ Webhook API
-         */
-        '/((?!_next/static|_next/image|favicon.ico|api).*)',
-    ],
+    matcher: ['/((?!_next/static|_next/image|favicon.ico|api).*)'],
 }

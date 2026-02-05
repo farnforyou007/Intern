@@ -1,6 +1,6 @@
 "use client"
 import { useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr' // เปลี่ยนมาใช้ตัวนี้
 import { useRouter } from 'next/navigation'
 import Swal from 'sweetalert2'
 
@@ -10,12 +10,12 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false)
     const router = useRouter()
 
-    // เรียกใช้ Supabase Client
-    const supabase = createClient(
+    // สร้าง Client สำหรับ Browser โดยเฉพาะ
+    const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-    // แก้ไขส่วน handleLogin ใน page.tsx
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
@@ -31,7 +31,6 @@ export default function LoginPage() {
             return
         }
 
-        // ล็อกอินสำเร็จ
         Swal.fire({
             title: 'สำเร็จ',
             text: 'กำลังเข้าสู่ระบบแอดมิน...',
@@ -40,9 +39,13 @@ export default function LoginPage() {
             showConfirmButton: false
         })
 
-        // บังคับรีโหลดหน้าไปยังหน้าจัดการพี่เลี้ยง 
-        // วิธีนี้จะช่วยให้ Middleware เห็น Cookie แน่นอน
-        window.location.assign('/admin/supervisors')
+        // ใช้ router.refresh ก่อนเพื่อให้ Server รับรู้ Cookie ใหม่
+        router.refresh()
+        
+        // แนะนำใช้ window.location.href สำหรับ Vercel เพื่อความแน่นอนในการบันทึก Cookie
+        setTimeout(() => {
+            window.location.href = '/admin/supervisors'
+        }, 500)
     }
 
     return (
