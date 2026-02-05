@@ -1,6 +1,4 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { createClient } from '@supabase/supabase-js'
-
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
@@ -9,20 +7,6 @@ export async function middleware(request: NextRequest) {
             headers: request.headers,
         },
     })
-
-     const supabaseC = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
-    const { data: { session } } = await supabaseC.auth.getSession()
-
-    // ถ้าไม่มี session และไม่ใช่หน้า login ให้เด้งไป login
-    if (!session && request.nextUrl.pathname.startsWith('/admin')) {
-        const redirectUrl = request.nextUrl.clone()
-        redirectUrl.pathname = '/login'
-        return NextResponse.redirect(redirectUrl)
-    }
 
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,18 +19,14 @@ export async function middleware(request: NextRequest) {
                 set(name: string, value: string, options: CookieOptions) {
                     request.cookies.set({ name, value, ...options })
                     response = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
+                        request: { headers: request.headers },
                     })
                     response.cookies.set({ name, value, ...options })
                 },
                 remove(name: string, options: CookieOptions) {
                     request.cookies.set({ name, value: '', ...options })
                     response = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
+                        request: { headers: request.headers },
                     })
                     response.cookies.set({ name, value: '', ...options })
                 },
@@ -54,18 +34,43 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-
-    // ตรวจสอบ Session
+    // ใช้ getUser() เพื่อความปลอดภัยและเสถียรที่สุดในการเช็ก Server-side
     const { data: { user } } = await supabase.auth.getUser()
+    const { pathname } = request.nextUrl
 
-    // --- Logic การป้องกันหน้า Admin ---
-    // หากพยายามเข้าหน้า /admin แต่ไม่ได้ล็อกอิน ให้ส่งไปหน้า /login
-    if (!user && request.nextUrl.pathname.startsWith('/admin')) {
+    if (user) {
+    // ดึงข้อมูล role จากตารางที่เราสร้างไว้
+    const { data: profile } = await supabase
+        .from('supervisors')
+        .select('role') // สมมติว่ามีคอลัมน์ role
+        .eq('id', user.id)
+        .single()
+
+    // ถ้าจะเข้าหน้า /admin แต่ role ไม่ใช่ admin ให้เตะออก
+    if (pathname.startsWith('/admin') && profile?.role !== 'admin') {
+        return NextResponse.redirect(new URL('/unauthorized', request.url))
+    }
+}
+
+    // --- 1. ป้องกันหน้า Admin ---
+    if (pathname.startsWith('/admin') && !user) {
         return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // หากล็อกอินแล้วแต่พยายามเข้าหน้า /login ให้ส่งไปหน้า /admin แทน
-    if (user && request.nextUrl.pathname === '/login') {
+    // --- 2. ป้องกันหน้า Teacher (อาจารย์) ---
+    if (pathname.startsWith('/teacher') && !user) {
+        return NextResponse.redirect(new URL('/login', request.url))
+    }
+
+    // --- 3. ป้องกันหน้า Supervisor (พี่เลี้ยง) ---
+    // ยกเว้นหน้า /supervisor/register ที่ให้คนทั่วไปเข้าถึงได้เพื่อลงทะเบียน
+    if (pathname.startsWith('/supervisor') && !pathname.includes('/register') && !user) {
+        return NextResponse.redirect(new URL('/login', request.url))
+    }
+
+    // --- 4. ถ้าล็อกอินแล้ว ห้ามกลับไปหน้า Login ---
+    if (user && pathname === '/login') {
+        // เช็กสิทธิ์เบื้องต้นเพื่อส่งไปหน้าเริ่มต้นที่ถูกต้อง (ในอนาคตปรับตาม metadata ของ user ได้)
         return NextResponse.redirect(new URL('/admin/supervisors', request.url))
     }
 
@@ -75,13 +80,8 @@ export async function middleware(request: NextRequest) {
 export const config = {
     matcher: [
         /*
-         * Match all request paths except for the ones starting with:
-         * - _next/static (static files)
-         * - _next/image (image optimization files)
-         * - favicon.ico (favicon file)
-         * - api (API routes - เว้นไว้ให้ Webhook ของ LINE เข้าได้)
+         * ครอบคลุมทุกหน้ายกเว้นไฟล์ static, รูปภาพ และ Webhook API
          */
         '/((?!_next/static|_next/image|favicon.ico|api).*)',
     ],
 }
-
