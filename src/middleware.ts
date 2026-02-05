@@ -54,22 +54,22 @@ export async function middleware(request: NextRequest) {
 
     // --- 1. ป้องกันหน้า Admin ---
     if (pathname.startsWith('/admin') && !user) {
-        return NextResponse.redirect(new URL('/login', request.url))
+        return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
     // --- 2. ป้องกันหน้า Teacher (อาจารย์) ---
     if (pathname.startsWith('/teacher') && !user) {
-        return NextResponse.redirect(new URL('/login', request.url))
+        return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
     // --- 3. ป้องกันหน้า Supervisor (พี่เลี้ยง) ---
     // ยกเว้นหน้า /supervisor/register ที่ให้คนทั่วไปเข้าถึงได้เพื่อลงทะเบียน
     if (pathname.startsWith('/supervisor') && !pathname.includes('/register') && !user) {
-        return NextResponse.redirect(new URL('/login', request.url))
+        return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
     // --- 4. ถ้าล็อกอินแล้ว ห้ามกลับไปหน้า Login ---
-    if (user && pathname === '/login') {
+    if (user && pathname === '/auth/login') {
         // เช็กสิทธิ์เบื้องต้นเพื่อส่งไปหน้าเริ่มต้นที่ถูกต้อง (ในอนาคตปรับตาม metadata ของ user ได้)
         return NextResponse.redirect(new URL('/admin/supervisors', request.url))
     }
