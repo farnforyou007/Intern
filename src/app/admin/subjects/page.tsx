@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect  } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@supabase/supabase-js'
 import AdminLayout from '@/components/AdminLayout'
@@ -17,7 +17,8 @@ export default function SubjectsPage() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [selectedSubject, setSelectedSubject] = useState<any>(null)
     const [subjectName, setSubjectName] = useState('')
-
+    const [teachers, setTeachers] = useState([]) // สำหรับเก็บรายชื่ออาจารย์
+    const [selectedTeacherId, setSelectedTeacherId] = useState('')
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
     const fetchData = async () => {
@@ -70,6 +71,19 @@ export default function SubjectsPage() {
     }
 
     useEffect(() => { fetchData() }, [])
+
+    // 1. ดึงรายชื่อเฉพาะคนที่เป็น Role 'teacher' มาแสดงใน Dropdown
+    useEffect(() => {
+        const fetchTeachers = async () => {
+            const { data } = await supabase
+                .from('supervisors')
+                .select('id, full_name')
+                .eq('role', 'teacher')
+                .eq('is_verified', true) // เอาเฉพาะคนที่อนุมัติแล้ว
+            setTeachers(data || [])
+        }
+        fetchTeachers()
+    }, [])
 
     return (
         <AdminLayout>
@@ -138,9 +152,24 @@ export default function SubjectsPage() {
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-bold text-slate-800">{selectedSubject ? 'แก้ไขวิชา' : 'เพิ่มรายวิชา'}</DialogTitle>
                     </DialogHeader>
-                    <div className="py-6">
+                    <div className="py-4 space-y-4">
                         <label className="text-sm font-bold text-slate-700 mb-2 block font-sans">ชื่อรายวิชา</label>
                         <Input value={subjectName} onChange={(e) => setSubjectName(e.target.value)} placeholder="เช่น การนวดไทย 1" className="h-14 rounded-2xl text-lg" />
+                    </div>
+
+                    <div className="mb-4 space-y-2">
+                        <label className="text-sm font-bold text-slate-700">อาจารย์ผู้ดูแลวิชา</label>
+                        <select
+                            className="w-full h-12 px-4 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                            value={selectedTeacherId}
+                            onChange={(e) => setSelectedTeacherId(e.target.value)}
+                            required
+                        >
+                            <option value="">-- เลือกอาจารย์ --</option>
+                            {teachers.map((t) => (
+                                <option key={t.id} value={t.id}>{t.full_name}</option>
+                            ))}
+                        </select>
                     </div>
                     <DialogFooter>
                         <Button onClick={handleSave} className="w-full bg-blue-600 h-14 rounded-2xl text-lg font-bold shadow-lg shadow-blue-500/20">บันทึกข้อมูล</Button>

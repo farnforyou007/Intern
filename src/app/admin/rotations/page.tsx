@@ -73,10 +73,9 @@ export default function RotationsPage() {
             cancelButtonColor: '#94a3b8',
             reverseButtons: true,
             customClass: {
-                popup: 'rounded-[2.5rem] p-10 font-sans',
-                title: 'text-2xl font-black text-slate-800',
-                confirmButton: 'rounded-xl px-6 py-3 font-bold',
-                cancelButton: 'rounded-xl px-6 py-3 font-bold',
+                popup: 'rounded-[2.5rem] font-sans p-10',
+                confirmButton: 'rounded-full px-10 py-3 font-bold order-1',
+                cancelButton: 'rounded-full px-10 py-3 font-bold order-2'
             }
         }).then(async (result) => {
             if (result.isConfirmed) {

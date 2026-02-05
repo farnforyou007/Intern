@@ -94,7 +94,7 @@
 // ver2
 "use client"
 import React, { useState } from 'react'
-import { LayoutDashboard, Hospital, CalendarClock, BookOpen, UserCircle, Menu, X, LogOut } from "lucide-react"
+import { LayoutDashboard, Hospital, CalendarClock, BookOpen, UserCircle, Menu, X, LogOut ,Settings } from "lucide-react"
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation' // เพิ่ม useRouter
 import { createClient } from '@supabase/supabase-js' // เพิ่ม createClient
@@ -118,6 +118,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'จัดการรายวิชา', icon: <BookOpen size={20} />, href: '/admin/subjects' },
         { name: 'จัดการแบบประเมิน', icon: <BookOpen size={20} />, href: '/admin/templates' },
         { name: 'จัดการพี่เลี้ยง', icon: <BookOpen size={20} />, href: '/admin/supervisors' },
+        { name: 'ตั้งค่าระบบ', icon: <Settings size={20} />, href: '/admin/settings' },
+        
     ]
 
     // ฟังก์ชันออกจากระบบ

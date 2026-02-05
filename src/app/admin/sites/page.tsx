@@ -16,7 +16,7 @@ export default function SitesPage() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [selectedSite, setSelectedSite] = useState<any>(null)
     const [siteName, setSiteName] = useState('')
-
+    const [inviteCode, setInviteCode] = useState('')
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
     const fetchData = async () => {
@@ -47,7 +47,7 @@ export default function SitesPage() {
     const handleResetInvite = (site: any) => {
         Swal.fire({
             title: 'สุ่มรหัสใหม่?',
-            html: `ต้องการเปลี่ยนรหัสสำหรับ <b>"${site.site_name}"</b> หรือไม่?<br><small>รหัสเดิมจะใช้งานไม่ได้ทันที</small>`,
+            html: `ต้องการเปลี่ยนรหัสสำหรับ <b>"${site.site_name}"</b> หรือไม่?<br><small>รหัสใหม่จะเป็นภาษาอังกฤษเพื่อความเสถียร</small>`,
             icon: 'question',
             showCancelButton: true,
             confirmButtonText: 'ยืนยันการเปลี่ยน',
@@ -55,16 +55,22 @@ export default function SitesPage() {
             confirmButtonColor: '#2563eb',
             reverseButtons: true,
             customClass: {
-                popup: 'rounded-[2rem] font-sans',
-                confirmButton: 'rounded-full px-8 py-3 font-bold',
-                cancelButton: 'rounded-full px-8 py-3 font-bold'
+                popup: 'rounded-[2.5rem] font-sans p-10',
+                confirmButton: 'rounded-full px-10 py-3 font-bold order-1',
+                cancelButton: 'rounded-full px-10 py-3 font-bold order-2'
             }
         }).then(async (result) => {
             if (result.isConfirmed) {
-                const newCode = `${site.site_name.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`
+                // ใช้ฟังก์ชัน generate ที่เป็นภาษาอังกฤษเท่านั้น
+                const newCode = generateEnglishCode();
                 const { error } = await supabase.from('training_sites').update({ invite_code: newCode }).eq('id', site.id)
                 if (!error) {
-                    Swal.fire({ title: 'สำเร็จ!', text: `รหัสใหม่คือ: ${newCode}`, icon: 'success', customClass: { popup: 'rounded-[2rem] font-sans' } })
+                    Swal.fire({
+                        title: 'สำเร็จ!',
+                        text: `รหัสใหม่คือ: ${newCode}`,
+                        icon: 'success',
+                        customClass: { popup: 'rounded-[2rem] font-sans' }
+                    })
                     fetchData()
                 }
             }
@@ -96,13 +102,24 @@ export default function SitesPage() {
         })
     }
 
+    const generateEnglishCode = () => {
+        // ใช้ Prefix เป็น SITE หรือ TCM เพื่อความเสถียร
+        const prefix = "SITE";
+        const randomNum = Math.floor(1000 + Math.random() * 9000);
+        return `${prefix}-${randomNum}`;
+    }
+
     const handleSave = async () => {
-        if (!siteName) return
+        if (!siteName) return;
         if (selectedSite?.id) {
-            await supabase.from('training_sites').update({ site_name: siteName }).eq('id', selectedSite.id)
+            // แก้ไข: เพิ่มฟิลด์ inviteCode เข้าไปด้วยเพื่อให้แก้ไขรหัสได้จากหน้า Modal
+            await supabase.from('training_sites')
+                .update({ site_name: siteName, invite_code: inviteCode })
+                .eq('id', selectedSite.id);
         } else {
-            const code = `${siteName.substring(0, 3).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`
-            await supabase.from('training_sites').insert([{ site_name: siteName, invite_code: code }])
+            // เพิ่มใหม่: ใช้รหัสภาษาอังกฤษ
+            const code = generateEnglishCode(siteName);
+            await supabase.from('training_sites').insert([{ site_name: siteName, invite_code: code }]);
         }
         setSiteName(''); setSelectedSite(null); setIsModalOpen(false); fetchData()
     }
@@ -181,9 +198,35 @@ export default function SitesPage() {
             <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogContent className="w-[92%] max-w-[400px] rounded-[2rem] border-none p-8">
                     <DialogHeader>
-                        <DialogTitle className="text-2xl font-bold text-slate-800 mb-2">{selectedSite ? 'แก้ไขแหล่งฝึก' : 'เพิ่มแหล่งฝึกใหม่'}</DialogTitle>
+                        <DialogTitle className="text-2xl font-bold text-slate-800 mb-2">
+                            {selectedSite ? 'แก้ไขแหล่งฝึก' : 'เพิ่มแหล่งฝึกใหม่'}
+                        </DialogTitle>
                     </DialogHeader>
-                    <Input value={siteName} onChange={(e) => setSiteName(e.target.value)} placeholder="ชื่อโรงพยาบาล เช่น รพ.ยะลา" className="h-14 rounded-2xl text-lg border-slate-200 focus:ring-blue-500" />
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-xs font-bold text-slate-400 ml-1 uppercase">ชื่อโรงพยาบาล</label>
+                            <Input
+                                value={siteName}
+                                onChange={(e) => setSiteName(e.target.value)}
+                                placeholder="เช่น รพ.ยะลา"
+                                className="h-14 rounded-2xl text-lg border-slate-200"
+                            />
+                        </div>
+
+                        {/* เพิ่มช่องแก้ไขรหัสเชิญ */}
+                        <div>
+                            <label className="text-xs font-bold text-slate-400 ml-1 uppercase">รหัสเชิญ (Invite Code)</label>
+                            <Input
+                                value={inviteCode}
+                                onChange={(e) => setInviteCode(e.target.value.toUpperCase())} // บังคับตัวพิมพ์ใหญ่
+                                placeholder="เช่น YALA-2026"
+                                className="h-14 rounded-2xl text-lg font-mono border-slate-200 text-blue-600 font-bold"
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1 ml-1">* แนะนำใช้ภาษาอังกฤษและตัวเลขเพื่อความเสถียร</p>
+                        </div>
+                    </div>
+
                     <DialogFooter className="mt-6">
                         <Button onClick={handleSave} className="w-full bg-blue-600 h-14 rounded-2xl text-lg font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
                             บันทึกข้อมูล

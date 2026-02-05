@@ -46,10 +46,10 @@ export async function middleware(request: NextRequest) {
 
     // ตรวจสอบสิทธิ์การเข้าถึงโฟลเดอร์ต่างๆ
     if (pathname.startsWith('/admin') && !user) {
-        return NextResponse.redirect(new URL('/login', request.url))
+        return NextResponse.redirect(new URL('/auth/login', request.url))
     }
 
-    if (user && pathname === '/login') {
+    if (user && pathname === '/auth/login') {
         return NextResponse.redirect(new URL('/admin/supervisors', request.url))
     }
 
