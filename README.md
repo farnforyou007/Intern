@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🌿 Thai Traditional Medicine Personnel System
+ระบบจัดการบุคลากร (อาจารย์นิเทศและพี่เลี้ยงแหล่งฝึก) คณะการแพทย์แผนไทย
+Powered by **Next.js 14 (App Router)**, **Tailwind CSS**, and **Supabase**.
 
-## Getting Started
+---
 
-First, run the development server:
+## 🛠 สำหรับเพื่อนสาย Frontend (Getting Started)
 
+เพื่อให้รันโปรเจกต์และเห็นข้อมูลจริงจาก Database ตัวเดียวกัน ให้ทำตามขั้นตอนดังนี้ครับ:
+
+### 1. Clone & Install
+ดึงโค้ดและติดตั้ง Library ที่จำเป็นทั้งหมด:
 ```bash
+git clone [URL_ของ_GIT_เรา]
+cd [ชื่อโฟลเดอร์โปรเจกต์]
+npm install
+2. Setup Environment Variables
+เนื่องจากเราไม่ได้เอาไฟล์ .env ขึ้น Git (เพื่อความปลอดภัย) เพื่อนต้องสร้างไฟล์ใหม่ชื่อ .env.local ไว้ที่โฟลเดอร์นอกสุด (Root) แล้วใส่ค่าดังนี้:
+
+Code snippet
+# ทักมาขอค่า URL และ Key ที่เรานะ!
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+3. Run Development Server
+รันคำสั่งเพื่อเริ่มทำงาน:
+
+Bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+เปิดเบราว์เซอร์ไปที่: http://localhost:3000
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+📂 โครงสร้างโปรเจกต์ (Project Structure)
+src/app/ : ไฟล์หน้าเว็บหลัก (Page.tsx)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+/admin/manage : หน้า Dashboard จัดการอนุมัติบุคลากร (ตาราง/การ์ด/Modal)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+/register : หน้าฟอร์มลงทะเบียนสำหรับผู้ใช้งานใหม่
 
-## Learn More
+src/components/ : คอมโพเนนต์ UI ต่างๆ (Card, Modal, Layout)
 
-To learn more about Next.js, take a look at the following resources:
+public/ : ไฟล์ Static เช่น รูปภาพ และโลโก้ต่างๆ
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+🎨 UI & Design Specs
+Styling: ใช้ Tailwind CSS เป็นหลัก
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Icons: ใช้ Lucide React
 
-## Deploy on Vercel
+Components: ใช้ Shadcn UI (เช่น Dialog, Tabs, Button)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Alerts: ใช้ SweetAlert2 สำหรับ Popup แจ้งเตือน
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+📋 สิ่งที่เพื่อนช่วยดูได้เลย (Frontend Tasks)
+Responsive Design: ฝากเช็กหน้าตารางและหน้าการ์ดในมือถือหน่อย ว่าบีบไปไหม
+
+UI Polishing: ถ้าอยากปรับสี ปรับความมน (Rounded) หรือเพิ่ม Animation สามารถแก้ได้ที่ page.tsx ในแต่ละหน้าได้เลย
+
+Modal UI: ส่วนของ PersonnelDetailModal สามารถแต่งเพิ่มให้สวยกว่าเดิมได้ตามสบาย
+
+⚠️ ข้อควรระวัง
+Database: โปรเจกต์นี้เชื่อมต่อกับ Supabase จริง ข้อมูลที่กดลบหรืออนุมัติจะส่งผลต่อ Database ทันที
+
+Storage: การอัปโหลดรูปจะวิ่งเข้า Bucket avatars ในเครื่องเรา
+
+🙏 สงสัยตรงไหน หรือรันไม่ขึ้น ทักแชทถามเราได้ตลอดเลยนะเพื่อน!
+
+
+---
+
+### คำแนะนำเพิ่มเติมสำหรับคุณ:
+อย่าลืมส่งค่า **URL** และ **Anon Key** ของ Supabase ให้เพื่อนทางแชทส่วนตัวนะครับ และถ้าคุณมีการปรับโครงสร้างฐานข้อมูลเพิ่มในอนาคต (เช่น เพิ่มคอลัมน์ใหม่) อย่าลืมบอกเพื่อนให้รู้ด้วยนะ เพื่อนจะได้แก้หน้า Frontend ให้รับข้อมูลใหม่ได้ครับ
+
+**ตอนนี้มีส่วนไหนที่คุณอยากปรับแก้ก่อนส่ง Git ให้เพื่อนไหมครับ? หรืออยากให้ผมช่วยร่าง "หน้า Dashboar
