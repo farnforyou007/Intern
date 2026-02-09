@@ -94,7 +94,7 @@
 // ver2
 "use client"
 import React, { useState } from 'react'
-import { LayoutDashboard, Hospital, CalendarClock, BookOpen, UserCircle, Menu, X, LogOut ,Settings } from "lucide-react"
+import { LayoutDashboard, Hospital, CalendarClock, BookOpen, UserCircle, Menu, X, LogOut ,Settings ,Users ,ClipboardPen ,UserRoundCheck} from "lucide-react"
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation' // เพิ่ม useRouter
 import { createClient } from '@supabase/supabase-js' // เพิ่ม createClient
@@ -115,9 +115,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'Dashboard', icon: <LayoutDashboard size={20} />, href: '/admin' },
         { name: 'จัดการแหล่งฝึกงาน', icon: <Hospital size={20} />, href: '/admin/sites' },
         { name: 'จัดการผลัดการฝึก', icon: <CalendarClock size={20} />, href: '/admin/rotations' },
+        { name: 'จัดการบุคลากร', icon: <UserRoundCheck size={20} />, href: '/admin/supervisors' },
+        { name: 'จัดการนักศึกษา', icon: <Users size={20} />, href: '/admin/students' },
         { name: 'จัดการรายวิชา', icon: <BookOpen size={20} />, href: '/admin/subjects' },
-        { name: 'จัดการแบบประเมิน', icon: <BookOpen size={20} />, href: '/admin/templates' },
-        { name: 'จัดการพี่เลี้ยง', icon: <BookOpen size={20} />, href: '/admin/supervisors' },
+        { name: 'จัดการแบบประเมิน', icon: <ClipboardPen size={20} />, href: '/admin/templates' },
         { name: 'ตั้งค่าระบบ', icon: <Settings size={20} />, href: '/admin/settings' },
         
     ]

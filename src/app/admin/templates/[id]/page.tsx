@@ -1,3 +1,4 @@
+// src/app/admin/templates/[id]/page.tsx
 "use client"
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -69,7 +70,7 @@ export default function TemplateItemsPage() {
                         <div key={item.id} className="bg-white border border-slate-50 p-7 rounded-[2.5rem] flex items-start justify-between group shadow-sm hover:border-blue-200 transition-all">
                             <div className="flex-1 pr-4">
                                 <div className="flex items-center gap-3 mb-1">
-                                    <div className="w-9 h-9 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black text-xs shrink-0">{idx + 1}</div>
+                                    <div className="w-9 h-9 bg-slate-900 text-white rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-lg shadow-slate-200">{idx + 1}</div>
                                     <p className="text-slate-800 font-bold text-xl leading-tight">{item.question_text}</p>
                                 </div>
                                 <p className="text-slate-500 text-base ml-12 whitespace-pre-line leading-relaxed">{item.description}</p>
