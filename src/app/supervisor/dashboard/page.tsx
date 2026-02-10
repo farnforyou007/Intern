@@ -176,7 +176,7 @@ export default function SupervisorDashboard() {
     const [loading, setLoading] = useState(true)
     const [supervisor, setSupervisor] = useState<any>(null)
     const [stats, setStats] = useState({ total: 0, evaluated: 0, pending: 0 })
-    const [daysLeft, setDaysLeft] = useState<number | null>(null) // เพิ่มบรรทัดนี้ครับ
+    const [daysLeft, setDaysLeft] = useState<number | null>(null)
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -303,8 +303,8 @@ export default function SupervisorDashboard() {
                 if (assignments) {
                     // 🚩 หา end_date ที่ใกล้ที่สุดของนักศึกษาที่ "ยังไม่ได้ประเมิน"
                     const pendingDates = assignments
-                        .filter(a => !a.is_evaluated && a.student_assignments?.rotations?.end_date)
-                        .map(a => new Date(a.student_assignments.rotations.end_date))
+                        .filter((a: any) => !a.is_evaluated && a.student_assignments?.rotations?.end_date)
+                        .map((a: any) => new Date(a.student_assignments.rotations.end_date))
 
                     if (pendingDates.length > 0) {
                         // หาผลัดที่จบเร็วที่สุด

@@ -135,7 +135,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Swal from 'sweetalert2'
-
+import liff from '@line/liff'
 export default function SupervisorStudentList() {
     const router = useRouter()
     const [activeTab, setActiveTab] = useState<'mine' | 'all'>('mine')
@@ -155,41 +155,109 @@ export default function SupervisorStudentList() {
     // สมมติ LINE ID (ในระบบจริงจะดึงจาก LIFF/Context)
     const mockLineUserId = 'LINE_USER_001'
 
-    useEffect(() => {
-        fetchInitialData()
-    }, [activeTab])
+    // const fetchInitialData = async () => {
+    //     setLoading(true)
+    //     try {
+    //         // 1. หาข้อมูลพี่เลี้ยงก่อน
+    //         const { data: supervisor } = await supabase
+    //             .from('supervisors')
+    //             .select('*')
+    //             .eq('line_user_id', mockLineUserId)
+    //             .single()
 
-    const fetchInitialData = async () => {
+    //         if (!supervisor) return
+    //         setSupervisorInfo(supervisor)
+
+    //         if (activeTab === 'mine') {
+    //             // 2. ดึง นศ. ในความดูแล (Join 3 ตาราง: assignment_supervisors -> student_assignments -> students)
+    //             const { data: mine } = await supabase
+    //                 .from('assignment_supervisors')
+    //                 .select(`
+    //                     id,
+    //                     student_assignments (
+    //                         id,
+    //                         students (id, full_name, student_code, avatar_url),
+    //                         subjects (name),
+    //                         rotations (name)
+    //                     )
+    //                 `)
+    //                 .eq('supervisor_id', supervisor.id)
+
+    //             setMyStudents(mine || [])
+    //         } else {
+    //             // 3. ดึง นศ. ทั้งหมดในหน่วยงาน (ที่ยังไม่ได้รับดูแล)
+    //             const { data: all } = await supabase
+    //                 .from('student_assignments')
+    //                 .select(`
+    //                     id,
+    //                     students (id, full_name, student_code, avatar_url),
+    //                     subjects (name),
+    //                     rotations (name)
+    //                 `)
+    //                 .eq('site_id', supervisor.site_id)
+
+    //             // กรองเฉพาะคนที่ไม่อยู่ใน MyStudents (แบบง่าย)
+    //             setAllSiteStudents(all || [])
+    //         }
+    //     } catch (error) {
+    //         console.error(error)
+    //     } finally {
+    //         setLoading(false)
+    //     }
+    // }
+
+    // ฟังก์ชันกดรับนักศึกษา
+
+    useEffect(() => {
+        const initLiff = async () => {
+            try {
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                if (!liff.isLoggedIn()) {
+                    liff.login()
+                    return
+                }
+                const profile = await liff.getProfile()
+                // ส่ง userId ไปดึงข้อมูล
+                fetchInitialData(profile.userId)
+            } catch (err) {
+                console.error("LIFF Init Error:", err)
+            }
+        }
+        initLiff()
+    }, [activeTab]) // ทำงานใหม่ทุกครั้งที่เปลี่ยนแท็บเพื่อให้ข้อมูลเป็นปัจจุบัน
+
+    const fetchInitialData = async (lineUserId: string) => {
         setLoading(true)
         try {
-            // 1. หาข้อมูลพี่เลี้ยงก่อน
-            const { data: supervisor } = await supabase
+            // 1. หาข้อมูลพี่เลี้ยง
+            const { data: supervisor, error: svError } = await supabase
                 .from('supervisors')
                 .select('*')
-                .eq('line_user_id', mockLineUserId)
+                .eq('line_user_id', lineUserId)
                 .single()
 
-            if (!supervisor) return
+            if (svError || !supervisor) return
             setSupervisorInfo(supervisor)
 
-            if (activeTab === 'mine') {
-                // 2. ดึง นศ. ในความดูแล (Join 3 ตาราง: assignment_supervisors -> student_assignments -> students)
-                const { data: mine } = await supabase
-                    .from('assignment_supervisors')
-                    .select(`
+            // 2. ดึง นศ. ในความดูแล (ดึงมาก่อนเสมอเพื่อใช้กรอง)
+            const { data: mine } = await supabase
+                .from('assignment_supervisors')
+                .select(`
+                    id,
+                    student_assignments (
                         id,
-                        student_assignments (
-                            id,
-                            students (id, full_name, student_code, avatar_url),
-                            subjects (name),
-                            rotations (name)
-                        )
-                    `)
-                    .eq('supervisor_id', supervisor.id)
+                        students (id, full_name, student_code, avatar_url),
+                        subjects (name),
+                        rotations (name)
+                    )
+                `)
+                .eq('supervisor_id', supervisor.id)
 
-                setMyStudents(mine || [])
-            } else {
-                // 3. ดึง นศ. ทั้งหมดในหน่วยงาน (ที่ยังไม่ได้รับดูแล)
+            const myStudentList = mine || []
+            setMyStudents(myStudentList)
+
+            if (activeTab === 'all') {
+                // 3. ดึง นศ. ทั้งหมดในหน่วยงาน
                 const { data: all } = await supabase
                     .from('student_assignments')
                     .select(`
@@ -200,17 +268,39 @@ export default function SupervisorStudentList() {
                     `)
                     .eq('site_id', supervisor.site_id)
 
-                // กรองเฉพาะคนที่ไม่อยู่ใน MyStudents (แบบง่าย)
-                setAllSiteStudents(all || [])
+                // if (all) {
+                //     // 🚩 กรองเอาคนที่พี่ดูแลอยู่แล้วออก จะได้ไม่เห็นซ้ำในแท็บ "ทั้งหมด"
+                //     const myAssignmentIds = myStudentList.map(m => m.student_assignments?.id)
+                //     const filteredAll = all.filter(a => !myAssignmentIds.includes(a.id))
+                //     setAllSiteStudents(filteredAll)
+                // }
+                if (all) {
+                    // 🚩 กรองเอาคนที่พี่ดูแลอยู่แล้วออก
+                    // ใส่ (m: any) และ (a: any) เพื่อบอก TypeScript ไม่ต้องเช็ก Type ละเอียดในจุดนี้
+                    const myAssignmentIds = myStudentList.map((m: any) => m.student_assignments?.id)
+                    const filteredAll = all.filter((a: any) => !myAssignmentIds.includes(a.id))
+
+                    setAllSiteStudents(filteredAll)
+                }
             }
         } catch (error) {
-            console.error(error)
+            console.error("Fetch Error:", error)
         } finally {
             setLoading(false)
         }
     }
 
-    // ฟังก์ชันกดรับนักศึกษา
+    // ฟังก์ชัน Filter สำหรับช่องค้นหา (เพิ่ม Optional Chaining เพื่อความปลอดภัย)
+    const currentList = activeTab === 'mine' ? myStudents : allSiteStudents
+
+    const filteredList = currentList.filter(item => {
+        const student = activeTab === 'mine' ? item.student_assignments?.students : item?.students
+        if (!student) return false
+        return student.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            student.student_code?.includes(searchTerm)
+    })
+
+
     const handleClaimStudent = async (assignmentId: number) => {
         const { isConfirmed } = await Swal.fire({
             title: 'ยืนยันการรับดูแล?',
@@ -232,19 +322,21 @@ export default function SupervisorStudentList() {
 
             if (!error) {
                 Swal.fire({ icon: 'success', title: 'เพิ่มสำเร็จ', timer: 1500, showConfirmButton: false })
-                fetchInitialData() // รีเฟรชข้อมูล
+                if (supervisorInfo?.line_user_id) {
+                    fetchInitialData(supervisorInfo.line_user_id)
+                }
             } else {
                 Swal.fire('Error', 'ไม่สามารถเพิ่มได้ หรือคุณดูแลคนนี้อยู่แล้ว', 'error')
             }
         }
     }
 
-    const currentList = activeTab === 'mine' ? myStudents : allSiteStudents
-    const filteredList = currentList.filter(item => {
-        const student = activeTab === 'mine' ? item.student_assignments?.students : item.students
-        return student?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            student?.student_code.includes(searchTerm)
-    })
+    // const currentList = activeTab === 'mine' ? myStudents : allSiteStudents
+    // const filteredList = currentList.filter(item => {
+    //     const student = activeTab === 'mine' ? item.student_assignments?.students : item.students
+    //     return student?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    //         student?.student_code.includes(searchTerm)
+    // })
 
     return (
         <div className="min-h-screen bg-slate-50 pb-24 font-sans">
