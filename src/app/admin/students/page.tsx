@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import Swal from 'sweetalert2'
 import * as XLSX from 'xlsx'
+import { Skeleton } from "@/components/ui/skeleton"
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
@@ -460,7 +461,11 @@ export default function StudentManagement() {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={4} className="text-center py-20 font-bold text-slate-300 animate-pulse uppercase tracking-[0.2em]">ดึงข้อมูลระบบ...</TableCell></TableRow>
+                                // <TableRow><TableCell colSpan={4} className="text-center py-20 font-bold text-slate-300 animate-pulse uppercase tracking-[0.2em]">กำโหลดข้อมูล...</TableCell></TableRow>
+                                Array(5).fill(0).map((_, i) => (
+                                    <TableRow key={i}><TableCell colSpan={4} className="p-8"><Skeleton className="h-12 w-full rounded-xl" /></TableCell></TableRow>
+                                ))
+
                             ) : paginatedStudents.map((s) => {
                                 const assignment = getDisplayAssignment(s);
                                 const rotIdx = s.student_assignments?.findIndex((a: any) => a.id === assignment?.id);
@@ -529,10 +534,7 @@ export default function StudentManagement() {
                             })}
                         </TableBody>
                     </Table>
-                </div>
-
-                {/* Pagination Controls */}
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-6">
+                    <div className="px-8 py-6 bg-slate-50/30 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
                     <div className="flex items-center gap-3">
                         <span className="text-xs font-black text-slate-400 uppercase tracking-widest">แสดงแถว:</span>
                         <select
@@ -546,7 +548,7 @@ export default function StudentManagement() {
                             {[5, 10, 20, 50].map(val => <option key={val} value={val}>{val}</option>)}
                         </select>
                         <p className="text-xs font-bold text-slate-400 ml-4">
-                            Showing {startIndex + 1} - {Math.min(startIndex + rowsPerPage, filteredStudents.length)} of {filteredStudents.length}
+                            แสดง {startIndex + 1} - {Math.min(startIndex + rowsPerPage, filteredStudents.length)} จากทั้งหมด  {filteredStudents.length}
                         </p>
                     </div>
 
@@ -580,6 +582,10 @@ export default function StudentManagement() {
                         </Button>
                     </div>
                 </div>
+                </div>
+
+                {/* Pagination Controls */}
+                
             </div>
 
             <StudentDetailModal

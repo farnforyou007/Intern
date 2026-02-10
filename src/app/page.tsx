@@ -1,65 +1,137 @@
-import Image from "next/image";
+"use client"
+import React from 'react'
+import { useRouter } from 'next/navigation'
+import { 
+    GraduationCap, 
+    UserCheck, 
+    ShieldCheck, 
+    ArrowRight, 
+    CheckCircle2,
+    Hospital,
+    Sprout
+} from 'lucide-react'
+import { Button } from "@/components/ui/button"
 
-export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+export default function SplitHomePage() {
+    const router = useRouter()
+
+    return (
+        <div className="min-h-screen bg-white flex flex-col lg:flex-row font-sans">
+            
+            {/* --- ฝั่งซ้าย: รูปภาพพื้นหลังเกี่ยวกับการแพทย์แผนไทย (Visual Side) --- */}
+            <div className="relative w-full lg:w-1/2 flex flex-col justify-center p-10 lg:p-24 overflow-hidden min-h-[450px] lg:min-h-screen">
+                
+                {/* รูปภาพพื้นหลัง (แนะนำรูปสมุนไพร หรือการนวดไทย) */}
+                <div 
+                    className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-transform duration-1000"
+                    style={{ 
+                        backgroundImage: `url('https://images.unsplash.com/photo-1540555700478-4be289fbecef?q=80&w=2070&auto=format&fit=crop')` 
+                    }}
+                />
+                
+                {/* Overlay สีน้ำเงินเพื่อให้ข้อความอ่านง่าย */}
+                <div className="absolute inset-0 z-10 bg-blue-900/70 mix-blend-multiply"></div>
+                <div className="absolute inset-0 z-10 bg-gradient-to-t from-blue-900 via-transparent to-blue-900/40"></div>
+
+                <div className="relative z-20">
+                    <div className="flex items-center gap-4 mb-8">
+                        <div className="p-3 bg-white rounded-2xl shadow-2xl">
+                            <Sprout size={32} className="text-blue-600" />
+                        </div>
+                        <span className="text-3xl font-black text-white tracking-tighter shadow-sm">
+                            INTERN<span className="text-blue-200">FLOW</span>
+                        </span>
+                    </div>
+
+                    <h1 className="text-5xl lg:text-7xl font-black text-white leading-[1.1] mb-8 drop-shadow-xl">
+                        ระบบประเมิน <br />
+                        <span className="text-blue-200 text-4xl lg:text-6xl">ทักษะการปฏิบัติงาน <br /> แพทย์แผนไทย</span>
+                    </h1>
+
+                    <div className="hidden sm:block space-y-6">
+                        {[
+                            "ประเมินทักษะแต่ละรายวิชาออนไลน์",
+                            "เชื่อมต่อข้อมูลระหว่างนักศึกษาและพี่เลี้ยง",
+                            "สรุปผลคะแนนรายบุคคลอัตโนมัติ"
+                        ].map((text, i) => (
+                            <div key={i} className="flex items-center gap-4 text-white/90 drop-shadow-sm">
+                                <CheckCircle2 className="text-blue-300 shrink-0" />
+                                <p className="text-lg font-medium">{text}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Footer ฝั่งซ้าย (แสดงเฉพาะจอใหญ่) */}
+                <div className="absolute bottom-12 hidden lg:block text-white/40 text-xs font-medium z-20 uppercase tracking-widest">
+                    Faculty of Thai Traditional Medicine
+                </div>
+            </div>
+
+            {/* --- ฝั่งขวา: เมนูเข้าใช้งาน (Menu Side) --- */}
+            <div className="w-full lg:w-1/2 flex flex-col bg-slate-50 relative min-h-screen">
+                
+                {/* ปุ่ม Admin Portal มุมขวาบน */}
+                <div className="p-6 flex justify-end shrink-0">
+                    <Button 
+                        variant="ghost" 
+                        onClick={() => router.push('/admin/login')}
+                        className="text-slate-400 hover:text-blue-600 font-bold gap-2 rounded-2xl h-12 px-6 bg-white/50 border border-slate-100 shadow-sm"
+                    >
+                        <ShieldCheck size={18} />
+                        Admin
+                    </Button>
+                </div>
+
+                {/* Content กลางหน้า */}
+                <div className="flex-1 flex flex-col justify-center px-8 lg:px-24">
+                    <div className="max-w-md mx-auto w-full">
+                        <div className="mb-12">
+                            <h2 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">ระบบประเมิน</h2>
+                            <p className="text-slate-500 font-medium">กรุณาเลือกประเภทการลงทะเบียน</p>
+                        </div>
+
+                        <div className="space-y-6">
+                            {/* เมนูนักศึกษา */}
+                            <button 
+                                onClick={() => router.push('/register')}
+                                className="w-full p-8 bg-white border-2 border-transparent hover:border-blue-600 rounded-[2.5rem] shadow-xl shadow-slate-200/50 transition-all flex items-center gap-6 group active:scale-[0.98] text-left"
+                            >
+                                <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all shrink-0">
+                                    <GraduationCap size={32} />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-xl font-black text-slate-900">นักศึกษา</h3>
+                                    <p className="text-slate-400 font-medium text-sm">ลงทะเบียนสถานที่ฝึกงาน</p>
+                                </div>
+                                <ArrowRight className="text-slate-200 group-hover:text-blue-600 group-hover:translate-x-2 transition-all" />
+                            </button>
+
+                            {/* เมนูพี่เลี้ยง / บุคลากร */}
+                            <button 
+                                onClick={() => router.push('supervisor/register')}
+                                className="w-full p-8 bg-white border-2 border-transparent hover:border-slate-900 rounded-[2.5rem] shadow-xl shadow-slate-200/50 transition-all flex items-center gap-6 group active:scale-[0.98] text-left"
+                            >
+                                <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-600 group-hover:bg-slate-900 group-hover:text-white transition-all shrink-0">
+                                    <Hospital size={32} />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-xl font-black text-slate-900">พี่เลี้ยง / บุคลากร</h3>
+                                    <p className="text-slate-400 font-medium text-sm">ลงทะเบียนเพื่อประเมินนักศึกษา</p>
+                                </div>
+                                <ArrowRight className="text-slate-200 group-hover:text-slate-900 group-hover:translate-x-2 transition-all" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer ล่างสุดฝั่งขวา (Mobile Friendly) */}
+                <div className="p-10 mt-auto shrink-0 border-t lg:border-none border-slate-100 text-center lg:text-right">
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                        © 2026 Faculty of Traditional Medicine <br className="lg:hidden" /> All Rights Reserved.
+                    </p>
+                </div>
+            </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+    )
 }

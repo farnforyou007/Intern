@@ -266,6 +266,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Checkbox } from "@/components/ui/checkbox" // สมมติว่ามี Shadcn Checkbox
 import { Plus, Edit2, Trash2, Calendar, BookOpen, Hash } from "lucide-react"
 import Swal from 'sweetalert2'
+import { Skeleton } from "@/components/ui/skeleton"
 
 export default function RotationsPage() {
     const [rotations, setRotations] = useState<any[]>([])
@@ -438,6 +439,18 @@ export default function RotationsPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
+                             {loading ? (
+                                Array(5).fill(0).map((_, i) => (
+                                    <TableRow key={i}><TableCell colSpan={4} className="p-8"><Skeleton className="h-12 w-full rounded-xl" /></TableCell></TableRow>
+                                ))
+                            ) : rotations.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center py-20 text-slate-400 italic">ยังไม่มีข้อมูลผลัดการฝึกในระบบ</TableCell>
+                                </TableRow>
+                            ) : (
+                                <>
+                                </>
+                            )}
                             {rotations.map((rot) => (
                                 <TableRow key={rot.id} className="hover:bg-slate-50/50 transition-colors">
                                     <TableCell className="px-6 py-5 font-black text-slate-400">#{rot.round_number}</TableCell>
