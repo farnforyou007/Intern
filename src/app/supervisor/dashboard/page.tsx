@@ -176,7 +176,7 @@ export default function SupervisorDashboard() {
     const [loading, setLoading] = useState(true)
     const [supervisor, setSupervisor] = useState<any>(null)
     const [stats, setStats] = useState({ total: 0, evaluated: 0, pending: 0 })
-
+    const [daysLeft, setDaysLeft] = useState<number | null>(null) // เพิ่มบรรทัดนี้ครับ
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -199,71 +199,138 @@ export default function SupervisorDashboard() {
         }
     }, [isMockup])
 
+    // const fetchRealData = async () => {
+    //     try {
+    //         // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+    //         // if (!liff.isLoggedIn()) return liff.login()
+    //         // const profile = await liff.getProfile()
+
+    //         // const { data: svData } = await supabase
+    //         //     .from('supervisors')
+    //         //     .select('*, sites(name)')
+    //         //     .eq('line_user_id', profile.userId)
+    //         //     .single()
+
+    //         // if (svData) {
+    //         //     setSupervisor(svData)
+    //         //     const { data: assignments } = await supabase
+    //         //         .from('assignment_supervisors')
+    //         //         .select('id, is_evaluated')
+    //         //         .eq('supervisor_id', svData.id)
+
+    //         //     if (assignments) {
+    //         //         const evaluated = assignments.filter(a => a.is_evaluated).length
+    //         //         setStats({
+    //         //             total: assignments.length,
+    //         //             evaluated: evaluated,
+    //         //             pending: assignments.length - evaluated
+    //         //         })
+    //         //     }
+    //         await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+    //         if (!liff.isLoggedIn()) return liff.login()
+    //         const profile = await liff.getProfile()
+
+    //         // ลองดึงแค่ตาราง supervisors อย่างเดียวดูก่อน (ตัด sites(name) ออกชั่วคราว)
+    //         const { data: svData, error } = await supabase
+    //             .from('supervisors')
+    //             .select('*') // ดึงทุกอย่างในตารางนี้มาก่อน
+    //             .eq('line_user_id', profile.userId)
+    //             .single()
+
+    //         if (error) {
+    //             console.error("Database Error:", error.message) // จะบอกชัดเจนว่าคอลัมน์ไหนพัง
+    //             return
+    //         }
+
+    //         if (svData) {
+    //             // ตรวจสอบว่าคอลัมน์รูปภาพใน DB ของคุณชื่ออะไร (เช่น avatar_url หรือ image)
+    //             const imgPath = svData.avatar_url || svData.image;
+
+    //             const publicUrl = imgPath?.startsWith('http')
+    //                 ? imgPath
+    //                 : `https://vvxsfibqlpkpzqyjwmuw.supabase.co/storage/v1/object/public/avatars/${imgPath}`;
+
+    //             setSupervisor({
+    //                 ...svData,
+    //                 avatar_url: publicUrl
+    //             })
+
+    //             console.log("Current Supervisor Image:", publicUrl)
+    //         }
+    //     } catch (error) {
+    //         console.error("Dashboard Error:", error)
+    //     } finally {
+    //         setLoading(false)
+    //     }
+    // }
+
     const fetchRealData = async () => {
         try {
-            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
-            // if (!liff.isLoggedIn()) return liff.login()
-            // const profile = await liff.getProfile()
-
-            // const { data: svData } = await supabase
-            //     .from('supervisors')
-            //     .select('*, sites(name)')
-            //     .eq('line_user_id', profile.userId)
-            //     .single()
-
-            // if (svData) {
-            //     setSupervisor(svData)
-            //     const { data: assignments } = await supabase
-            //         .from('assignment_supervisors')
-            //         .select('id, is_evaluated')
-            //         .eq('supervisor_id', svData.id)
-
-            //     if (assignments) {
-            //         const evaluated = assignments.filter(a => a.is_evaluated).length
-            //         setStats({
-            //             total: assignments.length,
-            //             evaluated: evaluated,
-            //             pending: assignments.length - evaluated
-            //         })
-            //     }
             await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
             if (!liff.isLoggedIn()) return liff.login()
             const profile = await liff.getProfile()
 
-            // ลองดึงแค่ตาราง supervisors อย่างเดียวดูก่อน (ตัด sites(name) ออกชั่วคราว)
-            const { data: svData, error } = await supabase
+            // 1. ดึงข้อมูลพี่เลี้ยง และดึงชื่อหน่วยงานผ่าน Relation sites
+            const { data: svData, error: svError } = await supabase
                 .from('supervisors')
-                .select('*') // ดึงทุกอย่างในตารางนี้มาก่อน
+                .select('*, sites(name)')
                 .eq('line_user_id', profile.userId)
                 .single()
 
-            if (error) {
-                console.error("Database Error:", error.message) // จะบอกชัดเจนว่าคอลัมน์ไหนพัง
-                return
-            }
+            if (svError) throw svError
 
             if (svData) {
-                // ตรวจสอบว่าคอลัมน์รูปภาพใน DB ของคุณชื่ออะไร (เช่น avatar_url หรือ image)
-                const imgPath = svData.avatar_url || svData.image;
-
+                // จัดการเรื่องรูปภาพ (คงเดิม)
+                const imgPath = svData.avatar_url || svData.image
                 const publicUrl = imgPath?.startsWith('http')
                     ? imgPath
-                    : `https://vvxsfibqlpkpzqyjwmuw.supabase.co/storage/v1/object/public/avatars/${imgPath}`;
+                    : `https://vvxsfibqlpkpzqyjwmuw.supabase.co/storage/v1/object/public/avatars/${imgPath}`
 
-                setSupervisor({
-                    ...svData,
-                    avatar_url: publicUrl
-                })
+                setSupervisor({ ...svData, avatar_url: publicUrl })
 
-                console.log("Current Supervisor Image:", publicUrl)
+                // 2. ดึงข้อมูลนักศึกษาที่ได้รับมอบหมาย (Assignment) 
+                // และดึงวันสิ้นสุดผลัดจากตาราง rotations ผ่านตารางกลาง
+                const { data: assignments, error: assignError } = await supabase
+                    .from('assignment_supervisors')
+                    .select(`
+        is_evaluated,
+        student_assignments (
+            rotations ( end_date )
+        )
+    `)
+                    .eq('supervisor_id', svData.id)
+
+                if (assignments) {
+                    // 🚩 หา end_date ที่ใกล้ที่สุดของนักศึกษาที่ "ยังไม่ได้ประเมิน"
+                    const pendingDates = assignments
+                        .filter(a => !a.is_evaluated && a.student_assignments?.rotations?.end_date)
+                        .map(a => new Date(a.student_assignments.rotations.end_date))
+
+                    if (pendingDates.length > 0) {
+                        // หาผลัดที่จบเร็วที่สุด
+                        const nearestEnd = new Date(Math.min(...pendingDates.map(d => d.getTime())))
+                        const today = new Date()
+
+                        // คำนวณส่วนต่าง (คืนค่าเป็นจำนวนวัน)
+                        const diffTime = nearestEnd.getTime() - today.getTime()
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                        setDaysLeft(diffDays)
+                    } else {
+                        setDaysLeft(null) // ถ้าประเมินครบหมดแล้ว ไม่ต้องแสดงวันถอยหลัง
+                    }
+
+                    // อัปเดต KPI ตามจริง
+                    const total = assignments.length
+                    const evaluated = assignments.filter(a => a.is_evaluated).length
+                    setStats({ total, evaluated, pending: total - evaluated })
+                }
             }
         } catch (error) {
-            console.error("Dashboard Error:", error)
+            console.error("Dashboard Fetch Error:", error)
         } finally {
             setLoading(false)
         }
     }
-
     // --- Skeleton Loading Component ---
     if (loading) return (
         <div className="min-h-screen bg-slate-50 font-sans">
@@ -344,9 +411,15 @@ export default function SupervisorDashboard() {
                         <Bell size={28} className={stats.pending > 0 ? "animate-bounce" : ""} />
                     </div>
                     <div className="flex-1">
-                        <h3 className="font-black text-slate-800 text-sm">แจ้งเตือนการประเมิน</h3>
+                        <h3 className="font-black text-slate-800 text-sm">
+                            {daysLeft !== null && daysLeft <= 7
+                                ? `สิ้นสุดผลัดใน ${daysLeft} วัน`
+                                : 'การแจ้งเตือน'}
+                        </h3>
                         <p className="text-[11px] text-slate-400 font-bold italic">
-                            {stats.pending > 0 ? `เหลือ นศ. ${stats.pending} คน ที่ยังไม่ประเมิน` : "ประเมินครบถ้วนแล้ว ยอดเยี่ยม!"}
+                            {stats.pending > 0
+                                ? `เหลือ นศ. ${stats.pending} คน ที่ยังไม่ประเมิน`
+                                : "ประเมินครบถ้วนแล้ว ยอดเยี่ยม!"}
                         </p>
                     </div>
                     {stats.pending > 0 && (
