@@ -249,7 +249,7 @@ export default function SupervisorDashboard() {
             // 1. ดึงข้อมูลพี่เลี้ยง และดึงชื่อหน่วยงานผ่าน Relation sites
             const { data: svData, error: svError } = await supabase
                 .from('supervisors')
-                .select('*, training_sites(name)')
+                .select('*, training_sites(site_name)')
                 .eq('line_user_id', profile.userId)
                 .single()
 
@@ -353,7 +353,7 @@ export default function SupervisorDashboard() {
                             </p>
                         </div>
                         <h1 className="text-2xl font-black text-white">{supervisor?.full_name}</h1>
-                        <p className="text-emerald-100/70 text-sm font-medium">{supervisor?.training_sites?.name}</p>
+                        <p className="text-emerald-100/70 text-sm font-medium">{supervisor?.training_sites?.site_name}</p>
                     </div>
                     {/* <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
                         <img src={supervisor?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=fallback`} alt="avatar" className="w-full h-full object-cover" />
