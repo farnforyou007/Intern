@@ -571,24 +571,26 @@
 "use client"
 import { useState, useEffect, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
-import { 
-    Camera, MapPin, Phone, User, Loader2, ImagePlus, 
-    CheckCircle2, BookOpen, Building2, ChevronDown, UserCircle2 , Hospital 
+import {
+    Camera, MapPin, Phone, User, Loader2, ImagePlus,
+    CheckCircle2, BookOpen, Building2, ChevronDown, UserCircle2, Hospital
 } from 'lucide-react'
 import Swal from 'sweetalert2'
-
+import liff from '@line/liff'
 export default function SmartRegister() {
     const [fullName, setFullName] = useState('')
     const [phone, setPhone] = useState('')
     const [loading, setLoading] = useState(false)
     const [preview, setPreview] = useState<string | null>(null)
     const [file, setFile] = useState<File | null>(null)
-    
+    const [lineUserId, setLineUserId] = useState<string | null>(null)
+    const [lineDisplayName, setLineDisplayName] = useState<string>('')
+
     // --- State สำหรับแยกประเภทผู้ใช้ ---
     const [userType, setUserType] = useState<'supervisor' | 'teacher'>('supervisor')
 
     // --- State สำหรับระบบค้นหาสถานที่ (Searchable Dropdown) ---
-    const [allSites, setAllSites] = useState<any[]>([]) 
+    const [allSites, setAllSites] = useState<any[]>([])
     const [searchTerm, setSearchTerm] = useState('')
     const [isDropdownOpen, setIsDropdownOpen] = useState(false)
     const [selectedSite, setSelectedSite] = useState<any>(null)
@@ -597,13 +599,35 @@ export default function SmartRegister() {
     // --- State สำหรับวิชาที่รับผิดชอบ ---
     const [allSubjects, setAllSubjects] = useState<any[]>([])
     const [subSubjects, setSubSubjects] = useState<any[]>([])
-    const [selectedSubjects, setSelectedSubjects] = useState<number[]>([]) 
+    const [selectedSubjects, setSelectedSubjects] = useState<number[]>([])
     const [selectedSubSubjects, setSelectedSubSubjects] = useState<number[]>([])
 
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
+
+    useEffect(() => {
+        const initLiff = async () => {
+            try {
+                // ใส่ LIFF ID ที่คุณได้จาก LINE Developers Console
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+
+                if (liff.isLoggedIn()) {
+                    const profile = await liff.getProfile()
+                    setLineUserId(profile.userId)
+                    setLineDisplayName(profile.displayName)
+                    // ถ้าใน LINE มีชื่ออยู่แล้ว สามารถเอามาตั้งเป็นค่าเริ่มต้นได้
+                    if (!fullName) setFullName(profile.displayName)
+                } else {
+                    liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
+                }
+            } catch (err) {
+                console.error("LIFF Init Error", err)
+            }
+        }
+        initLiff()
+    }, [])
 
     useEffect(() => {
         const fetchMasterData = async () => {
@@ -625,7 +649,7 @@ export default function SmartRegister() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const displayedSites = allSites.filter(site => 
+    const displayedSites = allSites.filter(site =>
         site.site_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         site.province.toLowerCase().includes(searchTerm.toLowerCase())
     ).slice(0, 10);
@@ -645,7 +669,11 @@ export default function SmartRegister() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
+        if (!lineUserId) {
+            Swal.fire('เกิดข้อผิดพลาด', 'ไม่พบข้อมูล LINE ID กรุณาเข้าใช้งานผ่าน LINE', 'error');
+            return;
+        }
         // Validation เบื้องต้น
         if (!file || !fullName || !phone || selectedSubjects.length === 0) {
             Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกข้อมูลส่วนตัว แนบรูป และเลือกวิชาที่รับผิดชอบ', 'warning');
@@ -669,6 +697,8 @@ export default function SmartRegister() {
             const { data: supervisor, error: insError } = await supabase
                 .from('supervisors')
                 .insert([{
+                    line_user_id: lineUserId,
+                    line_display_name: lineDisplayName,
                     full_name: fullName,
                     phone: phone,
                     avatar_url: publicUrl,
@@ -698,11 +728,21 @@ export default function SmartRegister() {
                 await supabase.from('supervisor_subjects').insert(subjectInserts);
             }
 
+            if (insError) {
+                // กรณีบันทึกซ้ำ (LINE ID เดิมลงทะเบียนแล้ว)
+                if (insError.code === '23505') {
+                    throw new Error("LINE ID นี้เคยลงทะเบียนในระบบแล้ว");
+                }
+                throw insError;
+            }
+
             Swal.fire({
                 title: 'ลงทะเบียนสำเร็จ',
                 text: 'ข้อมูลของคุณถูกส่งไปรอการอนุมัติจากแอดมินแล้ว',
                 icon: 'success',
                 confirmButtonColor: '#2563eb'
+            }).then(() => {
+                liff.closeWindow() // ปิดหน้าต่าง LIFF ทันทีเมื่อเสร็จ
             });
         } catch (error: any) {
             Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
@@ -720,18 +760,29 @@ export default function SmartRegister() {
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">ลงทะเบียนบุคลากร</h1>
                     <p className="text-slate-500 font-medium">เข้าใช้งานระบบประเมินผลการฝึกงาน</p>
+                    {/* ส่วน Header หรือเหนือฟอร์มลงทะเบียน */}
+                    {lineDisplayName && (
+                        <div className="flex items-center gap-2 mb-6 p-3 bg-emerald-50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2">
+                            <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white">
+                                <UserCircle2 size={18} />
+                            </div>
+                            <p className="text-[11px] font-bold text-emerald-700">
+                                เชื่อมต่อกับบัญชี LINE: <span className="font-black underline">{lineDisplayName}</span>
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* ส่วนเลือกประเภทผู้ใช้งาน */}
                 <div className="flex p-1.5 bg-slate-200/50 rounded-2xl">
-                    <button 
+                    <button
                         type="button"
                         onClick={() => { setUserType('supervisor'); setSelectedSite(null); setSearchTerm(''); }}
                         className={`flex-1 h-12 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${userType === 'supervisor' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
                     >
                         <Hospital size={18} /> พี่เลี้ยงแหล่งฝึก
                     </button>
-                    <button 
+                    <button
                         type="button"
                         onClick={() => { setUserType('teacher'); setSelectedSite(null); setSearchTerm(''); }}
                         className={`flex-1 h-12 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${userType === 'teacher' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
@@ -796,8 +847,8 @@ export default function SmartRegister() {
                                     <div className="absolute z-50 w-full mt-2 bg-white rounded-3xl shadow-2xl border border-slate-100 max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
                                         {displayedSites.length > 0 ? (
                                             displayedSites.map((site) => (
-                                                <div 
-                                                    key={site.id} 
+                                                <div
+                                                    key={site.id}
                                                     className="p-4 hover:bg-blue-50 cursor-pointer flex items-center justify-between border-b border-slate-50 last:border-none group"
                                                     onClick={() => {
                                                         setSelectedSite(site);
