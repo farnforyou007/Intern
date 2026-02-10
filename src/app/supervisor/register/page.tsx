@@ -728,14 +728,6 @@ export default function SmartRegister() {
                 await supabase.from('supervisor_subjects').insert(subjectInserts);
             }
 
-            if (insError) {
-                // กรณีบันทึกซ้ำ (LINE ID เดิมลงทะเบียนแล้ว)
-                if (insError.code === '23505') {
-                    throw new Error("LINE ID นี้เคยลงทะเบียนในระบบแล้ว");
-                }
-                throw insError;
-            }
-
             Swal.fire({
                 title: 'ลงทะเบียนสำเร็จ',
                 text: 'ข้อมูลของคุณถูกส่งไปรอการอนุมัติจากแอดมินแล้ว',
