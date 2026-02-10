@@ -263,7 +263,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Checkbox } from "@/components/ui/checkbox" // สมมติว่ามี Shadcn Checkbox
+import { Checkbox } from "@/components/ui/checkbox" 
 import { Plus, Edit2, Trash2, Calendar, BookOpen, Hash } from "lucide-react"
 import Swal from 'sweetalert2'
 import { Skeleton } from "@/components/ui/skeleton"

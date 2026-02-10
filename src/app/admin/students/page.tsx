@@ -124,7 +124,7 @@ export default function StudentManagement() {
 
         // 2. ถ้าไม่ได้เลือกผลัด (เป็น 'all') แต่ "มีการพิมพ์ค้นหา"
         if (searchTerm.trim() !== "") {
-            const searchLower = searchTerm.toLowerCase().trim();
+            const searchLower = searchTerm?.toLowerCase().trim();
             // หาผลัดที่ชื่อ รพ. หรือ จังหวัด ตรงกับที่พิมพ์ค้นหา
             const matchedAsm = student.student_assignments.find((asm: any) =>
                 asm.training_sites?.site_name?.toLowerCase().includes(searchLower) ||
@@ -140,7 +140,7 @@ export default function StudentManagement() {
 
     // --- ส่วน filteredStudents (คงเดิม แต่แนะนำให้ตรวจสอบให้แน่ใจว่าใช้ logic นี้) ---
     const filteredStudents = students.filter(s => {
-        const searchLower = searchTerm.toLowerCase().trim();
+        const searchLower = searchTerm?.toLowerCase().trim();
 
         // กรองจากข้อมูลพื้นฐาน
         const matchesBasicInfo =
@@ -743,7 +743,7 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                                 <div className="space-y-4">
                                     {form.student_assignments?.map((asm: any, idx: number) => {
                                         const theme = getRotationTheme(idx);
-                                        const currentSite = sites.find(s => String(s.id) === String(asm.site_id));
+                                        const currentSite = sites.find((s: any) => String(s.id) === String(asm.site_id))
                                         return (
                                             <div key={asm.id} className={`p-8 rounded-[2.5rem] border transition-all duration-300 ${isEditing ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100 shadow-sm'}`}>
                                                 <div className="flex flex-col lg:flex-row gap-8">
@@ -776,8 +776,8 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                                                                             style={{ zIndex: 9999, maxHeight: '300px' }}
                                                                         >
                                                                             <div className="overflow-y-auto max-h-[300px] custom-scrollbar p-2">
-                                                                                {sites.filter(s => s.site_name.toLowerCase().includes(siteSearch.toLowerCase()) || s.province.toLowerCase().includes(siteSearch.toLowerCase()))
-                                                                                    .map(s => (
+                                                                                {sites.filter((s :any) => s.site_name?.toLowerCase().includes(siteSearch?.toLowerCase()) || s.province?.toLowerCase().includes(siteSearch?.toLowerCase()))
+                                                                                    .map((s:any) => (
                                                                                         <button key={s.id} onMouseDown={(e) => e.preventDefault()} onClick={() => {
                                                                                             const nAsm = [...form.student_assignments]; nAsm[idx].site_id = s.id; nAsm[idx].supervisor_ids = []; setForm({ ...form, student_assignments: nAsm }); setActiveEditIdx(null); setSiteSearch("");
                                                                                         }} className="w-full text-left p-4 hover:bg-blue-50 rounded-xl transition-colors flex justify-between items-center group border-b border-slate-50 last:border-none">
@@ -793,7 +793,7 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                                                                 <div className="space-y-3 pt-2">
                                                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">พี่เลี้ยงที่ดูแล</span>
                                                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar p-1">
-                                                                        {mentors.filter(m => String(m.site_id) === String(asm.site_id)).map(m => (
+                                                                        {mentors.filter(( m:any) => String(m.site_id) === String(asm.site_id)).map((m : any) => (
                                                                             <button key={m.id} type="button" onClick={() => {
                                                                                 const nAsm = [...form.student_assignments]; const ids = [...nAsm[idx].supervisor_ids]; const i = ids.indexOf(m.id); i > -1 ? ids.splice(i, 1) : ids.push(m.id); nAsm[idx].supervisor_ids = ids; setForm({ ...form, student_assignments: nAsm });
                                                                             }} className={`px-3 py-2 rounded-xl text-[10px] font-black border-2 transition-all truncate text-center ${asm.supervisor_ids.includes(m.id) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200 hover:text-blue-500'}`}>{m.full_name}</button>
@@ -1064,7 +1064,7 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
 
                                                 {activeEditIdx === idx && (
                                                     <div className="absolute z-50 w-full mt-3 bg-white rounded-3xl shadow-2xl border border-slate-100 p-3 max-h-56 overflow-auto animate-in fade-in zoom-in-95">
-                                                        {sites.filter((s: any) => s.site_name.toLowerCase().includes(siteSearch.toLowerCase()) || s.province.toLowerCase().includes(siteSearch.toLowerCase())).map((s: any) => (
+                                                        {sites.filter((s: any) => s.site_name?.toLowerCase().includes(siteSearch?.toLowerCase()) || s.province?.toLowerCase().includes(siteSearch?.toLowerCase())).map((s: any) => (
                                                             <div key={s.id} onClick={() => handleSelectSite(idx, s)}
                                                                 className="p-4 hover:bg-blue-50 cursor-pointer rounded-2xl text-sm font-bold text-slate-600 flex justify-between items-center transition-colors">
                                                                 {s.site_name} <span className="text-[11px] bg-blue-100 text-blue-600 px-3 py-1 rounded-full font-black uppercase">{s.province}</span>
