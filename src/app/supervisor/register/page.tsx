@@ -621,8 +621,8 @@ export default function SmartRegister() {
                     if (!fullName) setFullName(profile.displayName)
                 } else {
                     // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
-                    // liff.login({ redirectUri: window.location.href });
-                    liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
+                    liff.login({ redirectUri: window.location.href });
+                    // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
                 }
             } catch (err) {
                 console.error("LIFF Init Error", err)

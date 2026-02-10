@@ -62,7 +62,7 @@ export default function SplitHomePage() {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-white">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600 mb-4"></div>
-                <p className="font-black text-slate-400 uppercase tracking-widest text-xs">กำลังตรวจสอบ...</p>
+                <p className="font-black text-slate-400 uppercase tracking-widest text-xs">กำลังโหลด...</p>
             </div>
         )
     }
