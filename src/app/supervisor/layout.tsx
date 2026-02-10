@@ -190,7 +190,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
 
             try {
                 await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
-                
+
                 if (!liff.isLoggedIn()) {
                     liff.login({ redirectUri: window.location.href })
                     return
@@ -234,20 +234,20 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                 <div className="w-24 h-24 bg-rose-50 text-rose-500 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-sm">
                     <ShieldAlert size={48} />
                 </div>
-                <h2 className="text-2xl font-black text-slate-900 mb-3">เข้าถึงไม่ได้</h2>
+                <h2 className="text-2xl font-black text-slate-900 mb-3">ไม่สามารถเข้าถึงได้</h2>
                 <p className="text-slate-500 font-medium mb-10 max-w-xs leading-relaxed">
                     ขออภัย คุณยังไม่มีสิทธิ์เข้าใช้งานในส่วนนี้ กรุณาลงทะเบียนข้อมูลบุคลากรก่อนเข้าใช้งานระบบ
                 </p>
-                
-                <button 
+
+                <button
                     onClick={() => router.push('/supervisor/register')}
                     className="w-full max-w-xs py-5 bg-[#064e3b] text-white rounded-3xl font-black text-sm shadow-xl shadow-emerald-100 flex items-center justify-center gap-3 active:scale-95 transition-all"
                 >
                     <UserPlus size={20} />
                     ลงทะเบียนเข้าใช้งาน
                 </button>
-                
-                <button 
+
+                <button
                     onClick={() => router.replace('/')}
                     className="mt-6 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-colors"
                 >
@@ -258,11 +258,59 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
     }
 
     // หน้า Loading ระหว่างเช็กสิทธิ์
+    // if (status === 'loading') {
+    //     return (
+    //         <div className="h-screen flex flex-col items-center justify-center bg-white">
+    //             <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#064e3b] mb-4"></div>
+    //             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Checking Permission...</p>
+    //         </div>
+    //     )
+    // }
     if (status === 'loading') {
         return (
-            <div className="h-screen flex flex-col items-center justify-center bg-white">
-                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#064e3b] mb-4"></div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Checking Permission...</p>
+            <div className="h-screen flex flex-col items-center justify-center bg-white overflow-hidden relative">
+                {/* พื้นหลังจางๆ เพื่อเพิ่มมิติ */}
+                <div className="absolute top-0 left-0 w-full h-full opacity-[0.03] pointer-events-none">
+                    <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-[#064e3b] rounded-full blur-[100px]"></div>
+                    <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-emerald-500 rounded-full blur-[100px]"></div>
+                </div>
+
+                <div className="relative flex flex-col items-center">
+                    {/* Loader หลัก: วงโคจรซ้อนกัน */}
+                    <div className="relative w-20 h-20 mb-8">
+                        {/* วงนอก (หมุนช้า) */}
+                        <div className="absolute inset-0 rounded-full border-[3px] border-slate-100 border-t-[#064e3b] animate-spin"></div>
+                        {/* วงใน (หมุนเร็ว) */}
+                        <div className="absolute inset-2 rounded-full border-[2px] border-transparent border-t-emerald-400 animate-[spin_0.8s_linear_infinite]"></div>
+                        {/* จุดกลาง (กระพริบ) */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-2 h-2 bg-[#064e3b] rounded-full animate-ping"></div>
+                        </div>
+                    </div>
+
+                    {/* ข้อความสถานะ */}
+                    <div className="flex flex-col items-center gap-2">
+                        <h2 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em] ml-[0.3em]">
+                            ตรวจสอบสิทธิ์เข้าใช้งาน
+                        </h2>
+                        <div className="flex items-center gap-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                กรุณารอซักครู่...
+                            </span>
+                            {/* จุดไข่ปลาวิ่ง */}
+                            <span className="flex gap-0.5">
+                                <span className="w-0.5 h-0.5 bg-slate-400 rounded-full animate-[bounce_1s_infinite_100ms]"></span>
+                                <span className="w-0.5 h-0.5 bg-slate-400 rounded-full animate-[bounce_1s_infinite_200ms]"></span>
+                                <span className="w-0.5 h-0.5 bg-slate-400 rounded-full animate-[bounce_1s_infinite_300ms]"></span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ลายน้ำด้านล่างแบบจางๆ */}
+                <p className="absolute bottom-10 text-[9px] font-black text-slate-300 uppercase tracking-[0.5em]">
+                    TTMED Internships Management System
+                </p>
             </div>
         )
     }
