@@ -621,7 +621,7 @@ export default function SmartRegister() {
                     if (!fullName) setFullName(profile.displayName)
                 } else {
                     // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
-                liff.login({ redirectUri: window.location.href });
+                    liff.login({ redirectUri: window.location.href });
                 }
             } catch (err) {
                 console.error("LIFF Init Error", err)
@@ -747,20 +747,41 @@ export default function SmartRegister() {
     return (
         <div className="min-h-screen bg-[#F8FAFC] p-6 pb-20 font-sans">
             <div className="max-w-md mx-auto space-y-8">
-                <div className="text-center">
+                {/* <div className="text-center">
                     <div className="inline-block p-4 bg-blue-600 rounded-[2rem] shadow-xl text-white mb-4">
                         <UserCircle2 size={32} />
                     </div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">ลงทะเบียนบุคลากร</h1>
                     <p className="text-slate-500 font-medium">เข้าใช้งานระบบประเมินผลการฝึกงาน</p>
-                    {/* ส่วน Header หรือเหนือฟอร์มลงทะเบียน */}
+                    
                     {lineDisplayName && (
                         <div className="flex items-center gap-2 mb-6 p-3 bg-emerald-50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2">
                             <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white">
                                 <UserCircle2 size={18} />
                             </div>
                             <p className="text-[11px] font-bold text-emerald-700">
-                                เชื่อมต่อกับบัญชี LINE: <span className="font-black underline">{lineDisplayName}</span>
+                                เชื่อมต่อกับบัญชี LINE: <span className="font-black">{lineDisplayName}</span>
+                            </p>
+                        </div>
+                    )}
+                </div> */}
+
+                <div className="text-center">
+                    <div className="inline-block p-4 bg-blue-600 rounded-[2rem] shadow-xl text-white mb-4">
+                        <UserCircle2 size={32} />
+                    </div>
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight">ลงทะเบียนบุคลากร</h1>
+                    <p className="text-slate-500 font-medium">เข้าใช้งานระบบประเมินผลการฝึกงาน</p>
+
+                    {/* ส่วนที่แก้ไข: เพิ่ม mt-6 และ justify-center */}
+                    {lineDisplayName && (
+                        <div className="flex items-center justify-center gap-2 mt-8 mb-4 p-3 bg-emerald-50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2 mx-auto max-w-[280px]">
+                            <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
+                                <UserCircle2 size={18} />
+                            </div>
+                            <p className="text-[11px] font-bold text-emerald-700 text-left">
+                                เชื่อมต่อกับบัญชี LINE: <br />
+                                <span className="font-black text-emerald-900">{lineDisplayName}</span>
                             </p>
                         </div>
                     )}
