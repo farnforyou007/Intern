@@ -626,9 +626,7 @@ export default function SmartRegister() {
                 }
             } catch (err) {
                 console.error("LIFF Init Error", err)
-                if (err.toString().includes('400')) {
-                    window.location.reload();
-                }
+                
             }
         }
         initLiff()
