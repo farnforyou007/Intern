@@ -1,5 +1,5 @@
 "use client"
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
     GraduationCap, 
@@ -11,9 +11,61 @@ import {
     Sprout
 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
-
+import liff from '@line/liff' // เพิ่มการ import liff
+import { createBrowserClient } from '@supabase/ssr'
 export default function SplitHomePage() {
     const router = useRouter()
+    const [isChecking, setIsChecking] = useState(true)
+    const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
+    useEffect(() => {
+        const checkAuth = async () => {
+            try {
+                // 1. เริ่มการทำงาน LIFF
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                
+                if (liff.isLoggedIn()) {
+                    const profile = await liff.getProfile()
+                    
+                    // 2. เช็กในฐานข้อมูลว่าคนนี้ลงทะเบียนหรือยัง
+                    const { data: user } = await supabase
+                        .from('supervisors')
+                        .select('is_verified')
+                        .eq('line_user_id', profile.userId)
+                        .single()
+
+                    if (user) {
+                        // ถ้าพบข้อมูลแล้ว
+                        if (user.is_verified) {
+                            router.replace('/supervisor/dashboard')
+                        } else {
+                            router.replace('/supervisor/pending')
+                        }
+                        return // จบการทำงาน ไม่ต้องโหลดหน้า Choice ต่อ
+                    }
+                }
+                // ถ้ายังไม่ล็อกอิน หรือไม่มีข้อมูลในระบบ ให้แสดงหน้า Choice ปกติ
+                setIsChecking(false)
+            } catch (err) {
+                console.error("Auth check failed", err)
+                setIsChecking(false)
+            }
+        }
+        checkAuth()
+    }, [])
+
+    // ถ้ากำลังตรวจสอบ ให้แสดงหน้า Loading สวยๆ ไปก่อน
+    if (isChecking) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-white">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600 mb-4"></div>
+                <p className="font-black text-slate-400 uppercase tracking-widest text-xs">กำลังตรวจสอบ...</p>
+            </div>
+        )
+    }
 
     return (
         <div className="min-h-screen bg-white flex flex-col lg:flex-row font-sans">
