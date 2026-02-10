@@ -201,31 +201,61 @@ export default function SupervisorDashboard() {
 
     const fetchRealData = async () => {
         try {
+            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+            // if (!liff.isLoggedIn()) return liff.login()
+            // const profile = await liff.getProfile()
+
+            // const { data: svData } = await supabase
+            //     .from('supervisors')
+            //     .select('*, sites(name)')
+            //     .eq('line_user_id', profile.userId)
+            //     .single()
+
+            // if (svData) {
+            //     setSupervisor(svData)
+            //     const { data: assignments } = await supabase
+            //         .from('assignment_supervisors')
+            //         .select('id, is_evaluated')
+            //         .eq('supervisor_id', svData.id)
+
+            //     if (assignments) {
+            //         const evaluated = assignments.filter(a => a.is_evaluated).length
+            //         setStats({
+            //             total: assignments.length,
+            //             evaluated: evaluated,
+            //             pending: assignments.length - evaluated
+            //         })
+            //     }
             await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
             if (!liff.isLoggedIn()) return liff.login()
             const profile = await liff.getProfile()
 
-            const { data: svData } = await supabase
+            // ลองดึงแค่ตาราง supervisors อย่างเดียวดูก่อน (ตัด sites(name) ออกชั่วคราว)
+            const { data: svData, error } = await supabase
                 .from('supervisors')
-                .select('*, sites(name)')
+                .select('*') // ดึงทุกอย่างในตารางนี้มาก่อน
                 .eq('line_user_id', profile.userId)
                 .single()
 
-            if (svData) {
-                setSupervisor(svData)
-                const { data: assignments } = await supabase
-                    .from('assignment_supervisors')
-                    .select('id, is_evaluated')
-                    .eq('supervisor_id', svData.id)
+            if (error) {
+                console.error("Database Error:", error.message) // จะบอกชัดเจนว่าคอลัมน์ไหนพัง
+                return
+            }
 
-                if (assignments) {
-                    const evaluated = assignments.filter(a => a.is_evaluated).length
-                    setStats({
-                        total: assignments.length,
-                        evaluated: evaluated,
-                        pending: assignments.length - evaluated
-                    })
-                }
+            if (svData) {
+                // ตรวจสอบว่าคอลัมน์รูปภาพใน DB ของคุณชื่ออะไร (เช่น avatar_url หรือ image)
+                const imgPath = svData.avatar_url || svData.image;
+
+                const publicUrl = imgPath?.startsWith('http')
+                    ? imgPath
+                    : `https://vvxsfibqlpkpzqyjwmuw.supabase.co/storage/v1/object/public/avatars/${imgPath}`;
+
+                setSupervisor({
+                    ...svData,
+                    avatar_url: publicUrl
+                })
+
+                console.log("Current Supervisor Image:", publicUrl)
             }
         } catch (error) {
             console.error("Dashboard Error:", error)
@@ -256,11 +286,11 @@ export default function SupervisorDashboard() {
         </div>
     )
 
-    const profileImage = supervisor?.avatar_url 
-    ? (supervisor.avatar_url.startsWith('http') 
-        ? supervisor.avatar_url 
-        : `https://vvxsfibqlpkpzqyjwmuw.supabase.co/storage/v1/object/public/avatars/${supervisor.avatar_url}`)
-    : `https://api.dicebear.com/7.x/avataaars/svg?seed=${supervisor?.id || 'fallback'}`;
+    const profileImage = supervisor?.avatar_url
+        ? (supervisor.avatar_url.startsWith('http')
+            ? supervisor.avatar_url
+            : `https://vvxsfibqlpkpzqyjwmuw.supabase.co/storage/v1/object/public/avatars/${supervisor.avatar_url}`)
+        : `https://api.dicebear.com/7.x/avataaars/svg?seed=${supervisor?.id || 'fallback'}`;
 
     console.log("Current Supervisor Image:", supervisor?.avatar_url)
     return (
@@ -285,62 +315,62 @@ export default function SupervisorDashboard() {
                     {/* <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
                         <img src={supervisor?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=fallback`} alt="avatar" className="w-full h-full object-cover" />
                     </div> */}
-                    
+
                     <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
-                    <img
-                        src={profileImage}
-                        alt="avatar"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                            // ถ้าโหลดรูปจาก Storage ไม่สำเร็จ ให้ใช้รูปสำรองทันที
-                            e.currentTarget.src = "https://api.dicebear.com/7.x/avataaars/svg?seed=fallback";
-                        }}
-                    />
+                        <img
+                            src={profileImage}
+                            alt="avatar"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                // ถ้าโหลดรูปจาก Storage ไม่สำเร็จ ให้ใช้รูปสำรองทันที
+                                e.currentTarget.src = "https://api.dicebear.com/7.x/avataaars/svg?seed=fallback";
+                            }}
+                        />
+                    </div>
+                </div>
+
+                {/* --- KPI Cards --- */}
+                <div className="p-2 relative z-10 grid grid-cols-3 gap-4">
+                    <KPICard label="นศ. ทั้งหมด" value={stats.total} icon={<Users size={16} />} color="bg-white/10 text-white" />
+                    <KPICard label="ประเมินแล้ว" value={stats.evaluated} icon={<CheckCircle size={16} />} color="bg-emerald-500/40 text-emerald-100" />
+                    <KPICard label="ยังไม่ประเมิน" value={stats.pending} icon={<AlertCircle size={16} />} color="bg-rose-500/40 text-rose-100" />
                 </div>
             </div>
 
-            {/* --- KPI Cards --- */}
-            <div className="p-2 relative z-10 grid grid-cols-3 gap-4">
-                <KPICard label="นศ. ทั้งหมด" value={stats.total} icon={<Users size={16} />} color="bg-white/10 text-white" />
-                <KPICard label="ประเมินแล้ว" value={stats.evaluated} icon={<CheckCircle size={16} />} color="bg-emerald-500/40 text-emerald-100" />
-                <KPICard label="ยังไม่ประเมิน" value={stats.pending} icon={<AlertCircle size={16} />} color="bg-rose-500/40 text-rose-100" />
+            {/* --- Notification Bar --- */}
+            <div className="px-6 -mt-8 relative z-20">
+                <div className="bg-white p-5 rounded-[2.5rem] shadow-xl shadow-slate-200/60 border border-slate-50 flex items-center gap-4">
+                    <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 shrink-0 border border-amber-100">
+                        <Bell size={28} className={stats.pending > 0 ? "animate-bounce" : ""} />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="font-black text-slate-800 text-sm">แจ้งเตือนการประเมิน</h3>
+                        <p className="text-[11px] text-slate-400 font-bold italic">
+                            {stats.pending > 0 ? `เหลือ นศ. ${stats.pending} คน ที่ยังไม่ประเมิน` : "ประเมินครบถ้วนแล้ว ยอดเยี่ยม!"}
+                        </p>
+                    </div>
+                    {stats.pending > 0 && (
+                        <button onClick={() => router.push('/supervisor/students')} className="bg-[#064e3b] text-white text-[10px] font-black px-5 py-3 rounded-2xl shadow-lg active:scale-95 transition-all">
+                            ดูรายชื่อ
+                        </button>
+                    )}
+                </div>
             </div>
-        </div>
 
-            {/* --- Notification Bar --- */ }
-    <div className="px-6 -mt-8 relative z-20">
-        <div className="bg-white p-5 rounded-[2.5rem] shadow-xl shadow-slate-200/60 border border-slate-50 flex items-center gap-4">
-            <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 shrink-0 border border-amber-100">
-                <Bell size={28} className={stats.pending > 0 ? "animate-bounce" : ""} />
+            {/* --- Main Menus --- */}
+            <div className="p-8 space-y-4">
+                <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2 mb-2">เมนูการจัดการ</h2>
+                <MenuCard
+                    onClick={() => router.push('/supervisor/students')}
+                    icon={<Users size={24} />}
+                    title="รายชื่อนักศึกษา"
+                    desc="ดูรายชื่อ นศ. และเริ่มประเมิน"
+                    badge={stats.total > 0 ? `${stats.total} คน` : null}
+                    color="text-emerald-600 bg-emerald-50"
+                />
+                <MenuCard icon={<ClipboardCheck size={24} />} title="ประวัติประเมิน" desc="ดูคะแนนย้อนหลังและสรุปผล" color="text-blue-600 bg-blue-50" />
+                <MenuCard icon={<Clock size={24} />} title="ตารางผลัดฝึก" desc="เช็กช่วงเวลาฝึกงานในแต่ละรอบ" color="text-purple-600 bg-purple-50" />
             </div>
-            <div className="flex-1">
-                <h3 className="font-black text-slate-800 text-sm">แจ้งเตือนการประเมิน</h3>
-                <p className="text-[11px] text-slate-400 font-bold italic">
-                    {stats.pending > 0 ? `เหลือ นศ. ${stats.pending} คน ที่ยังไม่ประเมิน` : "ประเมินครบถ้วนแล้ว ยอดเยี่ยม!"}
-                </p>
-            </div>
-            {stats.pending > 0 && (
-                <button onClick={() => router.push('/supervisor/students')} className="bg-[#064e3b] text-white text-[10px] font-black px-5 py-3 rounded-2xl shadow-lg active:scale-95 transition-all">
-                    ดูรายชื่อ
-                </button>
-            )}
-        </div>
-    </div>
-
-    {/* --- Main Menus --- */ }
-    <div className="p-8 space-y-4">
-        <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2 mb-2">เมนูการจัดการ</h2>
-        <MenuCard
-            onClick={() => router.push('/supervisor/students')}
-            icon={<Users size={24} />}
-            title="รายชื่อนักศึกษา"
-            desc="ดูรายชื่อ นศ. และเริ่มประเมิน"
-            badge={stats.total > 0 ? `${stats.total} คน` : null}
-            color="text-emerald-600 bg-emerald-50"
-        />
-        <MenuCard icon={<ClipboardCheck size={24} />} title="ประวัติประเมิน" desc="ดูคะแนนย้อนหลังและสรุปผล" color="text-blue-600 bg-blue-50" />
-        <MenuCard icon={<Clock size={24} />} title="ตารางผลัดฝึก" desc="เช็กช่วงเวลาฝึกงานในแต่ละรอบ" color="text-purple-600 bg-purple-50" />
-    </div>
         </div >
     )
 }
