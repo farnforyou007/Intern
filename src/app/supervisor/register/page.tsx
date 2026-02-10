@@ -620,7 +620,8 @@ export default function SmartRegister() {
                     // ถ้าใน LINE มีชื่ออยู่แล้ว สามารถเอามาตั้งเป็นค่าเริ่มต้นได้
                     if (!fullName) setFullName(profile.displayName)
                 } else {
-                    liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
+                    // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
+                liff.login({ redirectUri: window.location.href });
                 }
             } catch (err) {
                 console.error("LIFF Init Error", err)
