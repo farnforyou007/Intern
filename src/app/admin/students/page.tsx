@@ -1,4 +1,3 @@
-
 // ver2
 "use client"
 import { useState, useEffect, useCallback } from 'react'
@@ -170,60 +169,6 @@ export default function StudentManagement() {
     const studentYears = Array.from(
         new Set(students.map(s => s.student_code?.substring(0, 2)))
     ).filter(year => year).sort((a, b) => b.localeCompare(a)); // เรียงจากปีล่าสุดลงไป
-
-    // Filtering logic
-    // ปรับปรุง Logic การกรองให้ทำงานร่วมกันทุกตัว (Search + Year + Rotation)
-    // const filteredStudents = students.filter(s => {
-    //     // 1. กรองจากคำค้นหา (ชื่อ/รหัส)
-    //     const matchesSearch = s.student_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    //         `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase());
-
-    //     // 2. กรองจากรุ่นรหัส (2 ตัวหน้า)
-    //     const matchesYear = selectedYearFilter === 'all' || s.student_code?.startsWith(selectedYearFilter);
-
-    //     // 3. กรองจากผลัดการฝึก (ถ้าเลือกผลัด จะแสดงเฉพาะนักศึกษาที่มีรายชื่อในผลัดนั้น)
-    //     const matchesRotation = selectedRotationFilter === 'all' ||
-    //         s.student_assignments?.some((as: any) => String(as.rotation_id) === String(selectedRotationFilter));
-
-    //     return matchesSearch && matchesYear && matchesRotation;
-    // });
-
-    // ปรับปรุง Logic การกรองให้ "ฉลาด" และค้นหาได้จากทุกอย่าง
-    // const filteredStudents = students.filter(s => {
-    //     const searchLower = searchTerm.toLowerCase().trim();
-
-    //     // 1. ตรวจสอบข้อมูลส่วนตัว (รหัส, ชื่อ, เบอร์, อีเมล)
-    //     const matchesBasicInfo =
-    //         s.student_code?.toLowerCase().includes(searchLower) ||
-    //         s.first_name?.toLowerCase().includes(searchLower) ||
-    //         s.last_name?.toLowerCase().includes(searchLower) ||
-    //         s.phone?.includes(searchTerm) ||
-    //         s.email?.toLowerCase().includes(searchLower);
-
-    //     // 2. ตรวจสอบข้อมูลสถานที่ฝึก (ชื่อ รพ. หรือ จังหวัด)
-    //     // แก้ไข: ให้หาจากทุกผลัดที่มีอยู่ (student_assignments) 
-    //     const matchesAssignments = s.student_assignments?.some((asm: any) => {
-    //         const siteMatch = asm.training_sites?.site_name?.toLowerCase().includes(searchLower) ||
-    //             asm.training_sites?.province?.toLowerCase().includes(searchLower);
-
-    //         // ถ้าผู้ใช้เลือกกรอง "เฉพาะผลัด" ให้หาเฉพาะผลัดนั้น
-    //         if (selectedRotationFilter !== 'all') {
-    //             return siteMatch && String(asm.rotation_id) === String(selectedRotationFilter);
-    //         }
-    //         // ถ้าเลือก "ทั้งหมด" ให้คืนค่าถ้าเจอในผลัดใดผลัดหนึ่ง
-    //         return siteMatch;
-    //     });
-
-    //     // 3. กรองตามรุ่นรหัส (2 ตัวหน้า)
-    //     const matchesYear = selectedYearFilter === 'all' || s.student_code?.startsWith(selectedYearFilter);
-
-    //     // 4. กรองตามผลัดการฝึก (Dropdown Filter)
-    //     const matchesRotation = selectedRotationFilter === 'all' ||
-    //         s.student_assignments?.some((as: any) => String(as.rotation_id) === String(selectedRotationFilter));
-
-    //     // เงื่อนไขการแสดงผล: (เจอข้อมูลพื้นฐาน OR เจอในแผนฝึก) AND ตรงตามรุ่นรหัส AND ตรงตามผลัดที่เลือก
-    //     return (matchesBasicInfo || matchesAssignments) && matchesYear && matchesRotation;
-    // });
 
     // Pagination logic
     const totalPages = Math.ceil(filteredStudents.length / rowsPerPage)
@@ -535,57 +480,57 @@ export default function StudentManagement() {
                         </TableBody>
                     </Table>
                     <div className="px-8 py-6 bg-slate-50/30 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-3">
-                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">แสดงแถว:</span>
-                        <select
-                            value={rowsPerPage}
-                            onChange={(e) => {
-                                setRowsPerPage(Number(e.target.value));
-                                setCurrentPage(1);
-                            }}
-                            className="bg-white border-none shadow-lg shadow-slate-100 rounded-xl px-3 py-2 text-xs font-black text-blue-600 outline-none focus:ring-2 ring-blue-500"
-                        >
-                            {[5, 10, 20, 50].map(val => <option key={val} value={val}>{val}</option>)}
-                        </select>
-                        <p className="text-xs font-bold text-slate-400 ml-4">
-                            แสดง {startIndex + 1} - {Math.min(startIndex + rowsPerPage, filteredStudents.length)} จากทั้งหมด  {filteredStudents.length}
-                        </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="ghost"
-                            disabled={currentPage === 1}
-                            onClick={() => setCurrentPage(prev => prev - 1)}
-                            className="w-10 h-10 rounded-xl bg-white shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30"
-                        >
-                            <ChevronLeft size={18} />
-                        </Button>
-                        <div className="flex items-center gap-1">
-                            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                <Button
-                                    key={page}
-                                    onClick={() => setCurrentPage(page)}
-                                    className={`w-10 h-10 rounded-xl font-black text-xs transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 scale-110' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                                >
-                                    {page}
-                                </Button>
-                            ))}
+                        <div className="flex items-center gap-3">
+                            <span className="text-xs font-black text-slate-400 uppercase tracking-widest">แสดงแถว:</span>
+                            <select
+                                value={rowsPerPage}
+                                onChange={(e) => {
+                                    setRowsPerPage(Number(e.target.value));
+                                    setCurrentPage(1);
+                                }}
+                                className="bg-white border-none shadow-lg shadow-slate-100 rounded-xl px-3 py-2 text-xs font-black text-blue-600 outline-none focus:ring-2 ring-blue-500"
+                            >
+                                {[5, 10, 20, 50].map(val => <option key={val} value={val}>{val}</option>)}
+                            </select>
+                            <p className="text-xs font-bold text-slate-400 ml-4">
+                                แสดง {startIndex + 1} - {Math.min(startIndex + rowsPerPage, filteredStudents.length)} จากทั้งหมด  {filteredStudents.length}
+                            </p>
                         </div>
-                        <Button
-                            variant="ghost"
-                            disabled={currentPage === totalPages}
-                            onClick={() => setCurrentPage(prev => prev + 1)}
-                            className="w-10 h-10 rounded-xl bg-white shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30"
-                        >
-                            <ChevronRight size={18} />
-                        </Button>
+
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="ghost"
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage(prev => prev - 1)}
+                                className="w-10 h-10 rounded-xl bg-white shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30"
+                            >
+                                <ChevronLeft size={18} />
+                            </Button>
+                            <div className="flex items-center gap-1">
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                    <Button
+                                        key={page}
+                                        onClick={() => setCurrentPage(page)}
+                                        className={`w-10 h-10 rounded-xl font-black text-xs transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 scale-110' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                                    >
+                                        {page}
+                                    </Button>
+                                ))}
+                            </div>
+                            <Button
+                                variant="ghost"
+                                disabled={currentPage === totalPages}
+                                onClick={() => setCurrentPage(prev => prev + 1)}
+                                className="w-10 h-10 rounded-xl bg-white shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30"
+                            >
+                                <ChevronRight size={18} />
+                            </Button>
+                        </div>
                     </div>
-                </div>
                 </div>
 
                 {/* Pagination Controls */}
-                
+
             </div>
 
             <StudentDetailModal
@@ -776,8 +721,8 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                                                                             style={{ zIndex: 9999, maxHeight: '300px' }}
                                                                         >
                                                                             <div className="overflow-y-auto max-h-[300px] custom-scrollbar p-2">
-                                                                                {sites.filter((s :any) => s.site_name?.toLowerCase().includes(siteSearch?.toLowerCase()) || s.province?.toLowerCase().includes(siteSearch?.toLowerCase()))
-                                                                                    .map((s:any) => (
+                                                                                {sites.filter((s: any) => s.site_name?.toLowerCase().includes(siteSearch?.toLowerCase()) || s.province?.toLowerCase().includes(siteSearch?.toLowerCase()))
+                                                                                    .map((s: any) => (
                                                                                         <button key={s.id} onMouseDown={(e) => e.preventDefault()} onClick={() => {
                                                                                             const nAsm = [...form.student_assignments]; nAsm[idx].site_id = s.id; nAsm[idx].supervisor_ids = []; setForm({ ...form, student_assignments: nAsm }); setActiveEditIdx(null); setSiteSearch("");
                                                                                         }} className="w-full text-left p-4 hover:bg-blue-50 rounded-xl transition-colors flex justify-between items-center group border-b border-slate-50 last:border-none">
@@ -793,7 +738,7 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                                                                 <div className="space-y-3 pt-2">
                                                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">พี่เลี้ยงที่ดูแล</span>
                                                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar p-1">
-                                                                        {mentors.filter(( m:any) => String(m.site_id) === String(asm.site_id)).map((m : any) => (
+                                                                        {mentors.filter((m: any) => String(m.site_id) === String(asm.site_id)).map((m: any) => (
                                                                             <button key={m.id} type="button" onClick={() => {
                                                                                 const nAsm = [...form.student_assignments]; const ids = [...nAsm[idx].supervisor_ids]; const i = ids.indexOf(m.id); i > -1 ? ids.splice(i, 1) : ids.push(m.id); nAsm[idx].supervisor_ids = ids; setForm({ ...form, student_assignments: nAsm });
                                                                             }} className={`px-3 py-2 rounded-xl text-[10px] font-black border-2 transition-all truncate text-center ${asm.supervisor_ids.includes(m.id) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200 hover:text-blue-500'}`}>{m.full_name}</button>
@@ -836,10 +781,6 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
         </Dialog>
     );
 }
-
-
-
-
 
 function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
     const [loading, setLoading] = useState(false);
@@ -897,48 +838,173 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
         setForm({ ...form, assignments: nAs });
     };
 
+  
+    // const handleSave = async () => {
+    //     if (!form.student_code || !form.first_name) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
+
+    //     // เช็คหน้าประตูก่อน
+    //     if (!avatarFile) {
+    //         return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษา', 'warning');
+    //     }
+
+    //     setLoading(true);
+    //     try {
+    //         let publicUrl = null;
+
+    //         // บรรทัดเจ้าปัญหา แก้โดยใช้ ! หรือ as any
+    //         // บรรทัด 908 แก้เป็น:
+    //         const fileToUpload = avatarFile as File;
+
+    //         const fileExt = fileToUpload!.name.split('.').pop();
+    //         const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
+
+    //         const { error: uploadError } = await supabase.storage
+    //             .from('avatars')
+    //             .upload(fileName, fileToUpload);
+
+    //         if (uploadError) throw uploadError;
+
+    //         const { data: urlData } = supabase.storage
+    //             .from('avatars')
+    //             .getPublicUrl(fileName);
+
+    //         publicUrl = urlData.publicUrl;
+    //         const { data: student, error: stError } = await supabase.from('students').insert([{
+    //             student_code: form.student_code, prefix: form.prefix,
+    //             first_name: form.first_name, last_name: form.last_name,
+    //             phone: form.phone, email: form.email, avatar_url: publicUrl
+    //         }]).select().single();
+    //         if (stError) throw stError;
+
+    //         for (const as of form.assignments) {
+    //             if (as.site_id) {
+    //                 const { data: assignment } = await supabase.from('student_assignments').insert([{
+    //                     student_id: student.id, rotation_id: as.rotation_id,
+    //                     site_id: as.site_id, status: 'active'
+    //                 }]).select().single();
+
+    //                 if (as.supervisor_ids.length > 0) {
+    //                     const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+    //                         assignment_id: assignment.id, supervisor_id: sId
+    //                     }));
+    //                     await supabase.from('assignment_supervisors').insert(mentorRecords);
+    //                 }
+    //             }
+    //         }
+    //         Swal.fire({ icon: 'success', title: 'สำเร็จ', timer: 1500, showConfirmButton: false });
+    //         fetchData(); onClose();
+    //     } catch (e: any) { Swal.fire('Error', e.message, 'error'); }
+    //     finally { setLoading(false); }
+    // };
+
+
     const handleSave = async () => {
-        if (!form.student_code || !form.first_name) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
-        setLoading(true);
-        try {
-            let publicUrl = null;
-            if (avatarFile) {
-                const fileExt = avatarFile.name.split('.').pop();
-                const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
-                const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, avatarFile);
-                if (uploadError) throw uploadError;
-                const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
-                publicUrl = urlData.publicUrl;
-            }
+    // 1. ตรวจสอบฟิลด์พื้นฐาน
+    if (!form.student_code || !form.first_name) {
+        return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
+    }
 
-            const { data: student, error: stError } = await supabase.from('students').insert([{
-                student_code: form.student_code, prefix: form.prefix,
-                first_name: form.first_name, last_name: form.last_name,
-                phone: form.phone, email: form.email, avatar_url: publicUrl
-            }]).select().single();
-            if (stError) throw stError;
+    // 2. เช็ครูปภาพและ "Lock" ตัวแปรไว้ในตัวแปรใหม่ (Type Guard)
+    // การดึง avatarFile มาไว้ใน local variable แบบนี้จะทำให้ TS มั่นใจว่าค่าไม่เปลี่ยนระหว่างทาง
+    const fileToUpload = avatarFile; 
+    if (!fileToUpload) {
+        return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษา', 'warning');
+    }
 
+    setLoading(true);
+    try {
+        // 3. ตรวจสอบรหัสนักศึกษาซ้ำ (ใช้ maybeSingle เพื่อความปลอดภัยถ้าไม่เจอ row)
+        const { data: check } = await supabase
+            .from('students')
+            .select('id')
+            .eq('student_code', form.student_code)
+            .maybeSingle();
+
+        if (check) {
+            setLoading(false);
+            return Swal.fire('ข้อมูลซ้ำ', 'รหัสนี้ลงทะเบียนแล้ว', 'error');
+        }
+
+        // 4. จัดการเรื่องไฟล์ (ใช้ fileToUpload ที่เราเช็คแล้วว่าไม่ใช่ null)
+        const fileExt = fileToUpload.name.split('.').pop();
+        const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(fileName, fileToUpload);
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+
+        const publicUrl = urlData.publicUrl;
+
+        // 5. บันทึกข้อมูลนักศึกษา
+        const { data: student, error: stError } = await supabase
+            .from('students')
+            .insert([{
+                student_code: form.student_code,
+                prefix: form.prefix,
+                first_name: form.first_name,
+                last_name: form.last_name,
+                phone: form.phone,
+                email: form.email,
+                avatar_url: publicUrl
+            }])
+            .select()
+            .single();
+
+        if (stError) throw stError;
+
+        // 6. เพิ่มข้อมูลการมอบหมาย (Assignments)
+        if (form.assignments && form.assignments.length > 0) {
             for (const as of form.assignments) {
                 if (as.site_id) {
-                    const { data: assignment } = await supabase.from('student_assignments').insert([{
-                        student_id: student.id, rotation_id: as.rotation_id,
-                        site_id: as.site_id, status: 'active'
-                    }]).select().single();
+                    const { data: assignment, error: asError } = await supabase
+                        .from('student_assignments')
+                        .insert([{
+                            student_id: student.id,
+                            rotation_id: as.rotation_id,
+                            site_id: as.site_id,
+                            status: 'active'
+                        }])
+                        .select()
+                        .single();
+                    
+                    if (asError) throw asError;
 
-                    if (as.supervisor_ids.length > 0) {
+                    // 7. เพิ่มรายชื่อพี่เลี้ยง
+                    if (as.supervisor_ids && as.supervisor_ids.length > 0) {
                         const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-                            assignment_id: assignment.id, supervisor_id: sId
+                            assignment_id: assignment.id,
+                            supervisor_id: sId
                         }));
                         await supabase.from('assignment_supervisors').insert(mentorRecords);
                     }
                 }
             }
-            Swal.fire({ icon: 'success', title: 'สำเร็จ', timer: 1500, showConfirmButton: false });
-            fetchData(); onClose();
-        } catch (e: any) { Swal.fire('Error', e.message, 'error'); }
-        finally { setLoading(false); }
-    };
+        }
 
+        Swal.fire({
+            icon: 'success',
+            title: 'สำเร็จ',
+            text: 'เพิ่มข้อมูลนักศึกษาเรียบร้อยแล้ว',
+            timer: 1500,
+            showConfirmButton: false,
+            customClass: { popup: 'rounded-[2rem]' }
+        });
+
+        fetchData();
+        onClose();
+    } catch (e: any) {
+        console.error('Error saving student:', e);
+        Swal.fire('เกิดข้อผิดพลาด', e.message || 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+    } finally {
+        setLoading(false);
+    }
+};
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-[95vw] lg:max-w-[1200px] w-full p-0 overflow-hidden rounded-[2.5rem] border-none shadow-2xl bg-white focus:outline-none">
