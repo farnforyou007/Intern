@@ -5,16 +5,18 @@ import { createClient } from '@supabase/supabase-js'
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Camera, Save, Loader2, GraduationCap, CalendarDays, 
-    Search, Mail, Phone, User, Hash, UserCircle, Trash2 , 
-    Plus , X ,Hospital} from "lucide-react"
+import {
+    Camera, Save, Loader2, GraduationCap, CalendarDays,
+    Search, Mail, Phone, User, Hash, UserCircle, Trash2,
+    Plus, X, Hospital
+} from "lucide-react"
 import Swal from 'sweetalert2'
 
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
 } from "@/components/ui/dialog"
 
 const supabase = createClient(
@@ -58,9 +60,31 @@ export default function StudentRegisterPage() {
         }
     }
 
+    // const fetchMentors = async () => {
+    //     const { data } = await supabase.from('supervisors').select('*')
+    //     if (data) setMentors(data)
+    // }
     const fetchMentors = async () => {
-        const { data } = await supabase.from('supervisors').select('*')
-        if (data) setMentors(data)
+        // ดึงข้อมูลพี่เลี้ยง พร้อมข้อมูลจากตารางกลาง (supervisor_subjects)
+        const { data, error } = await supabase
+            .from('supervisors')
+            .select(`
+            *,
+            supervisor_subjects (
+                subject_id,
+                sub_subject_id
+            )
+        `)
+
+        if (error) {
+            console.error("Error fetching mentors:", error)
+            return
+        }
+
+        if (data) {
+            setMentors(data)
+            // console.log("Mentors with subjects:", data) // 🚩 ลองเช็กใน Console ว่ามีก้อน supervisor_subjects มาไหม
+        }
     }
 
     // ค้นหาฟังก์ชัน fetchConfigs เดิม แล้วแก้ไขเป็นตามนี้:
@@ -86,16 +110,46 @@ export default function StudentRegisterPage() {
         fetchMentors()
 
         // 1. ดึงข้อมูลผลัด (ครั้งเดียว)
+        // const fetchRotations = async () => {
+        //     const { data: r } = await supabase.from('rotations').select('*').order('round_number', { ascending: true }).limit(3)
+        //     if (r) {
+        //         setForm((prev: any) => ({
+        //             ...prev,
+        //             assignments: r.map((rot: any) => ({
+        //                 rotation_id: String(rot.id),
+        //                 rotation_name: rot.name,
+        //                 dates: `${rot.start_date} - ${rot.end_date}`,
+        //                 site_id: "", province: "", supervisor_ids: [], provinceSearch: ""
+        //             }))
+        //         }))
+        //     }
+        // }
         const fetchRotations = async () => {
-            const { data: r } = await supabase.from('rotations').select('*').order('round_number', { ascending: true }).limit(3)
+            // 🚩 ปรับให้ดึงข้อมูลวิชาจาก rotation_subjects มาด้วย
+            const { data: r } = await supabase
+                .from('rotations')
+                .select(`
+            *,
+            rotation_subjects (
+                subject_id
+            )
+        `)
+                .order('round_number', { ascending: true })
+                .limit(3)
+
             if (r) {
                 setForm((prev: any) => ({
                     ...prev,
                     assignments: r.map((rot: any) => ({
                         rotation_id: String(rot.id),
                         rotation_name: rot.name,
+                        // 🚩 เก็บ ID วิชาไว้ใน item เพื่อเอาไปกรองพี่เลี้ยง
+                        subject_id: rot.rotation_subjects?.[0]?.subject_id || null,
                         dates: `${rot.start_date} - ${rot.end_date}`,
-                        site_id: "", province: "", supervisor_ids: [], provinceSearch: ""
+                        site_id: "",
+                        province: "",
+                        supervisor_ids: [],
+                        provinceSearch: ""
                     }))
                 }))
             }
@@ -226,118 +280,338 @@ export default function StudentRegisterPage() {
     // };
 
     const handleRegister = async () => {
-    if (!validate()) return;
-    
-    // 1. เช็คว่าเลือกรูปภาพหรือยัง
-    if (!avatarFile) {
-        return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษาเพื่อลงทะเบียน', 'warning');
-    }
+        if (!validate()) return;
 
-    setLoading(true);
-    try {
-        // 2. เช็คข้อมูลซ้ำในระบบ
-        const { data: check } = await supabase
-            .from('students')
-            .select('id')
-            .eq('student_code', form.student_code)
-            .maybeSingle();
-
-        if (check) {
-            setLoading(false);
-            return Swal.fire('ข้อมูลซ้ำ', 'รหัสนี้ลงทะเบียนแล้ว', 'error');
+        // 1. เช็คว่าเลือกรูปภาพหรือยัง
+        if (!avatarFile) {
+            return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษาเพื่อลงทะเบียน', 'warning');
         }
 
-        // 3. จัดการอัปโหลดไฟล์รูปภาพ
-        const fileExt = avatarFile!.name.split('.').pop();
-        const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
+        setLoading(true);
+        try {
+            // 2. เช็คข้อมูลซ้ำในระบบ
+            const { data: check } = await supabase
+                .from('students')
+                .select('id')
+                .eq('student_code', form.student_code)
+                .maybeSingle();
 
-        const { error: uploadError } = await supabase.storage
-            .from('avatars')
-            .upload(fileName, avatarFile!);
+            if (check) {
+                setLoading(false);
+                return Swal.fire('ข้อมูลซ้ำ', 'รหัสนี้ลงทะเบียนแล้ว', 'error');
+            }
 
-        if (uploadError) throw uploadError;
+            // 3. จัดการอัปโหลดไฟล์รูปภาพ
+            const fileExt = avatarFile!.name.split('.').pop();
+            const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
 
-        const { data: { publicUrl } } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(fileName);
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(fileName, avatarFile!);
 
-        // 4. บันทึกข้อมูลนักศึกษาลงตารางหลัก
-        const { data: student, error: stError } = await supabase.from('students').insert([{
-            student_code: form.student_code, 
-            prefix: form.prefix, 
-            first_name: form.first_name,
-            last_name: form.last_name, 
-            nickname: form.nickname, 
-            phone: form.phone,
-            email: form.email, 
-            avatar_url: publicUrl
-        }]).select().single();
+            if (uploadError) throw uploadError;
 
-        if (stError) throw stError;
+            const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(fileName);
 
-        // 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
-        if (form.assignments && form.assignments.length > 0) {
-            for (const as of form.assignments) {
-                if (as.site_id) {
-                    const { data: assignment, error: asError } = await supabase
-                        .from('student_assignments')
-                        .insert([{
-                            student_id: student.id, 
-                            rotation_id: parseInt(as.rotation_id),
-                            site_id: parseInt(as.site_id), 
-                            status: 'active'
-                        }]).select().single();
+            // 4. บันทึกข้อมูลนักศึกษาลงตารางหลัก
+            const { data: student, error: stError } = await supabase.from('students').insert([{
+                student_code: form.student_code,
+                prefix: form.prefix,
+                first_name: form.first_name,
+                last_name: form.last_name,
+                nickname: form.nickname,
+                phone: form.phone,
+                email: form.email,
+                avatar_url: publicUrl
+            }]).select().single();
 
-                    if (asError) throw asError;
+            if (stError) throw stError;
 
-                    // 6. บันทึกรายชื่อพี่เลี้ยง
-                    if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-                        const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-                            assignment_id: assignment.id, 
-                            supervisor_id: parseInt(sId)
-                        }));
-                        await supabase.from('assignment_supervisors').insert(mentorRecords);
+            // 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
+            // if (form.assignments && form.assignments.length > 0) {
+            //     for (const as of form.assignments) {
+            //         if (as.site_id) {
+            //             const { data: assignment, error: asError } = await supabase
+            //                 .from('student_assignments')
+            //                 .insert([{
+            //                     student_id: student.id, 
+            //                     rotation_id: parseInt(as.rotation_id),
+            //                     site_id: parseInt(as.site_id), 
+            //                     status: 'active'
+            //                 }]).select().single();
+
+            //             if (asError) throw asError;
+
+            //             // 6. บันทึกรายชื่อพี่เลี้ยง
+            //             if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                 const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                     assignment_id: assignment.id, 
+            //                     supervisor_id: parseInt(sId)
+            //                 }));
+            //                 await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //             }
+            //         }
+            //     }
+            // }
+
+            // 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
+            // 🚩 แก้ไขภายในฟังก์ชัน handleRegister
+            // if (form.assignments && form.assignments.length > 0) {
+            //     for (const as of form.assignments) {
+            //         if (as.site_id) {
+            //             // 🚩 1. ดึง "วิชาย่อยทั้งหมด" ที่ผูกกับผลัดนี้ออกมา 
+            //             // เช่น ถ้าผลัดนี้คือ ผดุงครรภ์ จะได้ ID ของ ANC, LR, PP ออกมา 3 แถว
+            //             const { data: rotSubjects } = await supabase
+            //                 .from('rotation_subjects')
+            //                 .select('subject_id')
+            //                 .eq('rotation_id', parseInt(as.rotation_id));
+
+            //             if (rotSubjects && rotSubjects.length > 0) {
+            //                 // 🚩 2. ลูปบันทึกแยกทีละวิชาย่อยลง student_assignments
+            //                 for (const rs of rotSubjects) {
+            //                     const { data: assignment, error: asError } = await supabase
+            //                         .from('student_assignments')
+            //                         .insert([{
+            //                             student_id: student.id,
+            //                             rotation_id: parseInt(as.rotation_id),
+            //                             subject_id: rs.subject_id, // ✅ บันทึก ID วิชาย่อย (ไม่เป็น NULL แล้ว)
+            //                             site_id: parseInt(as.site_id),
+            //                             status: 'active'
+            //                         }]).select().single();
+
+            //                     if (asError) throw asError;
+
+            //                     // 🚩 3. บันทึกรายชื่อพี่เลี้ยงให้เชื่อมกับ "ทุกวิชาย่อย"
+            //                     if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                         const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                             assignment_id: assignment.id, // เชื่อมกับ ID ของวิชาย่อยแต่ละอัน
+            //                             supervisor_id: parseInt(sId),
+            //                             is_evaluated: false
+            //                         }));
+            //                         await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
+
+            // 🚩 แก้ไขภายในฟังก์ชัน handleRegister (ส่วนที่ 5)
+            // 🚩 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
+            // if (form.assignments && form.assignments.length > 0) {
+            //     for (const as of form.assignments) {
+            //         if (as.site_id) {
+            //             // STEP A: ดึง ID วิชาหลักที่ผูกกับผลัดนี้จาก rotation_subjects
+            //             const { data: rotSubs } = await supabase
+            //                 .from('rotation_subjects')
+            //                 .select('subject_id')
+            //                 .eq('rotation_id', parseInt(as.rotation_id));
+
+            //             if (rotSubs && rotSubs.length > 0) {
+            //                 for (const rs of rotSubs) {
+            //                     const mainSubjectId = rs.subject_id;
+
+            //                     // STEP B: ไปเช็กในตาราง sub_subjects ว่าวิชาหลักนี้มี "วิชาย่อย" หรือไม่
+            //                     const { data: subSubjects } = await supabase
+            //                         .from('sub_subjects')
+            //                         .select('id')
+            //                         .eq('parent_subject_id', mainSubjectId);
+
+            //                     if (subSubjects && subSubjects.length > 0) {
+            //                         // 🚩 กรณีมีวิชาย่อย (เช่น ผดุงครรภ์ -> ANC, LR, PP)
+            //                         // ให้บันทึกแยกแถวตามจำนวนวิชาย่อย
+            //                         for (const sub of subSubjects) {
+            //                             const { data: assignment, error: asError } = await supabase
+            //                                 .from('student_assignments')
+            //                                 .insert([{
+            //                                     student_id: student.id,
+            //                                     rotation_id: parseInt(as.rotation_id),
+            //                                     subject_id: mainSubjectId,
+            //                                     sub_subject_id: sub.id, // ✅ ใส่ ID วิชาย่อย (เช่น ANC)
+            //                                     site_id: parseInt(as.site_id),
+            //                                     status: 'active'
+            //                                 }]).select().single();
+
+            //                             if (asError) throw asError;
+
+            //                             // บันทึกพี่เลี้ยงให้เชื่อมกับทุกวิชาย่อย
+            //                             if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                                 const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                                     assignment_id: assignment.id,
+            //                                     supervisor_id: parseInt(sId)
+            //                                 }));
+            //                                 await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                             }
+
+            //                         }
+            //                     } else {
+            //                         // 🚩 กรณีไม่มีวิชาย่อย (วิชาทั่วไป) -> บันทึก 1 แถวปกติ
+            //                         const { data: assignment, error: asError } = await supabase
+            //                             .from('student_assignments')
+            //                             .insert([{
+            //                                 student_id: student.id,
+            //                                 rotation_id: parseInt(as.rotation_id),
+            //                                 subject_id: mainSubjectId,
+            //                                 sub_subject_id: null,
+            //                                 site_id: parseInt(as.site_id),
+            //                                 status: 'active'
+            //                             }]).select().single();
+
+            //                         if (asError) throw asError;
+
+            //                         if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                             const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                                 assignment_id: assignment.id,
+            //                                 supervisor_id: parseInt(sId)
+            //                             }));
+            //                             await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
+
+
+
+            if (form.assignments && form.assignments.length > 0) {
+                for (const as of form.assignments) {
+                    if (as.site_id) {
+                        // STEP A: ดึง ID วิชาหลัก
+                        const { data: rotSubs } = await supabase
+                            .from('rotation_subjects')
+                            .select('subject_id')
+                            .eq('rotation_id', parseInt(as.rotation_id));
+
+                        if (rotSubs && rotSubs.length > 0) {
+                            for (const rs of rotSubs) {
+                                const mainSubjectId = rs.subject_id;
+
+                                // STEP B: เช็คว่ามีวิชาย่อยไหม
+                                const { data: subSubjects } = await supabase
+                                    .from('sub_subjects')
+                                    .select('id')
+                                    .eq('parent_subject_id', mainSubjectId);
+
+                                if (subSubjects && subSubjects.length > 0) {
+                                    // 🟢 CASE 1: มีวิชาย่อย (เช่น ผดุงครรภ์)
+
+                                    // 1.1 วนลูปสร้างวิชาย่อย (ANC, LR, PP)
+                                    for (const sub of subSubjects) {
+                                        const { data: assignment, error: asError } = await supabase
+                                            .from('student_assignments')
+                                            .insert([{
+                                                student_id: student.id,
+                                                rotation_id: parseInt(as.rotation_id),
+                                                subject_id: mainSubjectId,
+                                                sub_subject_id: sub.id, // ใส่ ID วิชาย่อย
+                                                site_id: parseInt(as.site_id),
+                                                status: 'active'
+                                            }]).select().single();
+
+                                        if (asError) throw asError;
+
+                                        // บันทึกพี่เลี้ยงวิชาย่อย
+                                        if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+                                            const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+                                                assignment_id: assignment.id,
+                                                supervisor_id: parseInt(sId)
+                                            }));
+                                            await supabase.from('assignment_supervisors').insert(mentorRecords);
+                                        }
+                                    }
+
+                                    // 1.2 🚩 สร้าง "เล่มรายงาน/Portfolio" (ทำแค่ครั้งเดียว นอกลูป sub)
+                                    const { data: mainAssign, error: mainErr } = await supabase
+                                        .from('student_assignments')
+                                        .insert([{
+                                            student_id: student.id,
+                                            rotation_id: parseInt(as.rotation_id),
+                                            subject_id: mainSubjectId,
+                                            sub_subject_id: null, // เป็น NULL คือเล่มรายงาน
+                                            site_id: parseInt(as.site_id),
+                                            status: 'active'
+                                        }]).select().single();
+
+                                    if (mainErr) throw mainErr;
+
+                                    // บันทึกพี่เลี้ยงให้เล่มรายงานด้วย (จะได้เห็นทุกคน)
+                                    if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+                                        const mainMentorRecords = as.supervisor_ids.map((sId: any) => ({
+                                            assignment_id: mainAssign.id,
+                                            supervisor_id: parseInt(sId)
+                                        }));
+                                        await supabase.from('assignment_supervisors').insert(mainMentorRecords);
+                                    }
+
+                                } else {
+                                    // 🔵 CASE 2: วิชาทั่วไป (ไม่มีวิชาย่อย)
+                                    const { data: assignment, error: asError } = await supabase
+                                        .from('student_assignments')
+                                        .insert([{
+                                            student_id: student.id,
+                                            rotation_id: parseInt(as.rotation_id),
+                                            subject_id: mainSubjectId,
+                                            sub_subject_id: null,
+                                            site_id: parseInt(as.site_id),
+                                            status: 'active'
+                                        }]).select().single();
+
+                                    if (asError) throw asError;
+
+                                    if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+                                        const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+                                            assignment_id: assignment.id,
+                                            supervisor_id: parseInt(sId)
+                                        }));
+                                        await supabase.from('assignment_supervisors').insert(mentorRecords);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
+            // --- 7. ส่วนการ RESET FORM เมื่อสำเร็จ ---
+            Swal.fire({
+                icon: 'success',
+                title: 'ลงทะเบียนสำเร็จ',
+                text: 'ข้อมูลของคุณถูกบันทึกเข้าระบบเรียบร้อยแล้ว',
+                timer: 2000,
+                showConfirmButton: false
+            });
+
+            // รีเซ็ตค่าใน State ทั้งหมด
+            setForm({
+                student_code: '',
+                prefix: 'นางสาว',
+                first_name: '',
+                last_name: '',
+                nickname: '',
+                phone: '',
+                email: '',
+                assignments: form.assignments.map((as: any) => ({
+                    ...as,
+                    site_id: '',
+                    supervisor_ids: []
+                }))
+            });
+
+            // ล้างรูปภาพที่เลือกไว้
+            setAvatarFile(null);
+            setAvatarPreview(null); // ถ้าคุณมี State สำหรับแสดงตัวอย่างรูป (Preview) อย่าลืมล้างตัวนี้ด้วย
+
+        } catch (error: any) {
+            console.error('Registration Error:', error);
+            Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+        } finally {
+            setLoading(false);
         }
+    };
 
-        // --- 7. ส่วนการ RESET FORM เมื่อสำเร็จ ---
-        Swal.fire({ 
-            icon: 'success', 
-            title: 'ลงทะเบียนสำเร็จ',
-            text: 'ข้อมูลของคุณถูกบันทึกเข้าระบบเรียบร้อยแล้ว',
-            timer: 2000,
-            showConfirmButton: false
-        });
-
-        // รีเซ็ตค่าใน State ทั้งหมด
-        setForm({
-            student_code: '',
-            prefix: 'นางสาว',
-            first_name: '',
-            last_name: '',
-            nickname: '',
-            phone: '',
-            email: '',
-            assignments: form.assignments.map((as: any) => ({
-                ...as,
-                site_id: '',
-                supervisor_ids: []
-            }))
-        });
-
-        // ล้างรูปภาพที่เลือกไว้
-        setAvatarFile(null);
-        setAvatarPreview(null); // ถ้าคุณมี State สำหรับแสดงตัวอย่างรูป (Preview) อย่าลืมล้างตัวนี้ด้วย
-
-    } catch (error: any) { 
-        console.error('Registration Error:', error);
-        Swal.fire('เกิดข้อผิดพลาด', error.message, 'error'); 
-    } finally { 
-        setLoading(false); 
-    }
-};
     return (
         <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900 font-sans antialiased">
             <div className="bg-white border-b border-slate-100 py-10 text-center mb-10 shadow-sm">
@@ -469,7 +743,7 @@ export default function StudentRegisterPage() {
 
                             <select className="w-full h-12 rounded-xl bg-slate-100/50 px-5 font-bold text-sm border-none focus:ring-2 ring-blue-500 appearance-none disabled:opacity-30" disabled={!item.province} value={item.site_id || ""} onChange={(e) => handleAssignChange(idx, 'site_id', e.target.value)}>
                                 <option value="">เลือกโรงพยาบาลใน {item.province || 'จังหวัด'}</option>
-                                {sites.filter((s:any) => String(s.province || "").trim() === String(item.province || "").trim()).map(s => (<option key={s.id} value={String(s.id)}>{s.site_name}</option>))}
+                                {sites.filter((s: any) => String(s.province || "").trim() === String(item.province || "").trim()).map(s => (<option key={s.id} value={String(s.id)}>{s.site_name}</option>))}
                             </select>
 
                             {/* ปรับปรุงส่วนเลือกพี่เลี้ยงแบบเพิ่มทีละคน */}
@@ -479,7 +753,7 @@ export default function StudentRegisterPage() {
                                 {/* แสดงรายชื่อที่เลือกแล้ว */}
                                 <div className="space-y-2">
                                     {item.supervisor_ids.map((sId: string) => {
-                                        const mentor = mentors.find((m:any) => String(m.id) === String(sId));
+                                        const mentor = mentors.find((m: any) => String(m.id) === String(sId));
                                         return (
                                             <div key={sId} className="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-blue-100">
                                                 <span className="text-xs font-bold text-blue-700">{mentor?.full_name || 'ไม่พบข้อมูล'}</span>
@@ -500,9 +774,30 @@ export default function StudentRegisterPage() {
                                         onChange={(e) => addSupervisor(idx, e.target.value)}
                                     >
                                         <option value="">+ เพิ่มรายชื่อพี่เลี้ยง...</option>
+                                        {/* {mentors
+                                            .filter((m: any) => String(m.site_id) === String(item.site_id) && !item.supervisor_ids.includes(String(m.id)))
+                                            .map((m: any) => (<option key={m.id} value={String(m.id)}>{m.full_name}</option>))
+                                        } */}
                                         {mentors
-                                            .filter((m:any) => String(m.site_id) === String(item.site_id) && !item.supervisor_ids.includes(String(m.id)))
-                                            .map((m:any) => (<option key={m.id} value={String(m.id)}>{m.full_name}</option>))
+                                            .filter((m: any) => {
+                                                // 1. เช็กโรงพยาบาล (ต้องตรงกัน)
+                                                const isSameSite = String(m.site_id) === String(item.site_id);
+
+                                                // 2. เช็กวิชา (ถ้าใน m.supervisor_subjects มี subject_id ตรงกับผลัด)
+                                                const teachesThisSubject = m.supervisor_subjects?.some((sub: any) =>
+                                                    Number(sub.subject_id) === Number(item.subject_id)
+                                                );
+
+                                                // 3. ยังไม่ถูกเลือก
+                                                const isNotSelected = !item.supervisor_ids.includes(String(m.id));
+
+                                                return isSameSite && teachesThisSubject && isNotSelected;
+                                            })
+                                            .map((m: any) => (
+                                                <option key={m.id} value={String(m.id)}>
+                                                    {m.full_name}
+                                                </option>
+                                            ))
                                         }
                                     </select>
                                     {!item.site_id && <p className="text-[8px] text-blue-400 mt-1 ml-1 font-bold">* กรุณาเลือกโรงพยาบาลก่อน</p>}
@@ -522,169 +817,169 @@ export default function StudentRegisterPage() {
 
 // เพิ่มมอดอลนี้เข้าไปใน StudentManagement.tsx
 
-function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
-    const [loading, setLoading] = useState(false);
-    const [siteSearch, setSiteSearch] = useState("");
-    const [activeEditIdx, setActiveEditIdx] = useState<number | null>(null);
-    const [form, setForm] = useState<any>({
-        student_code: '', prefix: 'นางสาว', first_name: '', last_name: '',
-        phone: '', email: '',
-        assignments: []
-    });
+// function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
+//     const [loading, setLoading] = useState(false);
+//     const [siteSearch, setSiteSearch] = useState("");
+//     const [activeEditIdx, setActiveEditIdx] = useState<number | null>(null);
+//     const [form, setForm] = useState<any>({
+//         student_code: '', prefix: 'นางสาว', first_name: '', last_name: '',
+//         phone: '', email: '',
+//         assignments: []
+//     });
 
-    // เตรียมผลัดการฝึกอัตโนมัติเมื่อเปิดมอดอล
-    useEffect(() => {
-        if (isOpen) {
-            const initRotations = async () => {
-                const { data } = await supabase.from('rotations').select('*').order('round_number', { ascending: true }).limit(3);
-                if (data) {
-                    setForm((prev: any) => ({
-                        ...prev,
-                        assignments: data.map(r => ({
-                            rotation_id: r.id,
-                            rotation_name: r.name,
-                            site_id: "",
-                            supervisor_ids: []
-                        }))
-                    }));
-                }
-            };
-            initRotations();
-        }
-    }, [isOpen]);
+//     // เตรียมผลัดการฝึกอัตโนมัติเมื่อเปิดมอดอล
+//     useEffect(() => {
+//         if (isOpen) {
+//             const initRotations = async () => {
+//                 const { data } = await supabase.from('rotations').select('*').order('round_number', { ascending: true }).limit(3);
+//                 if (data) {
+//                     setForm((prev: any) => ({
+//                         ...prev,
+//                         assignments: data.map(r => ({
+//                             rotation_id: r.id,
+//                             rotation_name: r.name,
+//                             site_id: "",
+//                             supervisor_ids: []
+//                         }))
+//                     }));
+//                 }
+//             };
+//             initRotations();
+//         }
+//     }, [isOpen]);
 
-    const handleSave = async () => {
-        if (!form.student_code || !form.first_name) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
-        
-        setLoading(true);
-        try {
-            // 1. เพิ่มนักศึกษา
-            const { data: student, error: stError } = await supabase.from('students').insert([{
-                student_code: form.student_code, prefix: form.prefix,
-                first_name: form.first_name, last_name: form.last_name,
-                phone: form.phone, email: form.email
-            }]).select().single();
-            if (stError) throw stError;
+//     const handleSave = async () => {
+//         if (!form.student_code || !form.first_name) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
 
-            // 2. เพิ่มผลัดและพี่เลี้ยง
-            for (const as of form.assignments) {
-                if (as.site_id) {
-                    const { data: assignment } = await supabase.from('student_assignments').insert([{
-                        student_id: student.id, rotation_id: as.rotation_id,
-                        site_id: as.site_id, status: 'active'
-                    }]).select().single();
+//         setLoading(true);
+//         try {
+//             // 1. เพิ่มนักศึกษา
+//             const { data: student, error: stError } = await supabase.from('students').insert([{
+//                 student_code: form.student_code, prefix: form.prefix,
+//                 first_name: form.first_name, last_name: form.last_name,
+//                 phone: form.phone, email: form.email
+//             }]).select().single();
+//             if (stError) throw stError;
 
-                    if (as.supervisor_ids.length > 0) {
-                        const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-                            assignment_id: assignment.id, supervisor_id: sId
-                        }));
-                        await supabase.from('assignment_supervisors').insert(mentorRecords);
-                    }
-                }
-            }
+//             // 2. เพิ่มผลัดและพี่เลี้ยง
+//             for (const as of form.assignments) {
+//                 if (as.site_id) {
+//                     const { data: assignment } = await supabase.from('student_assignments').insert([{
+//                         student_id: student.id, rotation_id: as.rotation_id,
+//                         site_id: as.site_id, status: 'active'
+//                     }]).select().single();
 
-            Swal.fire({ icon: 'success', title: 'เพิ่มนักศึกษาสำเร็จ', timer: 1500, showConfirmButton: false });
-            fetchData();
-            onClose();
-        } catch (e: any) { Swal.fire('Error', e.message, 'error'); }
-        finally { setLoading(false); }
-    };
+//                     if (as.supervisor_ids.length > 0) {
+//                         const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+//                             assignment_id: assignment.id, supervisor_id: sId
+//                         }));
+//                         await supabase.from('assignment_supervisors').insert(mentorRecords);
+//                     }
+//                 }
+//             }
 
-    return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-5xl rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl bg-white focus:outline-none">
-                <div className="flex flex-col h-[90vh]">
-                    <div className="px-10 py-6 border-b border-slate-50 flex justify-between items-center bg-blue-600 text-white">
-                        <div className="flex items-center gap-3">
-                            <Plus size={24} />
-                            <h2 className="text-xl font-black uppercase tracking-tight">เพิ่มนักศึกษาใหม่ (Manual Add)</h2>
-                        </div>
-                        <Button onClick={onClose} variant="ghost" className="text-white hover:bg-blue-700 rounded-full w-10 h-10 p-0"><X size={20} /></Button>
-                    </div>
+//             Swal.fire({ icon: 'success', title: 'เพิ่มนักศึกษาสำเร็จ', timer: 1500, showConfirmButton: false });
+//             fetchData();
+//             onClose();
+//         } catch (e: any) { Swal.fire('Error', e.message, 'error'); }
+//         finally { setLoading(false); }
+//     };
 
-                    <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-10">
-                        {/* ส่วนข้อมูลส่วนตัว */}
-                        <div className="bg-slate-50 p-8 rounded-[2rem] space-y-6">
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสนักศึกษา</label>
-                                    <Input value={form.student_code} onChange={e => setForm({...form, student_code: e.target.value})} className="h-12 rounded-xl bg-white border-none font-bold shadow-sm" placeholder="เช่น 64XXXXX" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อ</label>
-                                    <div className="flex gap-2">
-                                        <select className="h-12 rounded-xl bg-white border-none font-bold shadow-sm px-3 text-sm" value={form.prefix} onChange={e => setForm({...form, prefix: e.target.value})}>
-                                            <option>นางสาว</option><option>นาย</option>
-                                        </select>
-                                        
-                                        <Input value={form.first_name} onChange={e => setForm({...form, first_name: e.target.value})} className="h-12 rounded-xl bg-white border-none font-bold shadow-sm flex-1" />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">นามสกุล</label>
-                                    <Input value={form.last_name} onChange={e => setForm({...form, last_name: e.target.value})} className="h-12 rounded-xl bg-white border-none font-bold shadow-sm" />
-                                </div>
-                            </div>
-                        </div>
+//     return (
+//         <Dialog open={isOpen} onOpenChange={onClose}>
+//             <DialogContent className="max-w-5xl rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl bg-white focus:outline-none">
+//                 <div className="flex flex-col h-[90vh]">
+//                     <div className="px-10 py-6 border-b border-slate-50 flex justify-between items-center bg-blue-600 text-white">
+//                         <div className="flex items-center gap-3">
+//                             <Plus size={24} />
+//                             <h2 className="text-xl font-black uppercase tracking-tight">เพิ่มนักศึกษาใหม่ (Manual Add)</h2>
+//                         </div>
+//                         <Button onClick={onClose} variant="ghost" className="text-white hover:bg-blue-700 rounded-full w-10 h-10 p-0"><X size={20} /></Button>
+//                     </div>
 
-                        {/* ส่วนจัดสรรผลัด */}
-                        <div className="space-y-6">
-                            <label className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                                <Hospital size={18} className="text-blue-500" /> การจัดการสถานที่ฝึกงานและพี่เลี้ยง
-                            </label>
-                            <div className="grid grid-cols-1 gap-4">
-                                {form.assignments.map((as: any, idx: number) => (
-                                    <div key={idx} className="p-6 border border-slate-100 rounded-[2rem] bg-white shadow-sm flex gap-6">
-                                        <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black shrink-0">{idx + 1}</div>
-                                        <div className="flex-1 space-y-4">
-                                            <div className="relative">
-                                                <Input 
-                                                    placeholder="ค้นหา รพ./จังหวัด..." 
-                                                    className="h-11 rounded-xl bg-slate-50 border-none font-bold text-xs"
-                                                    onFocus={() => setActiveEditIdx(idx)}
-                                                    onChange={(e) => setSiteSearch(e.target.value)}
-                                                />
-                                                {activeEditIdx === idx && (
-                                                    <div className="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-xl border p-2 max-h-40 overflow-auto">
-                                                        {sites.filter((s:any) => s.site_name.includes(siteSearch) || s.province.includes(siteSearch)).map((s:any) => (
-                                                            <div key={s.id} onClick={() => {
-                                                                const nAs = [...form.assignments];
-                                                                nAs[idx].site_id = s.id;
-                                                                nAs[idx].site_name = s.site_name;
-                                                                setForm({...form, assignments: nAs});
-                                                                setActiveEditIdx(null);
-                                                            }} className="p-2 hover:bg-blue-50 cursor-pointer rounded-lg text-xs font-bold">{s.site_name} ({s.province})</div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                                {as.site_name && <p className="mt-1 text-blue-600 text-[10px] font-black uppercase">เลือกแล้ว: {as.site_name}</p>}
-                                            </div>
+//                     <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-10">
+//                         {/* ส่วนข้อมูลส่วนตัว */}
+//                         <div className="bg-slate-50 p-8 rounded-[2rem] space-y-6">
+//                             <div className="grid grid-cols-3 gap-4">
+//                                 <div className="space-y-2">
+//                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสนักศึกษา</label>
+//                                     <Input value={form.student_code} onChange={e => setForm({ ...form, student_code: e.target.value })} className="h-12 rounded-xl bg-white border-none font-bold shadow-sm" placeholder="เช่น 64XXXXX" />
+//                                 </div>
+//                                 <div className="space-y-2">
+//                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อ</label>
+//                                     <div className="flex gap-2">
+//                                         <select className="h-12 rounded-xl bg-white border-none font-bold shadow-sm px-3 text-sm" value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value })}>
+//                                             <option>นางสาว</option><option>นาย</option>
+//                                         </select>
 
-                                            {/* เลือกพี่เลี้ยง */}
-                                            <div className="flex flex-wrap gap-2">
-                                                {mentors.filter((m:any) => m.site_id === as.site_id).map((m:any) => (
-                                                    <button key={m.id} onClick={() => {
-                                                        const nAs = [...form.assignments];
-                                                        const current = nAs[idx].supervisor_ids;
-                                                        nAs[idx].supervisor_ids = current.includes(m.id) ? current.filter((id: any) => id !== m.id) : [...current, m.id];
-                                                        setForm({...form, assignments: nAs});
-                                                    }} className={`px-3 py-1.5 rounded-lg text-[9px] font-black border transition-all ${as.supervisor_ids.includes(m.id) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white text-slate-400 border-slate-100'}`}>{m.full_name}</button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
+//                                         <Input value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} className="h-12 rounded-xl bg-white border-none font-bold shadow-sm flex-1" />
+//                                     </div>
+//                                 </div>
+//                                 <div className="space-y-2">
+//                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">นามสกุล</label>
+//                                     <Input value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} className="h-12 rounded-xl bg-white border-none font-bold shadow-sm" />
+//                                 </div>
+//                             </div>
+//                         </div>
 
-                    <div className="p-8 border-t bg-slate-50">
-                        <Button onClick={handleSave} disabled={loading} className="w-full h-16 rounded-2xl bg-slate-900 font-black text-lg gap-3">
-                            {loading ? <Loader2 className="animate-spin" /> : <Save />} บันทึกและเพิ่มรายชื่อนักศึกษา
-                        </Button>
-                    </div>
-                </div>
-            </DialogContent>
-        </Dialog>
-    );
-}
+//                         {/* ส่วนจัดสรรผลัด */}
+//                         <div className="space-y-6">
+//                             <label className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+//                                 <Hospital size={18} className="text-blue-500" /> การจัดการสถานที่ฝึกงานและพี่เลี้ยง
+//                             </label>
+//                             <div className="grid grid-cols-1 gap-4">
+//                                 {form.assignments.map((as: any, idx: number) => (
+//                                     <div key={idx} className="p-6 border border-slate-100 rounded-[2rem] bg-white shadow-sm flex gap-6">
+//                                         <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black shrink-0">{idx + 1}</div>
+//                                         <div className="flex-1 space-y-4">
+//                                             <div className="relative">
+//                                                 <Input
+//                                                     placeholder="ค้นหา รพ./จังหวัด..."
+//                                                     className="h-11 rounded-xl bg-slate-50 border-none font-bold text-xs"
+//                                                     onFocus={() => setActiveEditIdx(idx)}
+//                                                     onChange={(e) => setSiteSearch(e.target.value)}
+//                                                 />
+//                                                 {activeEditIdx === idx && (
+//                                                     <div className="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-xl border p-2 max-h-40 overflow-auto">
+//                                                         {sites.filter((s: any) => s.site_name.includes(siteSearch) || s.province.includes(siteSearch)).map((s: any) => (
+//                                                             <div key={s.id} onClick={() => {
+//                                                                 const nAs = [...form.assignments];
+//                                                                 nAs[idx].site_id = s.id;
+//                                                                 nAs[idx].site_name = s.site_name;
+//                                                                 setForm({ ...form, assignments: nAs });
+//                                                                 setActiveEditIdx(null);
+//                                                             }} className="p-2 hover:bg-blue-50 cursor-pointer rounded-lg text-xs font-bold">{s.site_name} ({s.province})</div>
+//                                                         ))}
+//                                                     </div>
+//                                                 )}
+//                                                 {as.site_name && <p className="mt-1 text-blue-600 text-[10px] font-black uppercase">เลือกแล้ว: {as.site_name}</p>}
+//                                             </div>
+
+//                                             {/* เลือกพี่เลี้ยง */}
+//                                             <div className="flex flex-wrap gap-2">
+//                                                 {mentors.filter((m: any) => m.site_id === as.site_id).map((m: any) => (
+//                                                     <button key={m.id} onClick={() => {
+//                                                         const nAs = [...form.assignments];
+//                                                         const current = nAs[idx].supervisor_ids;
+//                                                         nAs[idx].supervisor_ids = current.includes(m.id) ? current.filter((id: any) => id !== m.id) : [...current, m.id];
+//                                                         setForm({ ...form, assignments: nAs });
+//                                                     }} className={`px-3 py-1.5 rounded-lg text-[9px] font-black border transition-all ${as.supervisor_ids.includes(m.id) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white text-slate-400 border-slate-100'}`}>{m.full_name}</button>
+//                                                 ))}
+//                                             </div>
+//                                         </div>
+//                                     </div>
+//                                 ))}
+//                             </div>
+//                         </div>
+//                     </div>
+
+//                     <div className="p-8 border-t bg-slate-50">
+//                         <Button onClick={handleSave} disabled={loading} className="w-full h-16 rounded-2xl bg-slate-900 font-black text-lg gap-3">
+//                             {loading ? <Loader2 className="animate-spin" /> : <Save />} บันทึกและเพิ่มรายชื่อนักศึกษา
+//                         </Button>
+//                     </div>
+//                 </div>
+//             </DialogContent>
+//         </Dialog>
+//     );
+// }

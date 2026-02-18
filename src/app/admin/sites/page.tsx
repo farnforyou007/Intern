@@ -489,7 +489,12 @@ import {
     FileText, StickyNote 
 } from "lucide-react"
 import Swal from 'sweetalert2'
-
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 // รายชื่อจังหวัดคงเดิม
 const THAI_PROVINCES = [
     { name: "กรุงเทพมหานคร", code: "BKK" }, { name: "กระบี่", code: "KBI" }, { name: "กาญจนบุรี", code: "KNR" },
@@ -537,8 +542,10 @@ export default function SitesPageV2() {
 
     const [selectedProvinceFilter, setSelectedProvinceFilter] = useState('all')
     const [searchTerm, setSearchTerm] = useState('')
+    // const [currentPage, setCurrentPage] = useState(1)
+    // const rowsPerPage = 10 
     const [currentPage, setCurrentPage] = useState(1)
-    const rowsPerPage = 10 
+    const [rowsPerPage, setRowsPerPage] = useState(10)
 
     const usedProvinces = Array.from(new Set(sites.map(s => s.province))).filter(Boolean).sort()
 
@@ -548,6 +555,11 @@ export default function SitesPageV2() {
             site.site_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (site.note || '').toLowerCase().includes(searchTerm.toLowerCase())
         return matchesProvince && matchesSearch
+    }).sort((a, b) => {
+        // เรียงตามจังหวัด (ภาษาไทย)
+        const provA = a.province || '';
+        const provB = b.province || '';
+        return provA.localeCompare(provB, 'th');
     })
 
     const totalPages = Math.ceil(filteredSites.length / rowsPerPage)
@@ -556,7 +568,7 @@ export default function SitesPageV2() {
 
     useEffect(() => {
         setCurrentPage(1)
-    }, [searchTerm, selectedProvinceFilter])
+    }, [searchTerm, selectedProvinceFilter,rowsPerPage])
 
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
@@ -697,7 +709,7 @@ export default function SitesPageV2() {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                {/* <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
                     <Table>
                         <TableHeader className="bg-slate-50/50">
                             <TableRow>
@@ -757,7 +769,7 @@ export default function SitesPageV2() {
                         </TableBody>
                     </Table>
 
-                    {/* Pagination UI เหมือนเดิม */}
+                    
                     {filteredSites.length > 0 && (
                         <div className="px-8 py-6 bg-slate-50/30 border-t flex justify-between items-center">
                             <p className="text-xs font-bold text-slate-400 italic">
@@ -769,6 +781,110 @@ export default function SitesPageV2() {
                                     {[...Array(totalPages)].map((_, i) => (
                                         <button key={i} onClick={() => setCurrentPage(i+1)} className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === i+1 ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-100'}`}>{i+1}</button>
                                     ))}
+                                </div>
+                                <Button variant="outline" size="sm" className="rounded-xl h-9" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage === totalPages}><ChevronRight size={16}/></Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div> */}
+
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <Table>
+                        <TableHeader className="bg-slate-50/50">
+                            <TableRow>
+                                <TableHead className="px-8 py-4 font-black text-[10px] uppercase tracking-widest text-slate-400 w-1/2">ชื่อหน่วยงาน / รายละเอียด</TableHead>
+                                <TableHead className="text-left font-black text-[10px] uppercase tracking-widest text-slate-400">หมายเหตุ / ข้อมูลเพิ่มเติม</TableHead>
+                                <TableHead className="text-right px-8 font-black text-[10px] uppercase tracking-widest text-slate-400">จัดการ</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                Array(5).fill(0).map((_, i) => (
+                                    <TableRow key={i}><TableCell colSpan={3} className="p-8"><Skeleton className="h-12 w-full rounded-xl" /></TableCell></TableRow>
+                                ))
+                            ) : paginatedSites.length > 0 ? (
+                                paginatedSites.map((site) => (
+                                    <TableRow key={site.id} className="hover:bg-slate-50/50 transition-colors group">
+                                        <TableCell className="px-8 py-5">
+                                            <div className="font-bold text-slate-800 text-lg leading-tight">{site.site_name}</div>
+                                            <div className="flex items-center gap-4 mt-1.5">
+                                                <div className="flex items-center gap-1 text-slate-400">
+                                                    <MapPin size={13} className="text-amber-500" />
+                                                    <span className="text-[11px] font-bold text-slate-500">{site.province || 'ไม่ระบุจังหวัด'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1 text-slate-400 border-l pl-4">
+                                                    <CalendarDays size={13} className="text-blue-400" />
+                                                    <span className="text-[11px] font-bold text-slate-500">
+                                                        {new Date(site.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-left">
+                                            <div className="flex items-center gap-2 text-slate-500">
+                                                <StickyNote size={14} className="text-slate-300 shrink-0" />
+                                                <span className="text-sm font-medium line-clamp-1 italic">
+                                                    {site.note || '- ไม่มีหมายเหตุ -'}
+                                                </span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-right px-8">
+                                            <div className="flex justify-end gap-1">
+                                                <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-300 hover:text-blue-600 rounded-xl" onClick={() => onOpenModal(site)}>
+                                                    <Edit2 size={18} />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-300 hover:text-red-600 rounded-xl" onClick={() => handleDelete(site)}>
+                                                    <Trash2 size={18} />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={3} className="p-20 text-center text-slate-400 italic font-bold">ไม่พบข้อมูลแหล่งฝึกงาน</TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+
+                    {/* 3. Pagination Footer พร้อมตัวเลือกจำนวนแถว */}
+                    {filteredSites.length > 0 && (
+                        <div className="px-8 py-6 bg-slate-50/30 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="flex items-center gap-3">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">แสดงแถว:</span>
+                                <select
+                                    value={rowsPerPage}
+                                    onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                                    className="bg-white border-none shadow-sm rounded-xl px-3 py-1.5 text-xs font-black text-slate-600 outline-none focus:ring-2 ring-blue-500 cursor-pointer transition-all hover:shadow-md"
+                                >
+                                    {[5, 10, 20, 50].map(val => <option key={val} value={val}>{val}</option>)}
+                                </select>
+                                <p className="text-xs font-bold text-slate-400 ml-2">
+                                    {startIndex + 1} - {Math.min(startIndex + rowsPerPage, filteredSites.length)} จาก {filteredSites.length} รายการ
+                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" className="rounded-xl h-9" onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1}><ChevronLeft size={16}/></Button>
+                                <div className="flex gap-1">
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                                        // Logic ย่อหน้า pagination เหมือนเดิม
+                                        if (totalPages > 7 && (page !== 1 && page !== totalPages && Math.abs(currentPage - page) > 1)) {
+                                            if (page === 2 || page === totalPages - 1) return <span key={page} className="text-slate-300 text-xs px-1">...</span>;
+                                            return null;
+                                        }
+                                        return (
+                                            <button 
+                                                key={page} 
+                                                onClick={() => setCurrentPage(page)} 
+                                                className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-100'}`}
+                                            >
+                                                {page}
+                                            </button>
+                                        )
+                                    })}
                                 </div>
                                 <Button variant="outline" size="sm" className="rounded-xl h-9" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage === totalPages}><ChevronRight size={16}/></Button>
                             </div>

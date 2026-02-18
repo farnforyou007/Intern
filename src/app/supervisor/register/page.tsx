@@ -611,22 +611,24 @@ export default function SmartRegister() {
         const initLiff = async () => {
             try {
                 // ใส่ LIFF ID ที่คุณได้จาก LINE Developers Console
-                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
 
-                if (liff.isLoggedIn()) {
-                    const profile = await liff.getProfile()
-                    setLineUserId(profile.userId)
-                    setLineDisplayName(profile.displayName)
-                    // ถ้าใน LINE มีชื่ออยู่แล้ว สามารถเอามาตั้งเป็นค่าเริ่มต้นได้
-                    
-                } else {
-                    // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
-                    liff.login({ redirectUri: window.location.href });
-                    // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
-                }
+                // if (liff.isLoggedIn()) {
+                //     const profile = await liff.getProfile()
+                //     setLineUserId(profile.userId)
+                //     setLineDisplayName(profile.displayName)
+                //     // ถ้าใน LINE มีชื่ออยู่แล้ว สามารถเอามาตั้งเป็นค่าเริ่มต้นได้
+
+                // } else {
+                //     // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
+                //     liff.login({ redirectUri: window.location.href });
+                //     // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
+                // }
+                setLineUserId("test-user-id-1234");
+                setLineDisplayName("Tester User");
             } catch (err) {
                 console.error("LIFF Init Error", err)
-                
+
             }
         }
         initLiff()
@@ -737,7 +739,8 @@ export default function SmartRegister() {
                 icon: 'success',
                 confirmButtonColor: '#2563eb'
             }).then(() => {
-                liff.closeWindow() // ปิดหน้าต่าง LIFF ทันทีเมื่อเสร็จ
+                // liff.closeWindow() // ปิดหน้าต่าง LIFF ทันทีเมื่อเสร็จ
+                window.location.reload(); // ให้รีเฟรชหน้าแทนเพื่อดูผลลัพธ์
             });
         } catch (error: any) {
             Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');

@@ -44,31 +44,91 @@ export default function StudentManagement() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false)
     const [selectedStudent, setSelectedStudent] = useState<any>(null)
     const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all') // ค่าเริ่มต้นแสดงทั้งหมด หรือระบุปีปัจจุบัน
+    // const fetchData = useCallback(async () => {
+    //     setLoading(true)
+    //     try {
+    //         const { data: st } = await supabase.from('students').select(`
+    //             *,
+    //             student_assignments (
+    //                 id, rotation_id, site_id,
+    //                 training_sites (site_name, province),
+    //                 rotations (id, name, start_date, end_date),
+    //                 assignment_supervisors (
+    //                     supervisor_id,
+    //                     supervisors (full_name)
+    //                 )
+    //             )
+    //         `).order('student_code', { ascending: true })
+
+    //         const { data: si } = await supabase.from('training_sites').select('*').order('site_name')
+    //         const { data: me } = await supabase.from('supervisors').select('*')
+
+    //         setStudents(st || [])
+    //         setSites(si || [])
+    //         setMentors(me || [])
+    //     } catch (err: any) { console.error(err.message) }
+    //     finally { setLoading(false) }
+    // }, [])
+
     const fetchData = useCallback(async () => {
         setLoading(true)
         try {
             const { data: st } = await supabase.from('students').select(`
-                *,
-                student_assignments (
-                    id, rotation_id, site_id,
-                    training_sites (site_name, province),
-                    rotations (id, name, start_date, end_date),
-                    assignment_supervisors (
-                        supervisor_id,
-                        supervisors (full_name)
-                    )
+            *,
+            student_assignments (
+                id, rotation_id, site_id,
+                training_sites (site_name, province),
+                rotations (id, name, start_date, end_date),
+                assignment_supervisors (
+                    supervisor_id,
+                    supervisors (full_name)
                 )
-            `).order('student_code', { ascending: true })
+            )
+        `).order('student_code', { ascending: true })
+
+            // 🚩 เริ่มการ Group ข้อมูลตรงนี้ครับ
+            const formattedStudents = st?.map((student: any) => {
+                if (!student.student_assignments) return student;
+
+                // รวมรายการที่อยู่ในผลัด (rotation_id) เดียวกัน
+                const groupedAssignments = student.student_assignments.reduce((acc: any, curr: any) => {
+                    const rotId = curr.rotation_id;
+                    if (!acc[rotId]) {
+                        // ถ้ายังไม่มีผลัดนี้ ให้สร้างก้อนข้อมูลใหม่
+                        acc[rotId] = {
+                            ...curr,
+                            // เก็บรายชื่อพี่เลี้ยงทุกคนจากทุกวิชาย่อยในผลัดนี้ไว้ด้วยกัน
+                            all_supervisors: [...(curr.assignment_supervisors || [])]
+                        };
+                    } else {
+                        // ถ้ามีผลัดนี้อยู่แล้ว (เช่น เป็นวิชาย่อยที่ 2) ให้รวมพี่เลี้ยงเข้าไป
+                        acc[rotId].all_supervisors.push(...(curr.assignment_supervisors || []));
+                    }
+                    return acc;
+                }, {});
+
+                return {
+                    ...student,
+                    // แทนที่ด้วยข้อมูลที่ถูก Group แล้ว (1 ผลัด จะเหลือ 1 Object)
+                    student_assignments: Object.values(groupedAssignments)
+                };
+            });
 
             const { data: si } = await supabase.from('training_sites').select('*').order('site_name')
             const { data: me } = await supabase.from('supervisors').select('*')
 
-            setStudents(st || [])
+            // 🚩 เปลี่ยนจาก st เป็น formattedStudents
+            setStudents(formattedStudents || [])
             setSites(si || [])
             setMentors(me || [])
-        } catch (err: any) { console.error(err.message) }
-        finally { setLoading(false) }
+        } catch (err: any) {
+            console.error(err.message)
+        } finally {
+            setLoading(false)
+        }
     }, [])
+
+
 
     useEffect(() => { fetchData() }, [fetchData])
 
@@ -113,28 +173,52 @@ export default function StudentManagement() {
     }, [fetchData])
 
     // --- แก้ไขฟังก์ชัน getDisplayAssignment ให้แสดงผลัดที่ตรงกับคำค้นหาโดยอัตโนมัติ ---
+    // const getDisplayAssignment = (student: any) => {
+    //     if (!student.student_assignments || student.student_assignments.length === 0) return null;
+
+    //     // 1. ถ้ามีการเลือกฟิลเตอร์ผลัดเฉพาะเจาะจง (ไม่ใช่ 'all') ให้แสดงตามนั้น
+    //     if (selectedRotationFilter !== 'all') {
+    //         return student.student_assignments.find((as: any) => String(as.rotation_id) === String(selectedRotationFilter));
+    //     }
+
+    //     // 2. ถ้าไม่ได้เลือกผลัด (เป็น 'all') แต่ "มีการพิมพ์ค้นหา"
+    //     if (searchTerm.trim() !== "") {
+    //         const searchLower = searchTerm?.toLowerCase().trim();
+    //         // หาผลัดที่ชื่อ รพ. หรือ จังหวัด ตรงกับที่พิมพ์ค้นหา
+    //         const matchedAsm = student.student_assignments.find((asm: any) =>
+    //             asm.training_sites?.site_name?.toLowerCase().includes(searchLower) ||
+    //             asm.training_sites?.province?.toLowerCase().includes(searchLower)
+    //         );
+    //         // ถ้าเจอผลัดที่ตรง ให้โชว์ผลัดนั้นเลย (ตารางจะได้เปลี่ยนตามที่ค้นหา)
+    //         if (matchedAsm) return matchedAsm;
+    //     }
+
+    //     // 3. ถ้าไม่มีการค้นหา หรือค้นหาไม่เจอในผลัด ให้กลับไปโชว์ผลัดแรกเป็นค่าเริ่มต้น
+    //     return student.student_assignments[0];
+    // }
+
     const getDisplayAssignment = (student: any) => {
         if (!student.student_assignments || student.student_assignments.length === 0) return null;
 
-        // 1. ถ้ามีการเลือกฟิลเตอร์ผลัดเฉพาะเจาะจง (ไม่ใช่ 'all') ให้แสดงตามนั้น
+        let targetAssignments = student.student_assignments;
+
+        // 1. ถ้าเลือก Filter ผลัด
         if (selectedRotationFilter !== 'all') {
-            return student.student_assignments.find((as: any) => String(as.rotation_id) === String(selectedRotationFilter));
+            // คืนค่า "วิชาแรกที่เจอ" ในผลัดที่เลือก
+            return targetAssignments.find((as: any) => String(as.rotation_id) === String(selectedRotationFilter));
         }
 
-        // 2. ถ้าไม่ได้เลือกผลัด (เป็น 'all') แต่ "มีการพิมพ์ค้นหา"
+        // 2. ถ้ามีการค้นหา
         if (searchTerm.trim() !== "") {
-            const searchLower = searchTerm?.toLowerCase().trim();
-            // หาผลัดที่ชื่อ รพ. หรือ จังหวัด ตรงกับที่พิมพ์ค้นหา
-            const matchedAsm = student.student_assignments.find((asm: any) =>
+            const searchLower = searchTerm.toLowerCase().trim();
+            return targetAssignments.find((asm: any) =>
                 asm.training_sites?.site_name?.toLowerCase().includes(searchLower) ||
                 asm.training_sites?.province?.toLowerCase().includes(searchLower)
             );
-            // ถ้าเจอผลัดที่ตรง ให้โชว์ผลัดนั้นเลย (ตารางจะได้เปลี่ยนตามที่ค้นหา)
-            if (matchedAsm) return matchedAsm;
         }
 
-        // 3. ถ้าไม่มีการค้นหา หรือค้นหาไม่เจอในผลัด ให้กลับไปโชว์ผลัดแรกเป็นค่าเริ่มต้น
-        return student.student_assignments[0];
+        // 3. ค่าเริ่มต้น: คืนค่าวิชาแรกของผลัดแรก
+        return targetAssignments[0];
     }
 
     // --- ส่วน filteredStudents (คงเดิม แต่แนะนำให้ตรวจสอบให้แน่ใจว่าใช้ logic นี้) ---
@@ -283,7 +367,21 @@ export default function StudentManagement() {
         XLSX.writeFile(workbook, fileName);
     };
 
-
+    const groupedAssignments = students.flatMap(s =>
+        s.student_assignments?.reduce((acc: any, current: any) => {
+            const key = current.rotation_id;
+            if (!acc[key]) {
+                acc[key] = {
+                    ...current,
+                    student_name: `${s.prefix}${s.first_name} ${s.last_name}`,
+                    sub_tasks: [current]
+                };
+            } else {
+                acc[key].sub_tasks.push(current);
+            }
+            return acc;
+        }, {}) || []
+    ).map((obj: any) => Object.values(obj)).flat();
 
     return (
         <AdminLayout>
@@ -452,7 +550,7 @@ export default function StudentManagement() {
                                             {assignment ? (
                                                 <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
                                                     <div className="flex items-center gap-2">
-                                                        {/* วงกลมดัชนีสีบอกผลัด */}
+
                                                         <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-sm ${theme.bg}`}>
                                                             {rotIdx + 1}
                                                         </div>
@@ -838,7 +936,7 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
         setForm({ ...form, assignments: nAs });
     };
 
-  
+
     // const handleSave = async () => {
     //     if (!form.student_code || !form.first_name) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
 
@@ -899,112 +997,114 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
 
 
     const handleSave = async () => {
-    // 1. ตรวจสอบฟิลด์พื้นฐาน
-    if (!form.student_code || !form.first_name) {
-        return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
-    }
-
-    // 2. เช็ครูปภาพและ "Lock" ตัวแปรไว้ในตัวแปรใหม่ (Type Guard)
-    // การดึง avatarFile มาไว้ใน local variable แบบนี้จะทำให้ TS มั่นใจว่าค่าไม่เปลี่ยนระหว่างทาง
-    const fileToUpload = avatarFile; 
-    if (!fileToUpload) {
-        return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษา', 'warning');
-    }
-
-    setLoading(true);
-    try {
-        // 3. ตรวจสอบรหัสนักศึกษาซ้ำ (ใช้ maybeSingle เพื่อความปลอดภัยถ้าไม่เจอ row)
-        const { data: check } = await supabase
-            .from('students')
-            .select('id')
-            .eq('student_code', form.student_code)
-            .maybeSingle();
-
-        if (check) {
-            setLoading(false);
-            return Swal.fire('ข้อมูลซ้ำ', 'รหัสนี้ลงทะเบียนแล้ว', 'error');
+        // 1. ตรวจสอบฟิลด์พื้นฐาน
+        if (!form.student_code || !form.first_name) {
+            return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
         }
 
-        // 4. จัดการเรื่องไฟล์ (ใช้ fileToUpload ที่เราเช็คแล้วว่าไม่ใช่ null)
-        const fileExt = fileToUpload.name.split('.').pop();
-        const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
+        // 2. เช็ครูปภาพและ "Lock" ตัวแปรไว้ในตัวแปรใหม่ (Type Guard)
+        // การดึง avatarFile มาไว้ใน local variable แบบนี้จะทำให้ TS มั่นใจว่าค่าไม่เปลี่ยนระหว่างทาง
+        const fileToUpload = avatarFile;
+        if (!fileToUpload) {
+            return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษา', 'warning');
+        }
 
-        const { error: uploadError } = await supabase.storage
-            .from('avatars')
-            .upload(fileName, fileToUpload);
+        setLoading(true);
+        try {
+            // 3. ตรวจสอบรหัสนักศึกษาซ้ำ (ใช้ maybeSingle เพื่อความปลอดภัยถ้าไม่เจอ row)
+            const { data: check } = await supabase
+                .from('students')
+                .select('id')
+                .eq('student_code', form.student_code)
+                .maybeSingle();
 
-        if (uploadError) throw uploadError;
+            if (check) {
+                setLoading(false);
+                return Swal.fire('ข้อมูลซ้ำ', 'รหัสนี้ลงทะเบียนแล้ว', 'error');
+            }
 
-        const { data: urlData } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(fileName);
+            // 4. จัดการเรื่องไฟล์ (ใช้ fileToUpload ที่เราเช็คแล้วว่าไม่ใช่ null)
+            const fileExt = fileToUpload.name.split('.').pop();
+            const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
 
-        const publicUrl = urlData.publicUrl;
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(fileName, fileToUpload);
 
-        // 5. บันทึกข้อมูลนักศึกษา
-        const { data: student, error: stError } = await supabase
-            .from('students')
-            .insert([{
-                student_code: form.student_code,
-                prefix: form.prefix,
-                first_name: form.first_name,
-                last_name: form.last_name,
-                phone: form.phone,
-                email: form.email,
-                avatar_url: publicUrl
-            }])
-            .select()
-            .single();
+            if (uploadError) throw uploadError;
 
-        if (stError) throw stError;
+            const { data: urlData } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(fileName);
 
-        // 6. เพิ่มข้อมูลการมอบหมาย (Assignments)
-        if (form.assignments && form.assignments.length > 0) {
-            for (const as of form.assignments) {
-                if (as.site_id) {
-                    const { data: assignment, error: asError } = await supabase
-                        .from('student_assignments')
-                        .insert([{
-                            student_id: student.id,
-                            rotation_id: as.rotation_id,
-                            site_id: as.site_id,
-                            status: 'active'
-                        }])
-                        .select()
-                        .single();
-                    
-                    if (asError) throw asError;
+            const publicUrl = urlData.publicUrl;
 
-                    // 7. เพิ่มรายชื่อพี่เลี้ยง
-                    if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-                        const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-                            assignment_id: assignment.id,
-                            supervisor_id: sId
-                        }));
-                        await supabase.from('assignment_supervisors').insert(mentorRecords);
+            // 5. บันทึกข้อมูลนักศึกษา
+            const { data: student, error: stError } = await supabase
+                .from('students')
+                .insert([{
+                    student_code: form.student_code,
+                    prefix: form.prefix,
+                    first_name: form.first_name,
+                    last_name: form.last_name,
+                    phone: form.phone,
+                    email: form.email,
+                    avatar_url: publicUrl
+                }])
+                .select()
+                .single();
+
+            if (stError) throw stError;
+
+            // 6. เพิ่มข้อมูลการมอบหมาย (Assignments)
+            if (form.assignments && form.assignments.length > 0) {
+                for (const as of form.assignments) {
+                    if (as.site_id) {
+                        const { data: assignment, error: asError } = await supabase
+                            .from('student_assignments')
+                            .insert([{
+                                student_id: student.id,
+                                rotation_id: as.rotation_id,
+                                site_id: as.site_id,
+                                status: 'active'
+                            }])
+                            .select()
+                            .single();
+
+                        if (asError) throw asError;
+
+                        // 7. เพิ่มรายชื่อพี่เลี้ยง
+                        if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+                            const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+                                assignment_id: assignment.id,
+                                supervisor_id: sId
+                            }));
+                            await supabase.from('assignment_supervisors').insert(mentorRecords);
+                        }
                     }
                 }
             }
+
+            Swal.fire({
+                icon: 'success',
+                title: 'สำเร็จ',
+                text: 'เพิ่มข้อมูลนักศึกษาเรียบร้อยแล้ว',
+                timer: 1500,
+                showConfirmButton: false,
+                customClass: { popup: 'rounded-[2rem]' }
+            });
+
+            fetchData();
+            onClose();
+        } catch (e: any) {
+            console.error('Error saving student:', e);
+            Swal.fire('เกิดข้อผิดพลาด', e.message || 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+        } finally {
+            setLoading(false);
         }
+    };
 
-        Swal.fire({
-            icon: 'success',
-            title: 'สำเร็จ',
-            text: 'เพิ่มข้อมูลนักศึกษาเรียบร้อยแล้ว',
-            timer: 1500,
-            showConfirmButton: false,
-            customClass: { popup: 'rounded-[2rem]' }
-        });
 
-        fetchData();
-        onClose();
-    } catch (e: any) {
-        console.error('Error saving student:', e);
-        Swal.fire('เกิดข้อผิดพลาด', e.message || 'ไม่สามารถบันทึกข้อมูลได้', 'error');
-    } finally {
-        setLoading(false);
-    }
-};
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-[95vw] lg:max-w-[1200px] w-full p-0 overflow-hidden rounded-[2.5rem] border-none shadow-2xl bg-white focus:outline-none">

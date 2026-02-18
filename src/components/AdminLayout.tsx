@@ -152,9 +152,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
             )}
 
-            <aside className={`
+            {/* <aside className={`
                 fixed inset-y-0 left-0 z-50 w-64 bg-[#0F172A] text-slate-300 flex flex-col transform transition-transform duration-300 ease-in-out
                 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+            `}> */}
+            <aside className={`
+                fixed inset-y-0 left-0 z-50 w-64 bg-[#0F172A] text-slate-300 flex flex-col transform transition-transform duration-300 ease-in-out
+                lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}>
                 <div className="p-8 text-white font-bold text-2xl flex items-center justify-between">
                     <div className="flex items-center gap-2">

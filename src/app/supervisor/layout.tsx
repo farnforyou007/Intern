@@ -182,19 +182,23 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
     useEffect(() => {
         const checkAccess = async () => {
             // หน้าลงทะเบียนให้ผ่านตลอด
-            if (pathname === '/supervisor/register') {
-                setStatus('authorized')
-                setIsAuthorized(true)
-                return
-            }
+            // if (pathname === '/supervisor/register') {
+            //     setStatus('authorized')
+            //     setIsAuthorized(true)
+            //     return
+            // }
+
+            setStatus('authorized')
+            setIsAuthorized(true)
+            return // จบฟังก์ชันตรงนี้เลย ไม่ต้องรันโค้ดข้างล่าง
 
             try {
-                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
 
-                if (!liff.isLoggedIn()) {
-                    liff.login({ redirectUri: window.location.href })
-                    return
-                }
+                // if (!liff.isLoggedIn()) {
+                //     liff.login({ redirectUri: window.location.href })
+                //     return
+                // }
 
                 const profile = await liff.getProfile()
                 const { data: user } = await supabase

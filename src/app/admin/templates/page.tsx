@@ -23,7 +23,12 @@ export default function TemplatesPage() {
     // โลจิกข้อคำถามในเทมเพลต
     const [isItemModalOpen, setIsItemModalOpen] = useState(false)
     const [items, setItems] = useState<any[]>([])
-    const [itemForm, setItemForm] = useState({ question_text: '', description: '', allow_na: true })
+    const [itemForm, setItemForm] = useState({
+        question_text: '',
+        description: '',
+        allow_na: true,
+        factor: 1.0
+    })
     const [editingItem, setEditingItem] = useState<any>(null)
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -55,7 +60,11 @@ export default function TemplatesPage() {
             title: 'ยืนยันการลบเทมเพลต?',
             html: `เทมเพลต <b>"${template.template_name}"</b> และข้อคำถามภายในจะถูกลบถาวร`,
             icon: 'warning', showCancelButton: true, confirmButtonText: 'ลบข้อมูล', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#dc2626', reverseButtons: true,
-            customClass: { popup: 'rounded-[2.5rem] p-10', confirmButton: 'rounded-full px-8', cancelButton: 'rounded-full px-8' }
+            customClass: {
+                popup: 'rounded-[2.5rem] font-sans p-10',
+                confirmButton: 'rounded-full px-10 py-3 font-bold order-1',
+                cancelButton: 'rounded-full px-10 py-3 font-bold order-2'
+            }
         })
         if (isConfirmed) {
             await supabase.from('eval_templates').delete().eq('id', template.id)
@@ -78,15 +87,62 @@ export default function TemplatesPage() {
         } else {
             await supabase.from('eval_template_items').insert([{ ...itemForm, template_id: selectedTemplate.id, order_index: items.length }])
         }
-        setEditingItem(null); setItemForm({ question_text: '', description: '', allow_na: true })
+        setEditingItem(null);
+        setItemForm({ question_text: '', description: '', allow_na: true, factor: 1.0 })
         const { data } = await supabase.from('eval_template_items').select('*').eq('template_id', selectedTemplate.id).order('order_index', { ascending: true })
         setItems(data || [])
     }
 
+    // const handleDeleteItem = async (itemId: number) => {
+    //     await supabase.from('eval_template_items').delete().eq('id', itemId)
+    //     const { data } = await supabase.from('eval_template_items').select('*').eq('template_id', selectedTemplate.id).order('order_index', { ascending: true })
+    //     setItems(data || [])
+    // }
     const handleDeleteItem = async (itemId: number) => {
-        await supabase.from('eval_template_items').delete().eq('id', itemId)
-        const { data } = await supabase.from('eval_template_items').select('*').eq('template_id', selectedTemplate.id).order('order_index', { ascending: true })
-        setItems(data || [])
+
+        const { isConfirmed } = await Swal.fire({
+            target: document.getElementById('item-modal-content') || document.body,
+            title: 'ยืนยันการลบข้อคำถาม?',
+            text: "เมื่อลบแล้วจะไม่สามารถกู้คืนข้อมูลข้อนี้ได้",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626', // สีแดง
+            cancelButtonColor: '#e2e8f0', // สีเทา
+            confirmButtonText: 'ใช่, ลบเลย!',
+            cancelButtonText: 'ยกเลิก',
+            reverseButtons: true,
+            customClass: {
+                popup: 'rounded-[2.5rem] font-sans p-10',
+                confirmButton: 'rounded-full px-10 py-3 font-bold order-1',
+                cancelButton: 'rounded-full px-10 py-3 font-bold order-2'
+            }
+
+        });
+
+        if (isConfirmed) {
+            try {
+                const { error } = await supabase.from('eval_template_items').delete().eq('id', itemId)
+                if (error) throw error
+
+                // อัปเดต UI หลังลบสำเร็จ
+                const { data } = await supabase
+                    .from('eval_template_items')
+                    .select('*')
+                    .eq('template_id', selectedTemplate.id)
+                    .order('order_index', { ascending: true })
+                setItems(data || [])
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'ลบสำเร็จ',
+                    timer: 1000,
+                    showConfirmButton: false,
+                    customClass: { popup: 'rounded-[2rem]' }
+                })
+            } catch (error) {
+                Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถลบข้อมูลได้', 'error')
+            }
+        }
     }
 
     const handleDragEnd = async (event: any) => {
@@ -162,7 +218,7 @@ export default function TemplatesPage() {
             {/* Modal ชื่อเทมเพลต */}
             <Dialog open={isItemModalOpen} onOpenChange={setIsItemModalOpen}>
                 <DialogContent className="max-w-[95vw] w-[95vw] xl:max-w-7xl rounded-[2.5rem] p-0 border-none h-[85vh] flex flex-col shadow-2xl overflow-hidden bg-white focus:outline-none">
-                    <div className="flex flex-col h-full">
+                    <div id="item-modal-content" className="flex flex-col h-full">
                         {/* Header Modal */}
                         <div className="px-10 py-6 border-b flex justify-between items-center bg-white shrink-0">
                             <div className="flex items-center gap-4">
@@ -185,7 +241,7 @@ export default function TemplatesPage() {
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">หัวข้อประเมิน (ตัวเข้ม)</label>
                                         <Input
-                                            value={itemForm.question_text}
+                                            value={itemForm.question_text || ''}
                                             onChange={e => setItemForm({ ...itemForm, question_text: e.target.value })}
                                             className="h-14 bg-white rounded-2xl font-bold shadow-sm border-none ring-1 ring-slate-100 focus:ring-2 focus:ring-blue-500"
                                             placeholder="เช่น ทักษะการนวดรักษา..."
@@ -195,9 +251,9 @@ export default function TemplatesPage() {
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">คำอธิบายรายละเอียด (ตัวบาง)</label>
                                         <textarea
-                                            value={itemForm.description}
+                                            value={itemForm.description || ''}
                                             onChange={e => setItemForm({ ...itemForm, description: e.target.value })}
-                                            className="w-full p-5 rounded-2xl bg-white border-none ring-1 ring-slate-100 shadow-sm h-60 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600"
+                                            className="w-full p-5 rounded-2xl bg-white border-none ring-1 ring-slate-100 shadow-sm h-40 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600"
                                             placeholder="ระบุคำอธิบายเพิ่มเติม..."
                                             onKeyDown={(e) => {
                                                 // ถ้ากด Enter อย่างเดียว (โดยไม่กด Shift) ให้ทำการบันทึก
@@ -207,6 +263,19 @@ export default function TemplatesPage() {
                                                 }
                                                 // ถ้ากด Shift + Enter จะยังคงขึ้นบรรทัดใหม่ได้ตามปกติ
                                             }}
+
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">น้ำหนักคะแนน (Factor)</label>
+                                        <Input
+                                            type="number"
+                                            step="0.1"
+                                            value={itemForm.factor || ''}
+                                            onChange={e => setItemForm({ ...itemForm, factor: parseFloat(e.target.value) || 1.0 })}
+                                            className="h-14 bg-white rounded-2xl font-bold shadow-sm border-none ring-1 ring-slate-100 focus:ring-2 focus:ring-blue-500"
+                                            placeholder="เช่น 1.0, 1.5, 2.0"
+                                            onKeyDown={(e) => e.key === 'Enter' && handleSaveItem()}
 
                                         />
                                     </div>
@@ -245,6 +314,7 @@ export default function TemplatesPage() {
                                                     setEditingItem={setEditingItem}
                                                     setItemForm={setItemForm}
                                                     handleDeleteItem={handleDeleteItem}
+                                                    editingItem={editingItem}
                                                 />
                                             ))}
                                         </div>
@@ -296,7 +366,64 @@ export default function TemplatesPage() {
 }
 
 // --- Component ย่อยสำหรับแต่ละข้อคำถาม (Sortable) ---
-function SortableItem({ item, idx, setEditingItem, setItemForm, handleDeleteItem }: any) {
+// function SortableItem({ item, idx, setEditingItem, setItemForm, handleDeleteItem ,editingItem}: any) {
+//     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+
+//     const style = {
+//         transform: CSS.Transform.toString(transform),
+//         transition,
+//         zIndex: isDragging ? 50 : 1,
+//     };
+
+//     const isEditing = editingItem?.id === item.id;
+
+//     return (
+//         <div
+//             ref={setNodeRef}
+//             style={style}
+//             className={`bg-slate-50/50 border border-slate-100 p-6 rounded-3xl flex items-start justify-between group hover:border-blue-200 transition-all ${isDragging ? 'shadow-2xl ring-2 ring-blue-500 bg-white' : ''}`}
+//         >
+//             <div className="flex gap-4 items-start flex-1">
+//                 {/* ปุ่มสำหรับลาก */}
+//                 <div {...attributes} {...listeners} className="mt-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-blue-500">
+//                     <GripVertical size={20} />
+//                 </div>
+
+//                 {/* กล่องตัวเลขที่ล็อคขนาดให้เท่ากันเป๊ะ (Fixed Size) */}
+//                 <div className="w-9 h-9 aspect-square bg-slate-900 text-white rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-md">
+//                     {idx + 1}
+//                 </div>
+
+//                 <div className="flex-1 min-w-0">
+//                     <p className="font-bold text-slate-800 text-lg leading-tight break-words">{item.question_text}</p>
+//                     {item.description && <p className="text-slate-400 text-sm mt-1 break-words line-clamp-2">{item.description}</p>}
+//                     <div className="flex gap-2 mt-3">
+//                         <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black rounded-lg border border-emerald-100">
+//                             {item.allow_na ? 'เปิดใช้ N/A' : 'บังคับประเมิน'}
+//                         </span>
+//                         <span className="px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-black rounded-lg  border border-emerald-100">
+//                             factor : {item.factor || 1.0}
+//                         </span>
+//                     </div>
+//                 </div>
+//             </div>
+
+//             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+//                 <Button variant="ghost" size="icon" onClick={() => {
+//                     setEditingItem(item);
+//                     setItemForm({
+//                         question_text: item.question_text,
+//                         description: item.description || '',
+//                         allow_na: item.allow_na,
+//                         factor: item.factor || 1.0
+//                     });
+//                 }} className="h-9 w-9 text-blue-600 hover:bg-blue-50"><Edit2 size={16} /></Button>
+//                 <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item.id)} className="h-9 w-9 text-red-600 hover:bg-red-50"><Trash2 size={16} /></Button>
+//             </div>
+//         </div>
+//     );
+// }
+function SortableItem({ item, idx, setEditingItem, setItemForm, handleDeleteItem, editingItem }: any) { // 👈 รับ Props เพิ่ม
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
 
     const style = {
@@ -305,37 +432,95 @@ function SortableItem({ item, idx, setEditingItem, setItemForm, handleDeleteItem
         zIndex: isDragging ? 50 : 1,
     };
 
+    // 🚩 เช็คว่าข้อนี้กำลังถูกแก้ไขอยู่หรือไม่
+    const isEditing = editingItem?.id === item.id;
+
     return (
         <div
             ref={setNodeRef}
             style={style}
-            className={`bg-slate-50/50 border border-slate-100 p-6 rounded-3xl flex items-start justify-between group hover:border-blue-200 transition-all ${isDragging ? 'shadow-2xl ring-2 ring-blue-500 bg-white' : ''}`}
+            className={`p-6 rounded-3xl flex items-start justify-between group transition-all duration-200
+                ${isDragging
+                    ? 'shadow-2xl ring-4 ring-blue-600 bg-white border-blue-600 z-50 scale-[1.02]' // สีฟ้าเข้มตอนลาก
+                    : isEditing
+                        ? 'bg-orange-50 border-orange-500 ring-4 ring-orange-100 shadow-md' // สีส้มตอนกดแก้ไข
+                        : 'bg-slate-50/50 border border-slate-100 hover:border-blue-200'
+                }`}
         >
             <div className="flex gap-4 items-start flex-1">
                 {/* ปุ่มสำหรับลาก */}
-                <div {...attributes} {...listeners} className="mt-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-blue-500">
+                <div {...attributes} {...listeners} className={`mt-1 cursor-grab active:cursor-grabbing transition-colors ${isDragging ? 'text-blue-600' : 'text-slate-300 hover:text-blue-500'}`}>
                     <GripVertical size={20} />
                 </div>
 
                 {/* กล่องตัวเลขที่ล็อคขนาดให้เท่ากันเป๊ะ (Fixed Size) */}
-                <div className="w-9 h-9 aspect-square bg-slate-900 text-white rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-md">
+                <div className={`w-9 h-9 aspect-square rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-md transition-colors ${isEditing ? 'bg-orange-500 text-white' : 'bg-slate-900 text-white'}`}>
                     {idx + 1}
                 </div>
 
-                <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 text-lg leading-tight break-words">{item.question_text}</p>
+                <div className="flex-1 min-w-0 font-sans">
+                    <p className={`font-bold text-lg leading-tight break-words transition-colors ${isEditing ? 'text-orange-700' : 'text-slate-800'}`}>
+                        {item.question_text}
+                    </p>
                     {item.description && <p className="text-slate-400 text-sm mt-1 break-words line-clamp-2">{item.description}</p>}
                     <div className="flex gap-2 mt-3">
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-black rounded uppercase">
-                            {item.allow_na ? 'Allow N/A' : 'Required'}
+                        <span className={`px-3 py-1 text-[10px] font-black rounded-lg border transition-colors ${isEditing ? 'bg-white border-orange-200 text-orange-600' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                            {item.allow_na ? 'เปิดใช้ N/A' : 'บังคับประเมิน'}
+                        </span>
+                        <span className={`px-3 py-1 text-[10px] font-black rounded-lg border transition-colors ${isEditing ? 'bg-white border-orange-200 text-orange-600' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
+                            factor : {item.factor || 1.0}
                         </span>
                     </div>
                 </div>
             </div>
 
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
-                <Button variant="ghost" size="icon" onClick={() => { setEditingItem(item); setItemForm({ question_text: item.question_text, description: item.description || '', allow_na: item.allow_na }); }} className="h-9 w-9 text-blue-600 hover:bg-blue-50"><Edit2 size={16} /></Button>
-                <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item.id)} className="h-9 w-9 text-red-600 hover:bg-red-50"><Trash2 size={16} /></Button>
+            <div className={`flex gap-1 transition-all shrink-0 ${isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                {/* <Button variant="ghost" size="icon" onClick={() => {
+                    setEditingItem(item);
+                    setItemForm({
+                        question_text: item.question_text,
+                        description: item.description || '',
+                        allow_na: item.allow_na,
+                        factor: item.factor || 1.0
+                    });
+                }} className={`h-9 w-9 rounded-full transition-all ${isEditing ? 'bg-orange-100 text-orange-600 hover:bg-orange-200 shadow-sm' : 'text-blue-600 hover:bg-blue-50'}`}>
+                    <Edit2 size={16} />
+                </Button> */}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                        // 🚩 ถ้ากดซ้ำที่ข้อเดิม (isEditing เป็น true) ให้ยกเลิกการแก้ไข
+                        if (isEditing) {
+                            setEditingItem(null);
+                            setItemForm({
+                                question_text: '',
+                                description: '',
+                                allow_na: true,
+                                factor: 1.0
+                            });
+                        } else {
+                            // 🚩 ถ้ากดข้ออื่น ให้เริ่มโหมดแก้ไขข้อนั้นปกติ
+                            setEditingItem(item);
+                            setItemForm({
+                                question_text: item.question_text,
+                                description: item.description || '',
+                                allow_na: item.allow_na,
+                                factor: item.factor || 1.0
+                            });
+                        }
+                    }}
+                    className={`h-9 w-9 rounded-full transition-all ${isEditing
+                        ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm' // 🎨 ปรับสีปุ่มตอน Active ให้เด่นชัดขึ้น
+                        : 'text-blue-600 hover:bg-blue-50'
+                        }`}
+                >
+                    {/* 🚩 ถ้ากำลังแก้ไข ให้เปลี่ยนไอคอนเป็นตัว X เพื่อบอกว่ากดปิดได้ */}
+                    {isEditing ? <X size={16} /> : <Edit2 size={16} />}
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item.id)} className="h-9 w-9 text-red-600 hover:bg-red-50 rounded-full transition-all">
+                    <Trash2 size={16} />
+                </Button>
             </div>
         </div>
     );
