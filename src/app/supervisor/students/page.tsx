@@ -244,7 +244,7 @@ export default function SupervisorStudentList() {
             // 4. ดึงงานทั้งหมด (All Students)
             const { data: all } = await supabase.from('student_assignments').select(`
                 id, rotation_id, student_id, subject_id, sub_subject_id,
-                students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone ),
+                students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone ,email ),
                 subjects:subject_id ( id, name ), 
                 sub_subjects:sub_subject_id ( name ),
                 rotations:rotation_id ( name )

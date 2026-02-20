@@ -88,9 +88,23 @@ export default function EvaluationPage() {
             const subjectId = assign.student_assignments.subjects.id
             const subSubjectId = assign.student_assignments.sub_subject_id
 
+            // let query = supabase
+            //     .from('evaluation_groups')
+            //     .select(`*, evaluation_items(*)`)
+            //     .eq('subject_id', subjectId)
+
+
+            // if (subSubjectId) {
+            //     query = query.eq('sub_subject_id', subSubjectId)
+            // } else {
+            //     query = query.is('sub_subject_id', null)
+            // }
             let query = supabase
                 .from('evaluation_groups')
-                .select(`*, evaluation_items(*)`)
+                .select(`
+                    *, 
+                    evaluation_items (*)
+                `)
                 .eq('subject_id', subjectId)
 
             if (subSubjectId) {
@@ -99,7 +113,14 @@ export default function EvaluationPage() {
                 query = query.is('sub_subject_id', null)
             }
 
-            const { data: evalGroups } = await query.order('group_name', { ascending: true })
+            // const { data: evalGroups } = await query.order('order_index', { ascending: true })
+            const { data: evalGroups, error: groupsErr } = await query
+                .order('group_name', { ascending: true }) // 🚩 เรียง Tab ตามชื่อกลุ่ม (เพราะไม่มี order_index)
+                .order('order_index', { foreignTable: 'evaluation_items', ascending: true }); // 🚩 เรียงข้อ 1,2,3 ตาม order_index
+            if (groupsErr) {
+                console.error("Groups Error:", groupsErr.message);
+                return;
+            }
             const validGroups = evalGroups || []
             setGroups(validGroups)
 
@@ -366,63 +387,6 @@ export default function EvaluationPage() {
                         {currentGroup?.evaluation_items?.filter((i: any) => scores[i.id] !== undefined).length} / {currentGroup?.evaluation_items?.length} ข้อ
                     </span>
                 </div>
-                {/* <div className="flex gap-3">
-                    {activeTab < groups.length - 1 ? (
-                        <button
-                            onClick={() => handleNextOrFinish(false)}
-                            disabled={saving}
-                            className="flex-1 h-14 bg-emerald-600 text-white rounded-[1.5rem] font-black shadow-lg shadow-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2"
-                        >
-                            {saving ? <Loader2 className="animate-spin" /> : 'ถัดไป (Next)'}
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => handleNextOrFinish(true)}
-                            disabled={saving}
-                            className="flex-1 h-14 bg-slate-900 text-white rounded-[1.5rem] font-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
-                        >
-                            {saving ? <Loader2 className="animate-spin" /> : <><Save size={20} /> ยืนยันและบันทึก (Finish)</>}
-                           
-                        
-                        </button>
-                    )}
-
-                        {activeTab < groups.length - 1 ? (
-                   
-                            <button
-                                onClick={() => handleNextOrFinish(false)}
-                                disabled={saving}
-                                className="flex-1 h-14 bg-emerald-600 text-white rounded-[1.5rem] font-black shadow-lg shadow-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2"
-                            >
-                                {saving ? <Loader2 className="animate-spin" /> : 'ถัดไป (Next)'}
-                            </button>
-                        ) : (
-                         
-                            <button
-                                onClick={() => {
-                                    if (isLocked) {
-                                    
-                                        router.back()
-                                    } else {
-                                     
-                                        handleNextOrFinish(true)
-                                    }
-                                }}
-                                disabled={saving}
-                                className={`flex-1 h-14 rounded-[1.5rem] font-black shadow-xl transition-all ${isLocked ? 'bg-slate-400 text-white' : 'bg-slate-900 text-white'
-                                    
-                                    }`}
-                            >
-                                {saving ? (
-                                    <Loader2 className="animate-spin" />
-                                ) : isLocked ? (
-                                    'ปิดหน้าต่าง (Close)'
-                                ) : (
-                                    <><Save size={20} /> ยืนยันและบันทึก (Finish)</>
-                                )}
-                            </button>
-                        )}
-                </div> */}
 
                 <div className="flex gap-3">
                     {activeTab < groups.length - 1 ? (
@@ -450,8 +414,8 @@ export default function EvaluationPage() {
                             }}
                             disabled={saving}
                             className={`flex-1 h-14 rounded-[1.5rem] font-black shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 ${isLocked
-                                    ? 'bg-slate-400 text-white'
-                                    : 'bg-slate-900 text-white shadow-slate-200'
+                                ? 'bg-slate-400 text-white'
+                                : 'bg-slate-900 text-white shadow-slate-200'
                                 }`}
                         >
                             {saving ? (

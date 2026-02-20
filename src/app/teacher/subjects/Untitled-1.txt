@@ -1,0 +1,723 @@
+
+// "use client"
+// import { useState, useEffect } from 'react'
+// import { createBrowserClient } from '@supabase/ssr'
+// import { ChevronLeft, User, Search, GraduationCap, FileText, X, Download, MapPin, Phone, ListChecks, BookOpen, ChevronRight } from 'lucide-react'
+// import { useRouter, useSearchParams } from 'next/navigation'
+// import html2canvas from 'html2canvas'
+// import { jsPDF } from 'jspdf'
+// import * as XLSX from 'xlsx'
+
+// export default function EvaluationSummary() {
+//     const router = useRouter()
+//     const searchParams = useSearchParams()
+//     const subjectId = searchParams.get('id') || 'all'
+
+//     const [viewMode, setViewMode] = useState<'list' | 'overview'>('list')
+//     const [loading, setLoading] = useState(true)
+//     const [subjects, setSubjects] = useState<any[]>([])
+//     const [data, setData] = useState<any[]>([])
+//     const [searchTerm, setSearchTerm] = useState('')
+
+//     // Modal States
+//     const [isModalOpen, setIsModalOpen] = useState(false)
+//     const [modalMode, setModalMode] = useState<'summary' | 'details'>('summary')
+//     const [selectedStudent, setSelectedStudent] = useState<any>(null)
+//     const [activeDetailTab, setActiveDetailTab] = useState(0)
+//     const [loadingDetail, setLoadingDetail] = useState(false)
+
+//     const supabase = createBrowserClient(
+//         process.env.NEXT_PUBLIC_SUPABASE_URL!,
+//         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+//     )
+
+//     const handleFilterChange = (id: string) => {
+//         const params = new URLSearchParams(searchParams);
+//         params.set('id', id);
+//         router.push(`/teacher/subjects?${params.toString()}`);
+//     };
+
+//     useEffect(() => {
+//         const fetchData = async () => {
+//             setLoading(true)
+//             const lineId = 'test-c'
+//             const { data: user } = await supabase.from('supervisors').select('id').eq('line_user_id', lineId).single()
+
+//             if (user) {
+//                 const { data: subData } = await supabase.from('supervisor_subjects').select('subject_id, subjects(name, id)').eq('supervisor_id', user.id)
+//                 setSubjects(subData || [])
+
+//                 // 🚩 Query แบบแบนเพื่อความเสถียร
+//                 let query = supabase.from('student_assignments').select(`
+//                     id, 
+//                     students (id, first_name, last_name, student_code, avatar_url, phone),
+//                     subjects (name),
+//                     training_sites (site_name, province), 
+//                     evaluation_logs (
+//                         id, total_score, 
+//                         evaluation_groups (id, group_name, weight),
+//                         evaluation_answers (score, item_id)
+//                     )
+//                 `)
+
+//                 if (subjectId !== 'all') query = query.eq('subject_id', subjectId)
+//                 else if (subData) query = query.in('subject_id', subData.map(s => s.subject_id))
+
+//                 const { data: res } = await query
+//                 const processed = res?.map((item: any) => ({
+//                     student: item.students,
+//                     place: item.training_sites,
+//                     subjectName: item.subjects?.name,
+//                     evaluations: item.evaluation_logs?.map((log: any) => ({
+//                         groupId: log.evaluation_groups?.id,
+//                         title: log.evaluation_groups?.group_name,
+//                         rawScore: log.total_score || 0,
+//                         weight: log.evaluation_groups?.weight || 1,
+//                         answers: log.evaluation_answers || []
+//                     })) || []
+//                 }));
+//                 setData(processed || [])
+//             }
+//             setLoading(false)
+//         }
+//         fetchData()
+//     }, [subjectId, supabase])
+
+//     // ฟังก์ชันเปิด Modal รายละเอียด พร้อมดึงข้อคำถามจริง
+//     const openDetailModal = async (student: any) => {
+//         setSelectedStudent(student);
+//         setModalMode('details');
+//         setIsModalOpen(true);
+//         setActiveDetailTab(0);
+//         setLoadingDetail(true);
+
+//         // 🚩 ดึง Question Text ตาม Group ที่นักศึกษามีคะแนนประเมิน
+//         const groupIds = student.evaluations.map((e: any) => e.groupId);
+//         const { data: questions } = await supabase
+//             .from('evaluation_items')
+//             .select('id, question_text, item_no, group_id')
+//             .in('group_id', groupIds);
+
+//         const updated = { ...student };
+//         updated.evaluations = updated.evaluations.map((ev: any) => {
+//             // ดึงจำนวนข้อในกลุ่มนี้เพื่อนับ Max Score
+//             const groupQuestions = questions?.filter(q => q.group_id === ev.groupId) || [];
+//             const maxScore = groupQuestions.length * 5 || 40;
+
+//             return {
+//                 ...ev,
+//                 maxScore: maxScore,
+//                 detailedAnswers: ev.answers.map((ans: any) => ({
+//                     ...ans,
+//                     question: questions?.find(q => q.id === ans.item_id)
+//                 })).sort((a: any, b: any) => (a.question?.item_no || 0) - (b.question?.item_no || 0))
+//             };
+//         });
+
+//         setSelectedStudent(updated);
+//         setLoadingDetail(false);
+//     };
+
+//     const handleDownloadPDF = async () => {
+//         const element = document.getElementById(`pdf-content`);
+//         if (!element) return;
+//         const canvas = await html2canvas(element, { scale: 2 });
+//         const imgData = canvas.toDataURL('image/png');
+//         const pdf = new jsPDF('p', 'mm', 'a4');
+//         const pdfWidth = pdf.internal.pageSize.getWidth();
+//         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+//         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+//         pdf.save(`Report_${selectedStudent.student.student_code}.pdf`);
+//     };
+
+//     const filteredData = data.filter(item =>
+//         `${item.student?.first_name} ${item.student?.last_name} ${item.student?.student_code}`.toLowerCase().includes(searchTerm.toLowerCase())
+//     )
+
+//     return (
+//         <div className="min-h-screen bg-[#F0F7FF] pb-24 font-sans text-slate-900">
+//             {/* Header: ปรับปรุงระยะห่าง */}
+//             <div className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+//                 <div className="max-w-4xl mx-auto px-4 pt-10 pb-6">
+//                     <div className="flex items-center justify-between mb-8 px-2">
+//                         <button onClick={() => router.push('/teacher/dashboard')} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-600 transition-all active:scale-90"><ChevronLeft size={20} /></button>
+//                         <div className="text-center">
+//                             <h1 className="text-lg font-black text-slate-800 leading-none">ผลการประเมินวิชา</h1>
+//                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Weighted Summary</p>
+//                         </div>
+//                         <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><GraduationCap size={20} /></div>
+//                     </div>
+
+//                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-6 px-2">
+//                         <button onClick={() => handleFilterChange('all')} className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${subjectId === 'all' ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>ทุกวิชา</button>
+//                         {subjects.map((s, i) => (
+//                             <button key={i} onClick={() => handleFilterChange(s.subject_id)} className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${String(subjectId) === String(s.subject_id) ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{s.subjects.name}</button>
+//                         ))}
+//                     </div>
+
+//                     <div className="flex p-1 bg-slate-100 rounded-[1.2rem] mx-2">
+//                         <button onClick={() => setViewMode('list')} className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-400'}`}>รายชื่อนักศึกษา</button>
+//                         <button onClick={() => setViewMode('overview')} className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${viewMode === 'overview' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-400'}`}>สถิติภาพรวม</button>
+//                     </div>
+//                 </div>
+//             </div>
+
+//             {/* Student List: ปรับปรุง Card สำหรับมือถือ */}
+//             <div className="max-w-4xl mx-auto px-4 mt-8 space-y-4">
+//                 {viewMode === 'list' ? (
+//                     <>
+//                         <div className="relative mb-8 px-2">
+//                             <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+//                             <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนักศึกษา..." className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold shadow-sm focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all" onChange={(e) => setSearchTerm(e.target.value)} />
+//                         </div>
+
+//                         {filteredData.map((item, idx) => {
+//                             const totalNet = item.evaluations.reduce((acc: number, ev: any) => {
+//                                 const max = (ev.answers?.length || 8) * 5; // Default 40
+//                                 return acc + (ev.rawScore / max * (ev.weight * 100));
+//                             }, 0).toFixed(2);
+
+//                             return (
+//                                 <div key={idx} className="bg-white p-5 rounded-[2.2rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 hover:border-indigo-300 transition-all relative overflow-hidden group">
+//                                     <div className="flex items-center gap-4 flex-1">
+//                                         <div className="w-14 h-14 rounded-2xl bg-slate-50 overflow-hidden shrink-0 border border-slate-100">
+//                                             {item.student?.avatar_url ? <img src={item.student.avatar_url} className="w-full h-full object-cover" /> : <User size={20} className="m-auto mt-4 text-slate-200" />}
+//                                         </div>
+//                                         <div className="min-w-0 flex-1">
+//                                             <h3 className="font-black text-slate-800 text-base leading-tight truncate">{item.student?.first_name} {item.student?.last_name}</h3>
+//                                             <p className="text-[10px] font-bold text-slate-400 mt-0.5 tracking-tight uppercase">รหัส: {item.student?.student_code}</p>
+//                                         </div>
+//                                         <div className="text-right sm:hidden pr-2">
+//                                             <p className="text-xl font-black text-indigo-600 leading-none">{totalNet}</p>
+//                                             <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">Net %</p>
+//                                         </div>
+//                                     </div>
+
+//                                     {/* ส่วนข้อมูลที่ขยายบนมือถือ */}
+//                                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 sm:border-l sm:pl-6 border-slate-50">
+//                                         <div className="flex flex-col gap-1 flex-1">
+//                                             <div className="flex items-center gap-2 text-[10px] font-black text-indigo-500 uppercase"><BookOpen size={10} /> {item.subjectName}</div>
+//                                             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase"><MapPin size={10} /> {item.place?.site_name || 'ไม่ระบุสถานที่'}</div>
+//                                         </div>
+//                                         <div className="hidden sm:block text-right min-w-[70px]">
+//                                             <p className="text-2xl font-black text-indigo-600 leading-none">{totalNet}</p>
+//                                             <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">Net Score</p>
+//                                         </div>
+//                                         <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+//                                             <button onClick={() => { setSelectedStudent(item); setModalMode('summary'); setIsModalOpen(true); }} className="flex-1 sm:flex-none h-11 px-4 sm:px-0 sm:w-11 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><FileText size={18} /></button>
+//                                             <button onClick={() => openDetailModal(item)} className="flex-1 sm:flex-none h-11 px-4 sm:px-0 sm:w-11 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><ListChecks size={18} /></button>
+//                                         </div>
+//                                     </div>
+//                                 </div>
+//                             )
+//                         })}
+//                     </>
+//                 ) : (
+//                     <div className="bg-indigo-600 p-10 rounded-[3rem] text-white shadow-xl relative overflow-hidden">
+//                         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+//                         <h2 className="text-3xl font-black mb-1">Analytics Summary</h2>
+//                         <p className="opacity-70 text-xs font-bold uppercase tracking-widest tracking-tighter">ประมวลผลจากนิสิตทั้งหมด {data.length} คน</p>
+//                     </div>
+//                 )}
+//             </div>
+
+//             {/* Modal: สวยงามและครบถ้วน */}
+//             {isModalOpen && selectedStudent && (
+//                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4">
+//                     <div className="bg-white w-full max-w-4xl h-[90vh] sm:h-auto sm:max-h-[85vh] rounded-t-[2.5rem] sm:rounded-[3rem] shadow-2xl flex flex-col relative overflow-hidden animate-in slide-in-from-bottom duration-300">
+//                         <div className="p-6 sm:p-8 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-20">
+//                             <h2 className="text-base sm:text-xl font-black text-slate-800">{modalMode === 'summary' ? 'ใบสรุปรายงานการประเมิน' : 'รายละเอียดการให้คะแนนรายข้อ'}</h2>
+//                             <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all"><X size={24} /></button>
+//                         </div>
+
+//                         {/* Tabs Pills: ปรับให้สวยและแสดงครบตัวอักษร */}
+//                         {modalMode === 'details' && (
+//                             <div className="bg-slate-50/50 border-b border-slate-100">
+//                                 <div className="flex gap-3 p-4 overflow-x-auto no-scrollbar scroll-smooth px-6">
+//                                     {selectedStudent.evaluations.map((ev: any, i: number) => (
+//                                         <button
+//                                             key={i}
+//                                             onClick={() => setActiveDetailTab(i)}
+//                                             className={`
+//                                     px-6 py-3 rounded-2xl text-[11px] font-black transition-all shrink-0 shadow-sm whitespace-nowrap
+//                                     ${activeDetailTab === i
+//                                                     ? 'bg-indigo-600 text-white shadow-indigo-200 scale-105 ring-4 ring-indigo-600/10'
+//                                                     : 'bg-white text-slate-400 border border-slate-200 hover:border-indigo-300 hover:text-indigo-500'
+//                                                 }
+//                                 `}
+//                                             style={{ minWidth: 'max-content' }} // บังคับให้กางตามชื่อ
+//                                         >
+//                                             <div className="flex items-center gap-2">
+//                                                 <div className={`w-1.5 h-1.5 rounded-full ${activeDetailTab === i ? 'bg-white' : 'bg-slate-200'}`}></div>
+//                                                 {ev.title}
+//                                             </div>
+//                                         </button>
+//                                     ))}
+//                                 </div>
+//                             </div>
+//                         )}
+
+//                         <div className="flex-1 overflow-y-auto p-6 sm:p-10 no-scrollbar">
+//                             {loadingDetail ? (
+//                                 <div className="text-center py-20 opacity-30 font-black uppercase text-xs animate-pulse">กำลังโหลดรายละเอียด...</div>
+//                             ) : (
+//                                 <div id="pdf-content">
+//                                     {/* Header Info (เหมือนในรูป) */}
+//                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 mb-10 p-6 sm:p-8 bg-slate-50 rounded-[2rem] text-sm">
+//                                         <div className="space-y-1.5">
+//                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ข้อมูลนักศึกษา</p>
+//                                             <h3 className="font-black text-slate-800 text-xl">{selectedStudent.student.first_name} {selectedStudent.student.last_name}</h3>
+//                                             <p className="font-bold text-indigo-600">รหัส: {selectedStudent.student.student_code}</p>
+//                                             <p className="text-xs font-bold text-slate-500 flex items-center gap-2"><Phone size={12} /> {selectedStudent.student.phone || '-'}</p>
+//                                         </div>
+//                                         <div className="sm:text-right border-t sm:border-t-0 sm:border-l border-slate-200 pt-4 sm:pt-0 sm:pl-8 space-y-1.5">
+//                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">สถานที่ฝึกปฏิบัติงาน</p>
+//                                             <h3 className="font-black text-slate-800 text-base leading-tight">{selectedStudent.place?.site_name || '-'}</h3>
+//                                             <p className="text-sm font-bold text-slate-500">จังหวัด: {selectedStudent.place?.province || '-'}</p>
+//                                             <p className="text-[10px] font-black text-indigo-500 bg-indigo-50 inline-block px-2 py-1 rounded-md uppercase">{selectedStudent.subjectName}</p>
+//                                         </div>
+//                                     </div>
+
+//                                     {modalMode === 'summary' ? (
+//                                         /* ตารางสรุป (Header เขียว) */
+//                                         <div className="overflow-hidden border border-slate-100 rounded-3xl shadow-sm">
+//                                             <table className="w-full border-collapse">
+//                                                 <thead className="bg-[#105030] text-white">
+//                                                     <tr>
+//                                                         <th className="p-5 text-left text-xs sm:text-sm font-black uppercase">หัวข้อการประเมิน</th>
+//                                                         <th className="p-5 text-center text-xs sm:text-sm font-black w-24 sm:w-32 uppercase">คะแนนดิบ</th>
+//                                                         <th className="p-5 text-center text-xs sm:text-sm font-black w-20 sm:w-28 uppercase">น้ำหนัก</th>
+//                                                         <th className="p-5 text-center text-xs sm:text-sm font-black w-24 sm:w-32 uppercase tracking-tighter    text-left ">คะแนนสุทธิ</th>
+//                                                     </tr>
+//                                                 </thead>
+//                                                 <tbody className="divide-y divide-slate-50">
+//                                                     {selectedStudent.evaluations.map((ev: any, i: number) => {
+//                                                         const max = (ev.answers?.length || 8) * 5;
+//                                                         const net = (ev.rawScore / max * (ev.weight * 100));
+//                                                         return (
+//                                                             <tr key={i} className="hover:bg-slate-50/50">
+//                                                                 <td className="p-5 font-bold text-slate-600 text-xs sm:text-sm">{ev.title}</td>
+//                                                                 <td className="p-5 text-center font-bold text-slate-400 text-xs sm:text-sm whitespace-nowrap">{ev.rawScore} / {max}</td>
+//                                                                 <td className="p-5 text-center font-bold text-slate-400 text-xs sm:text-sm whitespace-nowrap">{ev.weight * 100}%</td>
+//                                                                 <td className="p-5 text-center font-black text-indigo-600 text-base sm:text-lg whitespace-nowrap">{net.toFixed(2)}</td>
+//                                                             </tr>
+//                                                         )
+//                                                     })}
+//                                                     <tr className="bg-slate-50 font-black">
+//                                                         <td colSpan={3} className="p-6 text-right text-[10px] text-slate-400 uppercase tracking-widest">Total Weighted Result</td>
+//                                                         <td className="p-6 text-right text-2xl sm:text-3xl text-indigo-700">
+//                                                             {selectedStudent.evaluations.reduce((acc: any, ev: any) => {
+//                                                                 const max = (ev.answers?.length || 8) * 5;
+//                                                                 return acc + (ev.rawScore / max * (ev.weight * 100));
+//                                                             }, 0).toFixed(2)}
+//                                                         </td>
+//                                                     </tr>
+//                                                 </tbody>
+//                                             </table>
+//                                         </div>
+//                                     ) : (
+//                                         /* ตารางรายละเอียดรายข้อ */
+//                                         <div className="space-y-6">
+//                                             <div className="flex items-center gap-3 border-l-4 border-indigo-600 pl-3">
+//                                                 <h4 className="text-sm sm:text-base font-black text-slate-800 uppercase leading-none">รายละเอียด: {selectedStudent.evaluations[activeDetailTab]?.title}</h4>
+//                                             </div>
+//                                             <div className="overflow-hidden border border-slate-100 rounded-3xl shadow-sm">
+//                                                 <table className="w-full text-xs sm:text-sm">
+//                                                     <thead className="bg-[#105030] text-white font-black">
+//                                                         <tr>
+//                                                             <th className="p-4 text-center w-12">#</th>
+//                                                             <th className="p-4 text-left">เกณฑ์การประเมิน</th>
+//                                                             <th className="p-4 text-center w-16 sm:w-24">คะแนน</th>
+//                                                         </tr>
+//                                                     </thead>
+//                                                     <tbody className="divide-y divide-slate-100 font-bold text-slate-600">
+//                                                         {selectedStudent.evaluations[activeDetailTab]?.detailedAnswers?.map((ans: any, i: number) => (
+//                                                             <tr key={i} className="hover:bg-slate-50/50">
+//                                                                 <td className="p-4 text-center text-slate-300 font-black">{ans.question?.item_no || i + 1}</td>
+//                                                                 <td className="p-4 leading-relaxed text-[11px] sm:text-xs text-slate-600">{ans.question?.question_text || `หัวข้อประเมินที่ ${i + 1}`}</td>
+//                                                                 <td className="p-4 text-center">
+//                                                                     <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black mx-auto shadow-sm">{ans.score}</div>
+//                                                                 </td>
+//                                                             </tr>
+//                                                         ))}
+//                                                     </tbody>
+//                                                 </table>
+//                                             </div>
+//                                         </div>
+//                                     )}
+//                                 </div>
+//                             )}
+//                         </div>
+
+//                         <div className="p-6 sm:p-8 bg-white border-t border-slate-100 flex gap-3">
+//                             <button onClick={handleDownloadPDF} className="flex-1 bg-slate-900 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-95 shadow-xl text-xs sm:text-sm uppercase tracking-widest">
+//                                 <Download size={18} /> Export PDF Report
+//                             </button>
+//                         </div>
+//                     </div>
+//                 </div>
+//             )}
+//         </div>
+//     )
+// }
+
+
+// //ver3
+// "use client"
+// import { useState, useEffect } from 'react'
+// import { createBrowserClient } from '@supabase/ssr'
+// import { ChevronLeft, User, Search, GraduationCap, FileText, X, Download, MapPin, Phone, ListChecks, BookOpen, FileSpreadsheet } from 'lucide-react'
+// import { useRouter, useSearchParams } from 'next/navigation'
+// import html2canvas from 'html2canvas'
+// import { jsPDF } from 'jspdf'
+// import * as XLSX from 'xlsx'
+
+// export default function EvaluationSummary() {
+//     const router = useRouter()
+//     const searchParams = useSearchParams()
+//     const subjectId = searchParams.get('id') || 'all'
+
+//     const [viewMode, setViewMode] = useState<'list' | 'overview'>('list')
+//     const [loading, setLoading] = useState(true)
+//     const [subjects, setSubjects] = useState<any[]>([])
+//     const [data, setData] = useState<any[]>([])
+//     const [searchTerm, setSearchTerm] = useState('')
+
+//     const [isModalOpen, setIsModalOpen] = useState(false)
+//     const [modalMode, setModalMode] = useState<'summary' | 'details'>('summary')
+//     const [selectedStudent, setSelectedStudent] = useState<any>(null)
+//     const [activeDetailTab, setActiveDetailTab] = useState(0)
+//     const [loadingDetail, setLoadingDetail] = useState(false)
+
+//     const supabase = createBrowserClient(
+//         process.env.NEXT_PUBLIC_SUPABASE_URL!,
+//         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+//     )
+
+//     const handleFilterChange = (id: string) => {
+//         const params = new URLSearchParams(searchParams);
+//         params.set('id', id);
+//         router.push(`/teacher/subjects?${params.toString()}`);
+//     };
+
+//     useEffect(() => {
+//         const fetchData = async () => {
+//             setLoading(true)
+//             const lineId = 'test-c'
+//             const { data: user } = await supabase.from('supervisors').select('id').eq('line_user_id', lineId).single()
+
+//             if (user) {
+//                 const { data: subData } = await supabase.from('supervisor_subjects').select('subject_id, subjects(name, id)').eq('supervisor_id', user.id)
+//                 setSubjects(subData || [])
+
+//                 // 🚩 ปรับ Query ให้สั้นลงเพื่อเลี่ยง Error 400 (ตัดส่วนที่ซ้อนลึกออก)
+//                 let query = supabase.from('student_assignments').select(`
+//                     id, 
+//                     students (id, first_name, last_name, student_code, avatar_url, phone),
+//                     subjects (id, name),
+//                     training_sites (site_name, province), 
+//                     evaluation_logs (
+//                         id, total_score, comment,
+//                         evaluation_groups (id, group_name, weight),
+//                         evaluation_answers (score, item_id)
+//                     )
+//                 `)
+
+//                 if (subjectId !== 'all') query = query.eq('subject_id', subjectId)
+//                 else if (subData) query = query.in('subject_id', subData.map(s => s.subject_id))
+
+//                 const { data: res, error } = await query
+//                 if (error) {
+//                     console.error("Query Fail:", error.message);
+//                     setLoading(false);
+//                     return;
+//                 }
+
+//                 const processed = res?.map((item: any) => ({
+//                     student: item.students,
+//                     place: item.training_sites,
+//                     subjectName: item.subjects?.name,
+//                     evaluations: item.evaluation_logs?.map((log: any) => ({
+//                         groupId: log.evaluation_groups?.id,
+//                         title: log.evaluation_groups?.group_name,
+//                         rawScore: log.total_score,
+//                         weight: log.evaluation_groups?.weight || 1,
+//                         comment: log.comment || '-',
+//                         answers: log.evaluation_answers || []
+//                     })) || []
+//                 }));
+//                 setData(processed || [])
+//             }
+//             setLoading(false)
+//         }
+//         fetchData()
+//     }, [subjectId, supabase])
+
+//     // 🚩 ฟังก์ชัน Export Excel แยก Sheet ตามรายวิชา
+//     const exportToExcelAdvanced = async () => {
+//         const workbook = XLSX.utils.book_new();
+//         const subjectList = Array.from(new Set(data.map(d => d.subjectName)));
+
+//         for (const subName of subjectList) {
+//             const studentsInSub = data.filter(d => d.subjectName === subName);
+//             const sheetData = studentsInSub.map(item => {
+//                 const row: any = {
+//                     'รหัสนักศึกษา': item.student?.student_code,
+//                     'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
+//                     'สถานที่ฝึกงาน': item.place?.site_name || 'N/A',
+//                 };
+//                 item.evaluations.forEach((ev: any) => {
+//                     const max = (ev.answers?.length || 8) * 5;
+//                     const net = ev.rawScore ? (ev.rawScore / max * (ev.weight * 100)) : 0;
+//                     row[`${ev.title} (%)`] = ev.rawScore ? net.toFixed(2) : 'N/A';
+//                 });
+//                 return row;
+//             });
+//             const worksheet = XLSX.utils.json_to_sheet(sheetData);
+//             XLSX.utils.book_append_sheet(workbook, worksheet, subName.substring(0, 30));
+//         }
+//         XLSX.writeFile(workbook, `สรุปผลประเมิน_แยกวิชา.xlsx`);
+//     };
+
+//     // 🚩 ดึงข้อมูลรายข้อเฉพาะเมื่อเปิด Modal (แก้ Error 400 แบบเด็ดขาด)
+//     const openDetailModal = async (student: any) => {
+//         setSelectedStudent(student);
+//         setModalMode('details');
+//         setIsModalOpen(true);
+//         setActiveDetailTab(0);
+//         setLoadingDetail(true);
+
+//         const groupIds = student.evaluations.map((e: any) => e.groupId);
+//         const { data: questions } = await supabase
+//             .from('evaluation_items')
+//             .select('id, question_text, item_no, group_id')
+//             .in('group_id', groupIds);
+
+//         const updated = { ...student };
+//         updated.evaluations = updated.evaluations.map((ev: any) => ({
+//             ...ev,
+//             maxScore: (questions?.filter(q => q.group_id === ev.groupId).length || 8) * 5,
+//             detailedAnswers: ev.answers.map((ans: any) => ({
+//                 ...ans,
+//                 question: questions?.find(q => q.id === ans.item_id)
+//             })).sort((a: any, b: any) => (a.question?.item_no || 0) - (b.question?.item_no || 0))
+//         }));
+
+//         setSelectedStudent(updated);
+//         setLoadingDetail(false);
+//     };
+
+//     const handleDownloadPDF = async () => {
+//         const element = document.getElementById(`pdf-content`);
+//         if (!element) return;
+//         const canvas = await html2canvas(element, { scale: 2 });
+//         const imgData = canvas.toDataURL('image/png');
+//         const pdf = new jsPDF('p', 'mm', 'a4');
+//         const pdfWidth = pdf.internal.pageSize.getWidth();
+//         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+//         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+//         pdf.save(`Report_${selectedStudent.student.student_code}.pdf`);
+//     };
+
+//     const filteredData = data.filter(item =>
+//         `${item.student?.first_name} ${item.student?.last_name} ${item.student?.student_code}`.toLowerCase().includes(searchTerm.toLowerCase())
+//     )
+
+//     return (
+//         <div className="min-h-screen bg-[#F8FBFF] pb-24 font-sans text-slate-900">
+//             {/* Header: กว้างเต็มจอคอมพิวเตอร์ */}
+//             <div className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+//                 <div className="w-full px-6 sm:px-12 pt-10 pb-6 text-center">
+//                     <div className="flex items-center justify-between mb-8 px-2 max-w-none">
+//                         <button onClick={() => router.push('/teacher/dashboard')} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-600 transition-all active:scale-90"><ChevronLeft size={24} /></button>
+//                         <div className="text-center">
+//                             <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight">ระบบสรุปผลการประเมิน</h1>
+//                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Official Results Dashboard</p>
+//                         </div>
+//                         <div className="flex gap-2">
+//                             <button onClick={exportToExcelAdvanced} className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all shadow-sm active:scale-95"><FileSpreadsheet size={24} /></button>
+//                             <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center"><GraduationCap size={24} /></div>
+//                         </div>
+//                     </div>
+
+//                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-6 px-2">
+//                         <button onClick={() => handleFilterChange('all')} className={`px-6 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${subjectId === 'all' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>ทุกวิชา</button>
+//                         {subjects.map((s, i) => (
+//                             <button key={i} onClick={() => handleFilterChange(s.subject_id)} className={`px-6 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${String(subjectId) === String(s.subject_id) ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{s.subjects.name}</button>
+//                         ))}
+//                     </div>
+//                 </div>
+//             </div>
+
+//             {/* List Content: กว้างเต็มจอ แต่ล็อคขนาดการ์ดนักศึกษาที่ max-w-4xl */}
+//             <div className="w-full flex flex-col items-center mt-10 px-6 space-y-4">
+//                 <div className="w-full max-w-4xl space-y-4 text-center">
+//                     <div className="relative mb-10 mx-auto">
+//                         <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+//                         <input type="text" placeholder="ค้นหาชื่อ-นามสกุล หรือ รหัสนักศึกษา..." className="w-full bg-white border border-slate-200 rounded-[1.8rem] py-5 pl-14 pr-6 text-base font-bold shadow-sm focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all" onChange={(e) => setSearchTerm(e.target.value)} />
+//                     </div>
+
+//                     {filteredData.map((item, idx) => {
+//                         const totalNet = item.evaluations.reduce((acc: number, ev: any) => {
+//                             if (!ev.rawScore) return acc;
+//                             const max = (ev.answers?.length || 8) * 5;
+//                             return acc + (ev.rawScore / max * (ev.weight * 100));
+//                         }, 0).toFixed(2);
+
+//                         return (
+//                             <div key={idx} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center gap-6 transition-all hover:-translate-y-1 hover:shadow-xl hover:border-indigo-300 relative group">
+//                                 <div className="flex items-center gap-5 flex-1 text-left">
+//                                     <div className="w-16 h-16 rounded-[1.5rem] bg-slate-50 overflow-hidden shrink-0 border border-slate-100 group-hover:scale-105 transition-transform shadow-inner">
+//                                         {item.student?.avatar_url ? <img src={item.student.avatar_url} className="w-full h-full object-cover" /> : <User size={24} className="m-auto mt-4 text-slate-200" />}
+//                                     </div>
+//                                     <div className="min-w-0 flex-1">
+//                                         <h3 className="font-black text-slate-800 text-lg leading-tight truncate">{item.student?.first_name} {item.student?.last_name}</h3>
+//                                         <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Student ID: {item.student?.student_code}</p>
+//                                     </div>
+//                                     <div className="text-right sm:hidden pr-2">
+//                                         <p className="text-2xl font-black text-indigo-600 leading-none">{totalNet !== "0.00" ? totalNet : "N/A"}</p>
+//                                         <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Total</p>
+//                                     </div>
+//                                 </div>
+
+//                                 <div className="flex flex-col sm:flex-row items-center gap-5 pt-4 sm:pt-0 border-t sm:border-t-0 sm:border-l sm:pl-8 border-slate-50">
+//                                     <div className="flex flex-col gap-1 flex-1 text-left min-w-[140px]">
+//                                         <div className="flex items-center gap-2 text-[10px] font-black text-indigo-500 uppercase"><BookOpen size={10} /> {item.subjectName}</div>
+//                                         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase"><MapPin size={10} /> {item.place?.site_name || 'N/A'}</div>
+//                                     </div>
+//                                     <div className="hidden sm:block text-right min-w-[100px]">
+//                                         <p className="text-3xl font-black text-indigo-600 leading-none tracking-tighter">{totalNet !== "0.00" ? totalNet : "N/A"}</p>
+//                                         <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">Net Score %</p>
+//                                     </div>
+//                                     <div className="flex gap-2">
+//                                         <button onClick={() => { setSelectedStudent(item); setModalMode('summary'); setIsModalOpen(true); }} className="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all shadow-sm active:scale-90"><FileText size={20} /></button>
+//                                         <button onClick={() => openDetailModal(item)} className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm active:scale-90"><ListChecks size={20} /></button>
+//                                     </div>
+//                                 </div>
+//                             </div>
+//                         )
+//                     })}
+//                 </div>
+//             </div>
+
+//             {/* Modal: รายงานมาตรฐาน (ตามรูปพี่) */}
+//             {isModalOpen && selectedStudent && (
+//                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+//                     <div className="bg-white w-full max-w-5xl max-h-[92vh] rounded-[3.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-500">
+//                         <div className="p-8 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/90 backdrop-blur-xl z-30">
+//                             <h2 className="text-xl sm:text-2xl font-black text-slate-800 leading-tight">{modalMode === 'summary' ? 'ใบรายงานสรุปผลการประเมิน' : 'รายละเอียดคะแนนรายข้อ'}</h2>
+//                             <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all active:scale-90 shadow-sm border border-slate-100"><X size={24} /></button>
+//                         </div>
+
+//                         {modalMode === 'details' && (
+//                             <div className="bg-slate-50 border-b border-slate-100 px-10">
+//                                 <div className="flex gap-4 p-5 overflow-x-auto no-scrollbar scroll-smooth">
+//                                     {selectedStudent.evaluations.map((ev: any, i: number) => (
+//                                         <button key={i} onClick={() => setActiveDetailTab(i)} className={`px-8 py-3.5 rounded-2xl text-[11px] font-black transition-all shrink-0 shadow-sm whitespace-nowrap border ${activeDetailTab === i ? 'bg-indigo-600 text-white shadow-indigo-200 border-indigo-600 scale-105' : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'}`} style={{ minWidth: 'max-content' }}>{ev.title}</button>
+//                                     ))}
+//                                 </div>
+//                             </div>
+//                         )}
+
+//                         <div className="flex-1 overflow-y-auto p-10 sm:p-14 no-scrollbar bg-white">
+//                             <div id="pdf-content">
+//                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-12 p-10 bg-slate-50/80 border border-slate-100 rounded-[3rem] shadow-inner text-left">
+//                                     <div className="space-y-1">
+//                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ข้อมูลนักศึกษา</p>
+//                                         <h3 className="font-black text-slate-800 text-3xl">{selectedStudent.student.first_name} {selectedStudent.student.last_name}</h3>
+//                                         <p className="font-bold text-indigo-600 text-lg pt-1">ID: {selectedStudent.student.student_code}</p>
+//                                         <div className="flex items-center gap-2 text-slate-500 font-bold text-sm pt-1"><Phone size={14} /> {selectedStudent.student.phone || 'N/A'}</div>
+//                                     </div>
+//                                     <div className="md:text-right border-t md:border-t-0 md:border-l border-slate-200 pt-6 md:pt-0 md:pl-12 space-y-1">
+//                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">สถานที่ฝึกปฏิบัติงาน</p>
+//                                         <h3 className="font-black text-slate-800 text-xl leading-tight">{selectedStudent.place?.site_name || 'N/A'}</h3>
+//                                         <p className="text-base font-bold text-slate-500 uppercase tracking-tighter">จังหวัด: {selectedStudent.place?.province || 'N/A'}</p>
+//                                         <p className="text-[10px] font-black text-indigo-500 bg-indigo-50 inline-block px-3 py-1.5 rounded-lg uppercase mt-4 tracking-tighter">{selectedStudent.subjectName}</p>
+//                                     </div>
+//                                 </div>
+
+//                                 {modalMode === 'summary' ? (
+//                                     <div className="overflow-hidden border border-slate-200 rounded-[2.5rem] shadow-xl">
+//                                         <table className="w-full border-collapse bg-white">
+//                                             <thead className="bg-[#105030] text-white">
+//                                                 <tr>
+//                                                     <th className="p-8 text-left text-sm font-black uppercase tracking-widest">หัวข้อการประเมิน</th>
+//                                                     <th className="p-8 text-center text-sm font-black w-44 uppercase whitespace-nowrap">คะแนนดิบ</th>
+//                                                     <th className="p-8 text-center text-sm font-black w-36 uppercase whitespace-nowrap">น้ำหนัก</th>
+//                                                     <th className="p-8 text-center text-sm font-black w-44 uppercase whitespace-nowrap text-left ">คะแนนสุทธิ (%)</th>
+//                                                 </tr>
+//                                             </thead>
+//                                             <tbody className="divide-y divide-slate-100">
+//                                                 {selectedStudent.evaluations.map((ev: any, i: number) => {
+//                                                     const max = (ev.answers?.length || 8) * 5;
+//                                                     const net = ev.rawScore ? (ev.rawScore / max * (ev.weight * 100)) : null;
+//                                                     return (
+//                                                         <tr key={i} className="hover:bg-slate-50 transition-colors">
+//                                                             <td className="p-8 font-black text-slate-700 text-lg leading-tight text-left">{ev.title}</td>
+//                                                             <td className="p-8 text-center font-black text-slate-400 text-lg whitespace-nowrap">{ev.rawScore || "N/A"} <span className="opacity-20">/ {max}</span></td>
+//                                                             <td className="p-8 text-center font-bold text-slate-400 text-lg whitespace-nowrap">{ev.weight * 100}%</td>
+//                                                             <td className="p-8 text-center font-black text-indigo-600 text-2xl whitespace-nowrap">{net !== null ? net.toFixed(2) : "N/A"}</td>
+//                                                         </tr>
+//                                                     )
+//                                                 })}
+//                                                 <tr className="bg-slate-900 text-white font-black">
+//                                                     <td colSpan={3} className="p-12 text-right text-xs uppercase tracking-[0.5em] opacity-50 border-r border-white/5">Total Weighted Result</td>
+//                                                     <td className="p-12 text-center text-5xl text-emerald-400 italic">
+//                                                         {selectedStudent.evaluations.some((e:any) => e.rawScore) ? selectedStudent.evaluations.reduce((acc: any, ev: any) => {
+//                                                             if (!ev.rawScore) return acc;
+//                                                             const max = (ev.answers?.length || 8) * 5;
+//                                                             return acc + (ev.rawScore / max * (ev.weight * 100));
+//                                                         }, 0).toFixed(2) : "N/A"}
+//                                                     </td>
+//                                                 </tr>
+//                                             </tbody>
+//                                         </table>
+//                                     </div>
+//                                 ) : (
+//                                     <div className="space-y-10 text-left">
+//                                         <div className="flex items-center justify-between border-l-8 border-indigo-600 pl-8 py-1">
+//                                             <h4 className="text-2xl font-black text-slate-800 uppercase tracking-tight">{selectedStudent.evaluations[activeDetailTab]?.title}</h4>
+//                                             <span className="text-xs font-black bg-indigo-50 text-indigo-600 px-6 py-2.5 rounded-2xl border border-indigo-100 shadow-sm">{selectedStudent.evaluations[activeDetailTab]?.answers?.length || 0} ITEMS RECORDED</span>
+//                                         </div>
+//                                         <div className="overflow-hidden border border-slate-100 rounded-[3rem] shadow-xl">
+//                                             <table className="w-full text-sm">
+//                                                 <thead className="bg-[#105030] text-white font-black">
+//                                                     <tr>
+//                                                         <th className="p-7 text-center w-24 text-[11px] uppercase tracking-widest border-r border-white/10">#</th>
+//                                                         <th className="p-7 text-left text-[11px] uppercase tracking-widest">Assessment Criteria & Behavioral Explanation</th>
+//                                                         <th className="p-7 text-center w-36 text-[11px] uppercase tracking-widest border-l border-white/10">Score (5)</th>
+//                                                     </tr>
+//                                                 </thead>
+//                                                 <tbody className="divide-y divide-slate-100 bg-white font-bold text-slate-600">
+//                                                     {selectedStudent.evaluations[activeDetailTab]?.detailedAnswers?.length > 0 ? selectedStudent.evaluations[activeDetailTab].detailedAnswers.map((ans: any, i: number) => (
+//                                                         <tr key={i} className="hover:bg-indigo-50/20 transition-colors">
+//                                                             <td className="p-7 text-center text-slate-300 font-black text-xl border-r border-slate-50">{ans.question?.item_no || i + 1}</td>
+//                                                             <td className="p-7 leading-relaxed text-base text-left">{ans.question?.question_text || 'รายละเอียดหัวข้อเกณฑ์ประเมิน'}</td>
+//                                                             <td className="p-7 text-center border-l border-slate-50">
+//                                                                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl mx-auto shadow-xl ${ans.score ? 'bg-indigo-600 text-white shadow-indigo-200 scale-105' : 'bg-slate-100 text-slate-300 italic shadow-none'}`}>{ans.score || "N/A"}</div>
+//                                                             </td>
+//                                                         </tr>
+//                                                     )) : (
+//                                                         <tr><td colSpan={3} className="p-20 text-center text-slate-300 italic font-black uppercase text-xs tracking-widest">No data available</td></tr>
+//                                                     )}
+//                                                 </tbody>
+//                                             </table>
+//                                         </div>
+//                                         <div className="p-10 bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200">
+//                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4">Evaluator Suggestions & Comments</p>
+//                                             <p className="text-slate-600 font-bold leading-relaxed italic text-lg whitespace-pre-wrap">{selectedStudent.evaluations[activeDetailTab]?.comment || 'ไม่มีความคิดเห็นเพิ่มเติมสำหรับส่วนนี้'}</p>
+//                                         </div>
+//                                     </div>
+//                                 )}
+//                             </div>
+//                         </div>
+
+//                         <div className="p-8 sm:p-12 bg-slate-50 border-t border-slate-100 flex gap-5">
+//                             <button onClick={handleDownloadPDF} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-black py-7 rounded-[2.5rem] flex items-center justify-center gap-5 transition-all active:scale-95 shadow-2xl text-base uppercase tracking-[0.25em]"><Download size={28} /> Download Full PDF Report</button>
+//                         </div>
+//                     </div>
+//                 </div>
+//             )}
+//         </div>
+//     )
+// }

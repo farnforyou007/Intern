@@ -40,12 +40,19 @@ export default function PendingPage() {
                     </div>
                 </div>
 
-                <button
+                {/* <button
                     onClick={() => router.replace('/')}
                     className="w-full h-16 bg-white border border-slate-200 text-slate-600 rounded-[2rem] font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
                 >
                     <ArrowLeft size={18} />
                     กลับหน้าหลัก
+                </button> */}
+                <button
+                    onClick={() => router.replace('/auth/check')}
+                    className="w-full h-16 bg-white text-slate-900 rounded-[2rem] font-black text-sm shadow-sm flex items-center justify-center gap-3 active:scale-95 transition-all border border-white"
+                >
+                    <ArrowLeft size={18} className="text-indigo-600" />
+                    ตรวจสอบสถานะอีกครั้ง
                 </button>
 
                 <button

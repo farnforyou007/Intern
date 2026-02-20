@@ -1,985 +1,943 @@
-// //ver4
+// // "use client"
+// // import { useState, useEffect } from 'react'
+// // import { createBrowserClient } from '@supabase/ssr'
+// // import { Camera, ShieldCheck, MapPin, Phone, User, Loader2, AlertCircle, ImagePlus } from 'lucide-react'
+// // import Swal from 'sweetalert2'
+
+// // export default function SmartRegister() {
+// //     const [fullName, setFullName] = useState('')
+// //     const [phone, setPhone] = useState('')
+// //     const [inviteCode, setInviteCode] = useState('')
+// //     const [selectedSite, setSelectedSite] = useState('')
+// //     const [sites, setSites] = useState<{ id: string, name: string }[]>([])
+// //     const [isSupervisor, setIsSupervisor] = useState(false)
+// //     const [loading, setLoading] = useState(false)
+// //     const [preview, setPreview] = useState<string | null>(null)
+// //     const [file, setFile] = useState<File | null>(null)
+// //     const [errors, setErrors] = useState<{ [key: string]: string }>({})
+
+// //     const supabase = createBrowserClient(
+// //         process.env.NEXT_PUBLIC_SUPABASE_URL!,
+// //         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// //     )
+
+// //     // --- ส่วนเช็กอัตโนมัติ (Automated Check) ---
+// //     useEffect(() => {
+// //         const checkInviteCode = async () => {
+// //             const cleanCode = inviteCode.trim().toUpperCase();
+// //             setErrors(prev => ({ ...prev, inviteCode: '' }));
+
+// //             if (cleanCode.length >= 4) {
+// //                 // 1. ตรวจสอบรหัสพี่เลี้ยง
+// //                 const { data: siteData } = await supabase
+// //                     .from('training_sites')
+// //                     .select('id, site_name')
+// //                     .eq('invite_code', cleanCode);
+
+// //                 // 2. ตรวจสอบรหัสอาจารย์
+// //                 const { data: configData } = await supabase
+// //                     .from('system_configs')
+// //                     .select('key_value')
+// //                     .eq('key_name', 'teacher_invite_code')
+// //                     .eq('key_value', cleanCode);
+
+// //                 if (siteData && siteData.length > 0) {
+// //                     const site = siteData[0];
+// //                     setIsSupervisor(true);
+// //                     setSites([{ id: site.id, name: site.site_name }]);
+// //                     setSelectedSite(site.id);
+// //                 } else if (configData && configData.length > 0) {
+// //                     setIsSupervisor(false);
+// //                     setSelectedSite('');
+// //                 } else {
+// //                     setIsSupervisor(false);
+// //                     if (cleanCode.length >= 6) {
+// //                         setErrors(prev => ({ ...prev, inviteCode: 'ไม่พบรหัสเชิญในระบบ' }));
+// //                     }
+// //                 }
+// //             }
+// //         };
+// //         checkInviteCode();
+// //     }, [inviteCode]);
+
+// //     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+// //         const value = e.target.value.replace(/\D/g, '');
+// //         if (value.length <= 10) {
+// //             setPhone(value);
+// //             if (value.length === 10) {
+// //                 setErrors(prev => ({ ...prev, phone: '' }));
+// //             }
+// //         }
+// //     }
+
+// //     const handleSubmit = async (e: React.FormEvent) => {
+// //         e.preventDefault();
+// //         setLoading(true); // เริ่มหมุน
+
+// //         try {
+// //             // 1. ตรวจสอบไฟล์รูปภาพ (ต้องมีตามที่คุณต้องการ)
+// //             if (!file) {
+// //                 throw new Error("กรุณาแนบรูปถ่ายหน้าตรง");
+// //             }
+
+// //             // 2. อัปโหลดรูปภาพไปยัง Storage
+// //             const fileExt = file.name.split('.').pop();
+// //             const fileName = `${Date.now()}.${fileExt}`;
+// //             const { error: uploadError } = await supabase.storage
+// //                 .from('avatars')
+// //                 .upload(fileName, file);
+
+// //             if (uploadError) throw uploadError;
+
+// //             const { data: { publicUrl } } = supabase.storage
+// //                 .from('avatars')
+// //                 .getPublicUrl(fileName);
+
+// //             // 3. บันทึกข้อมูลลงตาราง supervisors
+// //             const { error: insertError } = await supabase
+// //                 .from('supervisors')
+// //                 .insert([{
+// //                     full_name: fullName,
+// //                     phone: phone,
+// //                     avatar_url: publicUrl,
+// //                     site_id: isSupervisor ? selectedSite : null, // ใช้ชื่อคอลัมน์ site_id ตามโครงสร้างใหม่ของคุณ
+// //                     role: isSupervisor ? 'supervisor' : 'teacher',
+// //                     is_verified: false
+// //                 }]);
+
+// //             if (insertError) throw insertError;
+
+// //             // ถ้าสำเร็จ
+// //             Swal.fire('สำเร็จ', 'ลงทะเบียนเรียบร้อยแล้ว กรุณารอการตรวจสอบ', 'success');
+
+// //         } catch (error: any) {
+// //             console.error("Submit Error:", error);
+// //             // แสดง Error ใต้อินพุตหรือใช้ Swal
+// //             Swal.fire('เกิดข้อผิดพลาด', error.message || 'ไม่สามารถลงทะเบียนได้', 'error');
+// //         } finally {
+// //             setLoading(false); // หยุดหมุนเสมอ ไม่ว่าจะสำเร็จหรือไม่ก็ตาม
+// //         }
+// //     };
+
+// //     return (
+// //         <div className="min-h-screen bg-[#F8FAFC] p-6 font-sans text-slate-900">
+// //             <div className="max-w-md mx-auto">
+// //                 <div className="text-center mb-8">
+// //                     <div className="inline-block p-3 bg-blue-600 rounded-3xl shadow-lg shadow-blue-200 mb-4 text-white">
+// //                         <ShieldCheck size={32} />
+// //                     </div>
+// //                     <h1 className="text-3xl font-black tracking-tight">ลงทะเบียนบุคลากร</h1>
+// //                     <p className="text-slate-500 mt-2">สำหรับอาจารย์และพี่เลี้ยงแหล่งฝึก</p>
+// //                 </div>
+
+// //                 <form onSubmit={handleSubmit} className="space-y-5">
+// //                     {/* ส่วนแนบรูปถ่าย */}
+// //                     <div className="flex flex-col items-center mb-7">
+// //                         <p className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-4">
+// //                             <ImagePlus size={18} className="text-blue-600" />
+// //                             แนบรูปถ่ายหน้าตรงของคุณ
+// //                         </p>
+// //                         <label className={`relative cursor-pointer transition-all hover:scale-105 active:scale-95 ${errors.file ? 'ring-4 ring-red-100 rounded-[2.5rem]' : ''}`}>
+// //                             <div className="w-36 h-36 rounded-[2.5rem] bg-white shadow-xl border-4 border-white overflow-hidden flex items-center justify-center">
+// //                                 {preview ? (
+// //                                     <img src={preview} className="w-full h-full object-cover" />
+// //                                 ) : (
+// //                                     <div className="flex flex-col items-center text-slate-300">
+// //                                         <Camera size={48} />
+// //                                         <span className="text-[10px] font-bold mt-2 uppercase tracking-widest text-slate-400">กดเพื่อแนบรูป</span>
+// //                                     </div>
+// //                                 )}
+// //                             </div>
+// //                             <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-2.5 rounded-2xl shadow-lg border-4 border-[#F8FAFC]">
+// //                                 <Camera size={20} />
+// //                             </div>
+// //                             <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+// //                                 if (e.target.files?.[0]) {
+// //                                     setFile(e.target.files[0]);
+// //                                     setPreview(URL.createObjectURL(e.target.files[0]));
+// //                                     setErrors(prev => ({ ...prev, file: '' }));
+// //                                 }
+// //                             }} />
+// //                         </label>
+// //                         {errors.file && <p className="text-red-500 text-xs font-bold mt-3 animate-bounce">{errors.file}</p>}
+// //                     </div>
+
+// //                     <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 space-y-5">
+// //                         <div className="space-y-1">
+// //                             <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">ข้อมูลส่วนตัว</label>
+// //                             <div className="relative">
+// //                                 <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+// //                                 <input
+// //                                     placeholder="ชื่อ-นามสกุลจริง"
+// //                                     className={`w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-2 outline-none transition-all ${errors.fullName ? 'border-red-200 bg-red-50' : 'border-transparent focus:ring-2 focus:ring-blue-500 focus:bg-white'}`}
+// //                                     value={fullName} onChange={e => setFullName(e.target.value)}
+// //                                 />
+// //                             </div>
+// //                             {errors.fullName && <p className="text-red-500 text-[11px] font-bold ml-4">{errors.fullName}</p>}
+// //                         </div>
+
+// //                         <div className="space-y-1">
+// //                             <div className="relative">
+// //                                 <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+// //                                 <input
+// //                                     placeholder="เบอร์โทรศัพท์ (10 หลัก)"
+// //                                     className={`w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-2 outline-none transition-all ${errors.phone ? 'border-red-200 bg-red-50' : 'border-transparent focus:ring-2 focus:ring-blue-500 focus:bg-white'}`}
+// //                                     value={phone} onChange={handlePhoneChange}
+// //                                 />
+// //                             </div>
+// //                             {errors.phone && <p className="text-red-500 text-[11px] font-bold ml-4">{errors.phone}</p>}
+// //                         </div>
+
+// //                         <div className="space-y-1">
+// //                             <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">รหัสยืนยันสิทธิ์</label>
+// //                             <div className="relative">
+// //                                 <ShieldCheck className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-500" size={20} />
+// //                                 <input
+// //                                     placeholder="ระบุรหัสเชิญ"
+// //                                     className={`w-full h-14 pl-14 pr-6 rounded-2xl border-2 outline-none transition-all font-mono font-bold uppercase ${errors.inviteCode ? 'border-red-200 bg-red-50 text-red-600' : 'bg-blue-50/50 border-dashed border-blue-200 focus:border-blue-500 focus:bg-white text-blue-600'}`}
+// //                                     value={inviteCode} onChange={e => setInviteCode(e.target.value)}
+// //                                 />
+// //                             </div>
+// //                             {errors.inviteCode && <p className="text-red-500 text-[11px] font-bold ml-4 flex items-center gap-1"><AlertCircle size={12} /> {errors.inviteCode}</p>}
+// //                         </div>
+
+// //                         {isSupervisor && (
+// //                             <div className="space-y-2 pt-2 animate-in slide-in-from-top-4 duration-500">
+// //                                 <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">สถานที่ฝึกประสบการณ์</label>
+// //                                 <div className="relative">
+// //                                     <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+// //                                     <select
+// //                                         className="w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-none appearance-none font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+// //                                         value={selectedSite} onChange={e => setSelectedSite(e.target.value)}
+// //                                     >
+// //                                         <option value="">เลือกโรงพยาบาล/แหล่งฝึก</option>
+// //                                         {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+// //                                     </select>
+// //                                 </div>
+// //                                 {errors.site && <p className="text-red-500 text-[11px] font-bold ml-4">{errors.site}</p>}
+// //                             </div>
+// //                         )}
+// //                     </div>
+
+// //                     <button
+// //                         disabled={loading}
+// //                         className="w-full h-16 bg-slate-900 text-white rounded-[2rem] font-black text-xl shadow-xl active:scale-95 transition-all disabled:bg-slate-300 disabled:active:scale-100 flex items-center justify-center gap-3"
+// //                     >
+// //                         {loading ? (
+// //                             <>
+// //                                 <Loader2 className="animate-spin" />
+// //                                 <span>กำลังบันทึกข้อมูล...</span>
+// //                             </>
+// //                         ) : (
+// //                             <span>ยืนยันการลงทะเบียน</span>
+// //                         )}
+// //                     </button>
+
+// //                     <p className="text-center text-[10px] text-slate-400 font-medium px-4">
+// //                         การลงทะเบียนหมายถึงคุณยอมรับให้ระบบเก็บรักษาข้อมูลส่วนบุคคลเพื่อใช้ในการประเมินผลการฝึกประสบการณ์วิชาชีพ
+// //                     </p>
+// //                 </form>
+// //             </div>
+// //         </div>
+// //     )
+// // }
+
+
+// // ver2
+
+// "use client"
+// import { useState, useEffect } from 'react'
+// import { createBrowserClient } from '@supabase/ssr'
+// import { Camera, ShieldCheck, MapPin, Phone, User, Loader2, AlertCircle, ImagePlus, CheckCircle2, BookOpen } from 'lucide-react'
+// import Swal from 'sweetalert2'
+
+// export default function SmartRegister() {
+//     // --- State เดิม ---
+//     const [fullName, setFullName] = useState('')
+//     const [phone, setPhone] = useState('')
+//     const [inviteCode, setInviteCode] = useState('')
+//     const [selectedSite, setSelectedSite] = useState('')
+//     const [sites, setSites] = useState<{ id: string, name: string, province: string }[]>([])
+//     const [isSupervisor, setIsSupervisor] = useState(false)
+//     const [loading, setLoading] = useState(false)
+//     const [preview, setPreview] = useState<string | null>(null)
+//     const [file, setFile] = useState<File | null>(null)
+//     const [errors, setErrors] = useState<{ [key: string]: string }>({})
+
+//     // --- State ใหม่สำหรับวิชา ---
+//     const [allSubjects, setAllSubjects] = useState<any[]>([])
+//     const [subSubjects, setSubSubjects] = useState<any[]>([])
+//     const [selectedSubjects, setSelectedSubjects] = useState<number[]>([]) // วิชาหลักที่เลือก
+//     const [selectedSubSubjects, setSelectedSubSubjects] = useState<number[]>([]) // วิชาย่อย (ANC, LR, PP)
+
+//     const supabase = createBrowserClient(
+//         process.env.NEXT_PUBLIC_SUPABASE_URL!,
+//         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+//     )
+
+
+//     const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+//         const value = e.target.value.replace(/\D/g, '');
+//         if (value.length <= 10) {
+//             setPhone(value);
+//             if (value.length === 10) {
+//                 setErrors(prev => ({ ...prev, phone: '' }));
+//             }
+//         }
+//     }
+
+//     // ดึงข้อมูลวิชาและวิชาย่อยมาเตรียมไว้
+//     useEffect(() => {
+//         const fetchMasterData = async () => {
+//             const { data: subs } = await supabase.from('subjects').select('*').order('id');
+//             const { data: subSubs } = await supabase.from('sub_subjects').select('*').order('id');
+//             if (subs) setAllSubjects(subs);
+//             if (subSubs) setSubSubjects(subSubs);
+//         }
+//         fetchMasterData();
+//     }, []);
+
+//     // เช็ครหัสเชิญและดึงข้อมูลจังหวัด/หน่วยงาน
+//     useEffect(() => {
+//         const checkInviteCode = async () => {
+//             const cleanCode = inviteCode.trim().toUpperCase();
+//             if (cleanCode.length >= 4) {
+//                 const { data: siteData } = await supabase
+//                     .from('training_sites')
+//                     .select('id, site_name, province')
+//                     .eq('invite_code', cleanCode);
+
+//                 if (siteData && siteData.length > 0) {
+//                     const site = siteData[0];
+//                     setIsSupervisor(true);
+//                     setSites([{ id: site.id, name: site.site_name, province: site.province }]);
+//                     setSelectedSite(site.id);
+//                 } else {
+//                     setIsSupervisor(false);
+//                 }
+//             }
+//         };
+//         checkInviteCode();
+//     }, [inviteCode]);
+
+//     // จัดการการเลือกวิชาหลัก
+//     const toggleSubject = (id: number) => {
+//         setSelectedSubjects(prev =>
+//             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+//         );
+//     }
+
+//     // จัดการการเลือกวิชาย่อย
+//     const toggleSubSubject = (id: number) => {
+//         setSelectedSubSubjects(prev =>
+//             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+//         );
+//     }
+
+//     const handleSubmit = async (e: React.FormEvent) => {
+//         e.preventDefault();
+//         if (!file || selectedSubjects.length === 0) {
+//             Swal.fire('ข้อมูลไม่ครบ', 'กรุณาแนบรูปและเลือกวิชาที่รับผิดชอบ', 'warning');
+//             return;
+//         }
+
+//         setLoading(true);
+//         try {
+//             // 1. Upload รูป
+//             const fileName = `${Date.now()}.jpg`;
+//             await supabase.storage.from('avatars').upload(fileName, file);
+//             const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
+
+//             // 2. บันทึกข้อมูลบุคลากร
+//             const { data: supervisor, error: insError } = await supabase
+//                 .from('supervisors')
+//                 .insert([{
+//                     full_name: fullName,
+//                     phone: phone,
+//                     avatar_url: publicUrl,
+//                     site_id: isSupervisor ? selectedSite : null,
+//                     role: isSupervisor ? 'supervisor' : 'teacher',
+//                     is_verified: false
+//                 }]).select().single();
+
+//             if (insError) throw insError;
+
+//             // 3. บันทึกสิทธิ์วิชาลง supervisor_subjects
+//             const subjectInserts = [];
+
+//             // สำหรับวิชาที่ไม่มีวิชาย่อย หรือวิชาผดุงครรภ์
+//             for (const subId of selectedSubjects) {
+//                 const relatedSubSubs = subSubjects.filter(ss => ss.parent_subject_id === subId);
+
+//                 if (relatedSubSubs.length > 0) {
+//                     // ถ้าเป็นผดุงครรภ์ ให้บันทึกตามวิชาย่อยที่เลือก
+//                     const pickedSubSubs = selectedSubSubjects.filter(ssId =>
+//                         relatedSubSubs.some(rss => rss.id === ssId)
+//                     );
+//                     pickedSubSubs.forEach(ssId => {
+//                         subjectInserts.push({ supervisor_id: supervisor.id, subject_id: subId, sub_subject_id: ssId });
+//                     });
+//                 } else {
+//                     // วิชาทั่วไป (นวด, เวช, ฯลฯ) บันทึกแบบ sub_subject_id เป็น null
+//                     subjectInserts.push({ supervisor_id: supervisor.id, subject_id: subId, sub_subject_id: null });
+//                 }
+//             }
+
+//             if (subjectInserts.length > 0) {
+//                 await supabase.from('supervisor_subjects').insert(subjectInserts);
+//             }
+
+//             Swal.fire('สำเร็จ', 'ลงทะเบียนเรียบร้อยแล้ว กรุณารอแอดมินอนุมัติ', 'success');
+//         } catch (error: any) {
+//             Swal.fire('Error', error.message, 'error');
+//         } finally {
+//             setLoading(false);
+//         }
+//     };
+
+//     return (
+//         <div className="min-h-screen bg-[#F8FAFC] p-6 pb-20">
+//             <div className="max-w-md mx-auto space-y-8">
+//                 {/* Header ส่วนเดิมของคุณ */}
+//                 <div className="text-center">
+//                     <div className="inline-block p-4 bg-blue-600 rounded-[2rem] shadow-xl text-white mb-4">
+//                         <ShieldCheck size={32} />
+//                     </div>
+//                     <h1 className="text-3xl font-black">ลงทะเบียนบุคลากร</h1>
+//                 </div>
+
+//                 <form onSubmit={handleSubmit} className="space-y-6">
+//                     {/* ส่วนแนบรูปถ่าย */}
+//                     <div className="flex flex-col items-center mb-7">
+//                         <p className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-4">
+//                             <ImagePlus size={18} className="text-blue-600" />
+//                             แนบรูปถ่ายหน้า
+//                         </p>
+//                         <label className={`relative cursor-pointer transition-all hover:scale-105 active:scale-95 ${errors.file ? 'ring-4 ring-red-100 rounded-[2.5rem]' : ''}`}>
+//                             <div className="w-36 h-36 rounded-[2.5rem] bg-white shadow-xl border-4 border-white overflow-hidden flex items-center justify-center">
+//                                 {preview ? (
+//                                     <img src={preview} className="w-full h-full object-cover" />
+//                                 ) : (
+//                                     <div className="flex flex-col items-center text-slate-300">
+//                                         <Camera size={48} />
+//                                         <span className="text-[10px] font-bold mt-2 uppercase tracking-widest text-slate-400">กดเพื่อแนบรูป</span>
+//                                     </div>
+//                                 )}
+//                             </div>
+//                             <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-2.5 rounded-2xl shadow-lg border-4 border-[#F8FAFC]">
+//                                 <Camera size={20} />
+//                             </div>
+//                             <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+//                                 if (e.target.files?.[0]) {
+//                                     setFile(e.target.files[0]);
+//                                     setPreview(URL.createObjectURL(e.target.files[0]));
+//                                     setErrors(prev => ({ ...prev, file: '' }));
+//                                 }
+//                             }} />
+//                         </label>
+//                         {errors.file && <p className="text-red-500 text-xs font-bold mt-3 animate-bounce">{errors.file}</p>}
+//                     </div>
+
+//                     <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 space-y-5">
+//                         <div className="space-y-1">
+//                             <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">ข้อมูลส่วนตัว</label>
+//                             <div className="relative">
+//                                 <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+//                                 <input
+//                                     placeholder="ชื่อ-นามสกุลจริง"
+//                                     className={`w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-2 outline-none transition-all ${errors.fullName ? 'border-red-200 bg-red-50' : 'border-transparent focus:ring-2 focus:ring-blue-500 focus:bg-white'}`}
+//                                     value={fullName} onChange={e => setFullName(e.target.value)}
+//                                 />
+//                             </div>
+//                             {errors.fullName && <p className="text-red-500 text-[11px] font-bold ml-4">{errors.fullName}</p>}
+//                         </div>
+
+//                         <div className="space-y-1">
+//                             <div className="relative">
+//                                 <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+//                                 <input
+//                                     placeholder="เบอร์โทรศัพท์ (10 หลัก)"
+//                                     className={`w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-2 outline-none transition-all ${errors.phone ? 'border-red-200 bg-red-50' : 'border-transparent focus:ring-2 focus:ring-blue-500 focus:bg-white'}`}
+//                                     value={phone} onChange={handlePhoneChange}
+//                                 />
+//                             </div>
+//                             {errors.phone && <p className="text-red-500 text-[11px] font-bold ml-4">{errors.phone}</p>}
+//                         </div>
+
+//                         <div className="space-y-1">
+//                             <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">รหัสยืนยันสิทธิ์</label>
+//                             <div className="relative">
+//                                 <ShieldCheck className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-500" size={20} />
+//                                 <input
+//                                     placeholder="ระบุรหัสเชิญ"
+//                                     className={`w-full h-14 pl-14 pr-6 rounded-2xl border-2 outline-none transition-all font-mono font-bold uppercase ${errors.inviteCode ? 'border-red-200 bg-red-50 text-red-600' : 'bg-blue-50/50 border-dashed border-blue-200 focus:border-blue-500 focus:bg-white text-blue-600'}`}
+//                                     value={inviteCode} onChange={e => setInviteCode(e.target.value)}
+//                                 />
+//                             </div>
+//                             {errors.inviteCode && <p className="text-red-500 text-[11px] font-bold ml-4 flex items-center gap-1"><AlertCircle size={12} /> {errors.inviteCode}</p>}
+//                         </div>
+
+//                         {isSupervisor && (
+//                             <div className="space-y-2 pt-2 animate-in slide-in-from-top-4 duration-500">
+//                                 <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">สถานที่ฝึกประสบการณ์</label>
+//                                 <div className="relative">
+//                                     <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+//                                     <select
+//                                         className="w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-none appearance-none font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
+//                                         value={selectedSite} onChange={e => setSelectedSite(e.target.value)}
+//                                     >
+//                                         <option value="">เลือกโรงพยาบาล/แหล่งฝึก</option>
+//                                         {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+//                                     </select>
+//                                 </div>
+//                                 {errors.site && <p className="text-red-500 text-[11px] font-bold ml-4">{errors.site}</p>}
+//                             </div>
+//                         )}
+//                     </div>
+//                     {/* ส่วนใหม่: เลือกวิชาที่รับผิดชอบ (แบบ 2 คอลัมน์) */}
+//                     <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 space-y-6">
+//                         <div className="flex items-center gap-3 mb-2">
+//                             <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
+//                                 <BookOpen size={20} />
+//                             </div>
+//                             <div>
+//                                 <h3 className="font-black text-slate-800 leading-none">วิชาที่รับผิดชอบ</h3>
+//                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Select Subjects</p>
+//                             </div>
+//                         </div>
+
+//                         {/* ปรับเป็น Grid 2 คอลัมน์สำหรับวิชาหลัก */}
+//                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+//                             {allSubjects.map(sub => {
+//                                 const hasSub = subSubjects.some(ss => ss.parent_subject_id === sub.id);
+//                                 const isSelected = selectedSubjects.includes(sub.id);
+
+//                                 return (
+//                                     <div key={sub.id} className={`col-span-1 ${isSelected && hasSub ? 'sm:col-span-2' : ''} transition-all duration-300`}>
+//                                         <button
+//                                             type="button"
+//                                             onClick={() => toggleSubject(sub.id)}
+//                                             className={`w-full h-16 px-5 rounded-2xl border-2 transition-all flex items-center justify-between group ${isSelected
+//                                                     ? 'border-blue-600 bg-blue-50/30 shadow-md shadow-blue-100'
+//                                                     : 'border-slate-100 bg-slate-50 hover:border-blue-200'
+//                                                 }`}
+//                                         >
+//                                             <span className={`font-bold ${isSelected ? 'text-blue-700' : 'text-slate-600'}`}>{sub.name}</span>
+//                                             <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white scale-110' : 'border-slate-200 bg-white'
+//                                                 }`}>
+//                                                 {isSelected && <CheckCircle2 size={14} strokeWidth={3} />}
+//                                             </div>
+//                                         </button>
+
+//                                         {/* แสดงวิชาย่อยแบบแนวนอน (Horizontal Pill) */}
+//                                         {isSelected && hasSub && (
+//                                             <div className="mt-3 p-4 bg-blue-50/50 rounded-[1.5rem] border border-blue-100 animate-in zoom-in-95 duration-300">
+//                                                 <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-3 ml-1">วิชาย่อย / แผนกที่รับผิดชอบ</p>
+//                                                 <div className="flex flex-wrap gap-2">
+//                                                     {subSubjects.filter(ss => ss.parent_subject_id === sub.id).map(ss => (
+//                                                         <button
+//                                                             key={ss.id}
+//                                                             type="button"
+//                                                             onClick={() => toggleSubSubject(ss.id)}
+//                                                             className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all shadow-sm ${selectedSubSubjects.includes(ss.id)
+//                                                                     ? 'bg-blue-600 text-white translate-y-[-2px] shadow-blue-200'
+//                                                                     : 'bg-white text-slate-400 hover:text-slate-600 border border-slate-100'
+//                                                                 }`}
+//                                                         >
+//                                                             {ss.name}
+//                                                         </button>
+//                                                     ))}
+//                                                 </div>
+//                                             </div>
+//                                         )}
+//                                     </div>
+//                                 )
+//                             })}
+//                         </div>
+//                     </div>
+
+//                     <button disabled={loading} className="w-full h-16 bg-slate-900 text-white rounded-[2rem] font-black text-xl shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3">
+//                         {loading ? <Loader2 className="animate-spin" /> : "ยืนยันการลงทะเบียน"}
+//                     </button>
+//                 </form>
+//             </div>
+//         </div>
+//     )
+// }
+
+
+
+// version not invite code 
 "use client"
-import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { useState, useEffect, useRef } from 'react'
+import { createBrowserClient } from '@supabase/ssr'
 import {
-    Camera, Save, Loader2, GraduationCap, CalendarDays,
-    Search, Mail, Phone, User, Hash, UserCircle, Trash2,
-    Plus, X, Hospital
-} from "lucide-react"
+    Camera, MapPin, Phone, User, Loader2, ImagePlus,
+    CheckCircle2, BookOpen, Building2, ChevronDown, UserCircle2, Hospital
+} from 'lucide-react'
 import Swal from 'sweetalert2'
-
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-interface Mentor {
-    id: number;
-    full_name: string;
-    site_id: number;
-}
-
-export default function StudentRegisterPage() {
+import liff from '@line/liff'
+export default function SmartRegister() {
+    const [fullName, setFullName] = useState('')
+    const [phone, setPhone] = useState('')
     const [loading, setLoading] = useState(false)
-    const [allowedBatch, setAllowedBatch] = useState('')
-    const [allProvinces, setAllProvinces] = useState<string[]>([])
-    const [sites, setSites] = useState<any[]>([])
-    const [mentors, setMentors] = useState<any[]>([])
-    const [openDropdownIndex, setOpenDropdownIndex] = useState<number | null>(null)
-    const [errors, setErrors] = useState<any>({})
+    const [preview, setPreview] = useState<string | null>(null)
+    const [file, setFile] = useState<File | null>(null)
+    const [lineUserId, setLineUserId] = useState<string | null>(null)
+    const [lineDisplayName, setLineDisplayName] = useState<string>('')
 
-    const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
-    const [avatarFile, setAvatarFile] = useState<File | null>(null)
+    // --- State สำหรับแยกประเภทผู้ใช้ ---
+    const [userType, setUserType] = useState<'supervisor' | 'teacher'>('supervisor')
 
-    const [form, setForm] = useState<any>({
-        student_code: '', prefix: 'นางสาว',
-        first_name: '', last_name: '',
-        nickname: '', phone: '',
-        email: '', class_year: '4',
-        assignments: []
-    })
+    // --- State สำหรับระบบค้นหาสถานที่ (Searchable Dropdown) ---
+    const [allSites, setAllSites] = useState<any[]>([])
+    const [searchTerm, setSearchTerm] = useState('')
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+    const [selectedSite, setSelectedSite] = useState<any>(null)
+    const dropdownRef = useRef<HTMLDivElement>(null)
 
-    // ฟังก์ชันสำหรับดึงข้อมูล (ใช้ซ้ำได้ทั้งตอนโหลดครั้งแรกและตอน Real-time Update)
-    const fetchSites = async () => {
-        const { data } = await supabase.from('training_sites').select('*')
-        if (data) {
-            setSites(data)
-            const uniqueProvinces = Array.from(new Set(data.map(item => item.province?.trim()).filter(Boolean))) as string[]
-            setAllProvinces(uniqueProvinces.sort())
-        }
-    }
+    // --- State สำหรับวิชาที่รับผิดชอบ ---
+    const [allSubjects, setAllSubjects] = useState<any[]>([])
+    const [subSubjects, setSubSubjects] = useState<any[]>([])
+    const [selectedSubjects, setSelectedSubjects] = useState<number[]>([])
+    const [selectedSubSubjects, setSelectedSubSubjects] = useState<number[]>([])
 
-    // const fetchMentors = async () => {
-    //     const { data } = await supabase.from('supervisors').select('*')
-    //     if (data) setMentors(data)
-    // }
-    const fetchMentors = async () => {
-        // ดึงข้อมูลพี่เลี้ยง พร้อมข้อมูลจากตารางกลาง (supervisor_subjects)
-        const { data, error } = await supabase
-            .from('supervisors')
-            .select(`
-            *,
-            supervisor_subjects (
-                subject_id,
-                sub_subject_id
-            )
-        `)
-
-        if (error) {
-            console.error("Error fetching mentors:", error)
-            return
-        }
-
-        if (data) {
-            setMentors(data)
-            // console.log("Mentors with subjects:", data) // 🚩 ลองเช็กใน Console ว่ามีก้อน supervisor_subjects มาไหม
-        }
-    }
-
-    // ค้นหาฟังก์ชัน fetchConfigs เดิม แล้วแก้ไขเป็นตามนี้:
-    const fetchConfigs = async () => {
-        const { data } = await supabase
-            .from('system_configs')
-            .select('key_value') // แก้จาก value เป็น key_value ให้ตรงกับ DB
-            .eq('key_name', 'allowed_student_batch') // แก้จาก key เป็น key_name ให้ตรงกับ DB
-            .maybeSingle();
-
-        if (data) {
-            setAllowedBatch(data.key_value);
-            console.log("Allowed Batch loaded:", data.key_value); // เช็คใน Console ดูได้เลยว่าเลข 65 มาหรือยัง
-        } else {
-            console.warn("Could not find configuration for allowed_student_batch");
-        }
-    }
+    const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
 
     useEffect(() => {
-        // โหลดข้อมูลครั้งแรก
-        fetchConfigs()
-        fetchSites()
-        fetchMentors()
+        const initLiff = async () => {
+            try {
+                // ใส่ LIFF ID ที่คุณได้จาก LINE Developers Console
+                // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
 
-        // 1. ดึงข้อมูลผลัด (ครั้งเดียว)
-        // const fetchRotations = async () => {
-        //     const { data: r } = await supabase.from('rotations').select('*').order('round_number', { ascending: true }).limit(3)
-        //     if (r) {
-        //         setForm((prev: any) => ({
-        //             ...prev,
-        //             assignments: r.map((rot: any) => ({
-        //                 rotation_id: String(rot.id),
-        //                 rotation_name: rot.name,
-        //                 dates: `${rot.start_date} - ${rot.end_date}`,
-        //                 site_id: "", province: "", supervisor_ids: [], provinceSearch: ""
-        //             }))
-        //         }))
-        //     }
-        // }
-        const fetchRotations = async () => {
-            // 🚩 ปรับให้ดึงข้อมูลวิชาจาก rotation_subjects มาด้วย
-            const { data: r } = await supabase
-                .from('rotations')
-                .select(`
-            *,
-            rotation_subjects (
-                subject_id
-            )
-        `)
-                .order('round_number', { ascending: true })
-                .limit(3)
+                // if (liff.isLoggedIn()) {
+                //     const profile = await liff.getProfile()
+                //     setLineUserId(profile.userId)
+                //     setLineDisplayName(profile.displayName)
+                //     // ถ้าใน LINE มีชื่ออยู่แล้ว สามารถเอามาตั้งเป็นค่าเริ่มต้นได้
 
-            if (r) {
-                setForm((prev: any) => ({
-                    ...prev,
-                    assignments: r.map((rot: any) => ({
-                        rotation_id: String(rot.id),
-                        rotation_name: rot.name,
-                        // 🚩 เก็บ ID วิชาไว้ใน item เพื่อเอาไปกรองพี่เลี้ยง
-                        subject_id: rot.rotation_subjects?.[0]?.subject_id || null,
-                        dates: `${rot.start_date} - ${rot.end_date}`,
-                        site_id: "",
-                        province: "",
-                        supervisor_ids: [],
-                        provinceSearch: ""
-                    }))
-                }))
+                // } else {
+                //     // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
+                //     liff.login({ redirectUri: window.location.href });
+                //     // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
+                // }
+                setLineUserId("test-c");
+                setLineDisplayName("Tester Teacher");
+            } catch (err) {
+                console.error("LIFF Init Error", err)
+
             }
         }
-        fetchRotations()
-
-        // --- ระบบ REAL-TIME SUBSCRIPTION ---
-
-        // ติดตามการเปลี่ยนแปลงตารางสถานที่ฝึก (จังหวัด/รพ.)
-        const siteChannel = supabase
-            .channel('realtime-sites')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, () => {
-                fetchSites()
-            })
-            .subscribe()
-
-        // ติดตามการเปลี่ยนแปลงตารางพี่เลี้ยง
-        const mentorChannel = supabase
-            .channel('realtime-mentors')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, () => {
-                fetchMentors()
-            })
-            .subscribe()
-
-        // ติดตามการเปลี่ยนแปลงตาราง Config (ปีที่อนุญาต)
-        const configChannel = supabase
-            .channel('realtime-configs')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'system_configs' }, () => {
-                fetchConfigs()
-            })
-            .subscribe()
-
-        // Clean up เมื่อปิดหน้าจอ
-        return () => {
-            supabase.removeChannel(siteChannel)
-            supabase.removeChannel(mentorChannel)
-            supabase.removeChannel(configChannel)
-        }
+        initLiff()
     }, [])
 
-    const validate = () => {
-        let tempErrors: any = {}
-
-        if (!form.student_code) {
-            tempErrors.student_code = "กรุณากรอกรหัสนักศึกษา"
+    useEffect(() => {
+        const fetchMasterData = async () => {
+            const { data: sites } = await supabase.from('training_sites').select('id, site_name, province');
+            const { data: subs } = await supabase.from('subjects').select('*').order('id');
+            const { data: subSubs } = await supabase.from('sub_subjects').select('*').order('id');
+            if (sites) setAllSites(sites);
+            if (subs) setAllSubjects(subs);
+            if (subSubs) setSubSubjects(subSubs);
         }
-        // เพิ่มการดักรหัส 2 ตัวหน้าตรงนี้
-        else if (allowedBatch && !form.student_code.startsWith(allowedBatch)) {
-            tempErrors.student_code = `(รหัสต้องขึ้นต้นด้วย ${allowedBatch} เท่านั้น)`
-        }
+        fetchMasterData();
 
-        if (!form.first_name || !form.last_name) tempErrors.name = "กรุณากรอกชื่อ-นามสกุล"
-        if (!avatarFile) tempErrors.avatar = "กรุณาใส่รูป"
-
-        const mentorMissing = form.assignments.some((as: any) => as.supervisor_ids.length === 0)
-        if (mentorMissing) tempErrors.rotation = "กรุณาเลือกพี่เลี้ยงอย่างน้อย 1 คนในทุกผลัด"
-
-        setErrors(tempErrors)
-        return Object.keys(tempErrors).length === 0
-    }
-
-    const handleAssignChange = (idx: number, field: string, value: any) => {
-        setForm((prev: any) => {
-            const newAssignments = [...prev.assignments]
-            newAssignments[idx] = { ...newAssignments[idx], [field]: value }
-            if (field === 'province') {
-                newAssignments[idx].site_id = "";
-                newAssignments[idx].supervisor_ids = [];
-                newAssignments[idx].provinceSearch = value;
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsDropdownOpen(false);
             }
-            if (field === 'site_id') {
-                newAssignments[idx].supervisor_ids = []; // ล้างพี่เลี้ยงเมื่อเปลี่ยน รพ.
-            }
-            return { ...prev, assignments: newAssignments }
-        })
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const displayedSites = allSites.filter(site =>
+        site.site_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        site.province.toLowerCase().includes(searchTerm.toLowerCase())
+    ).slice(0, 10);
+
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value.replace(/\D/g, '');
+        if (value.length <= 10) setPhone(value);
     }
 
-    // ฟังก์ชันสำหรับ เพิ่ม/ลบ พี่เลี้ยงในลิสต์
-    const addSupervisor = (idx: number, supervisorId: string) => {
-        if (!supervisorId) return;
-        const currentIds = [...form.assignments[idx].supervisor_ids];
-        if (!currentIds.includes(supervisorId)) {
-            currentIds.push(supervisorId);
-            handleAssignChange(idx, 'supervisor_ids', currentIds);
+    const toggleSubject = (id: number) => {
+        setSelectedSubjects(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    }
+
+    const toggleSubSubject = (id: number) => {
+        setSelectedSubSubjects(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!lineUserId) {
+            Swal.fire('เกิดข้อผิดพลาด', 'ไม่พบข้อมูล LINE ID กรุณาเข้าใช้งานผ่าน LINE', 'error');
+            return;
         }
-    }
-
-    const removeSupervisor = (idx: number, supervisorId: string) => {
-        const currentIds = form.assignments[idx].supervisor_ids.filter((id: string) => id !== supervisorId);
-        handleAssignChange(idx, 'supervisor_ids', currentIds);
-    }
-
-    // const handleRegister = async () => {
-    //     if (!validate()) return
-    //     setLoading(true);
-    //     try {
-    //         const { data: check } = await supabase.from('students').select('id').eq('student_code', form.student_code).maybeSingle()
-    //         if (check) { setLoading(false); return Swal.fire('ข้อมูลซ้ำ', 'รหัสนี้ลงทะเบียนแล้ว', 'error'); }
-
-    //         const fileExt = avatarFile.name.split('.').pop();
-    //         const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
-    //         await supabase.storage.from('avatars').upload(fileName, avatarFile);
-    //         const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
-
-    //         const { data: student, error: stError } = await supabase.from('students').insert([{
-    //             student_code: form.student_code, prefix: form.prefix, first_name: form.first_name,
-    //             last_name: form.last_name, nickname: form.nickname, phone: form.phone,
-    //             email: form.email, avatar_url: publicUrl
-    //         }]).select().single();
-    //         if (stError) throw stError;
-
-    //         for (const as of form.assignments) {
-    //             const { data: assignment, error: asError } = await supabase.from('student_assignments').insert([{
-    //                 student_id: student.id, rotation_id: parseInt(as.rotation_id),
-    //                 site_id: parseInt(as.site_id), status: 'active'
-    //             }]).select().single();
-    //             if (asError) throw asError;
-
-    //             const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-    //                 assignment_id: assignment.id, supervisor_id: parseInt(sId)
-    //             }));
-    //             await supabase.from('assignment_supervisors').insert(mentorRecords);
-    //         }
-
-    //         Swal.fire({ icon: 'success', title: 'ลงทะเบียนสำเร็จ' });
-    //     } catch (error: any) { Swal.fire('Error', error.message, 'error'); }
-    //     finally { setLoading(false); }
-    // };
-
-    const handleRegister = async () => {
-        if (!validate()) return;
-
-        // 1. เช็คว่าเลือกรูปภาพหรือยัง
-        if (!avatarFile) {
-            return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษาเพื่อลงทะเบียน', 'warning');
+        // Validation เบื้องต้น
+        if (!file || !fullName || !phone || selectedSubjects.length === 0) {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกข้อมูลส่วนตัว แนบรูป และเลือกวิชาที่รับผิดชอบ', 'warning');
+            return;
+        }
+        if (userType === 'supervisor' && !selectedSite) {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกสถานที่ฝึกประสบการณ์ของคุณ', 'warning');
+            return;
         }
 
         setLoading(true);
         try {
-            // 2. เช็คข้อมูลซ้ำในระบบ
-            const { data: check } = await supabase
-                .from('students')
-                .select('id')
-                .eq('student_code', form.student_code)
-                .maybeSingle();
-
-            if (check) {
-                setLoading(false);
-                return Swal.fire('ข้อมูลซ้ำ', 'รหัสนี้ลงทะเบียนแล้ว', 'error');
-            }
-
-            // 3. จัดการอัปโหลดไฟล์รูปภาพ
-            const fileExt = avatarFile!.name.split('.').pop();
-            const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(fileName, avatarFile!);
-
+            // 1. Upload รูปภาพ
+            const fileName = `avatar_${Date.now()}.jpg`;
+            const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file);
             if (uploadError) throw uploadError;
 
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(fileName);
+            const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
 
-            // 4. บันทึกข้อมูลนักศึกษาลงตารางหลัก
-            const { data: student, error: stError } = await supabase.from('students').insert([{
-                student_code: form.student_code,
-                prefix: form.prefix,
-                first_name: form.first_name,
-                last_name: form.last_name,
-                nickname: form.nickname,
-                phone: form.phone,
-                email: form.email,
-                avatar_url: publicUrl
-            }]).select().single();
+            // 2. บันทึกข้อมูลลงตาราง supervisors
+            const { data: supervisor, error: insError } = await supabase
+                .from('supervisors')
+                .insert([{
+                    line_user_id: lineUserId,
+                    line_display_name: lineDisplayName,
+                    full_name: fullName,
+                    phone: phone,
+                    avatar_url: publicUrl,
+                    site_id: userType === 'supervisor' ? selectedSite.id : null,
+                    province: userType === 'supervisor' ? selectedSite?.province : 'มหาวิทยาลัย',
+                    role: userType,
+                    is_verified: false // รอแอดมินตรวจสอบ
+                }]).select().single();
 
-            if (stError) throw stError;
+            if (insError) throw insError;
 
-            // 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
-            // if (form.assignments && form.assignments.length > 0) {
-            //     for (const as of form.assignments) {
-            //         if (as.site_id) {
-            //             const { data: assignment, error: asError } = await supabase
-            //                 .from('student_assignments')
-            //                 .insert([{
-            //                     student_id: student.id, 
-            //                     rotation_id: parseInt(as.rotation_id),
-            //                     site_id: parseInt(as.site_id), 
-            //                     status: 'active'
-            //                 }]).select().single();
-
-            //             if (asError) throw asError;
-
-            //             // 6. บันทึกรายชื่อพี่เลี้ยง
-            //             if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-            //                 const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-            //                     assignment_id: assignment.id, 
-            //                     supervisor_id: parseInt(sId)
-            //                 }));
-            //                 await supabase.from('assignment_supervisors').insert(mentorRecords);
-            //             }
-            //         }
-            //     }
-            // }
-
-            // 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
-            // 🚩 แก้ไขภายในฟังก์ชัน handleRegister
-            // if (form.assignments && form.assignments.length > 0) {
-            //     for (const as of form.assignments) {
-            //         if (as.site_id) {
-            //             // 🚩 1. ดึง "วิชาย่อยทั้งหมด" ที่ผูกกับผลัดนี้ออกมา 
-            //             // เช่น ถ้าผลัดนี้คือ ผดุงครรภ์ จะได้ ID ของ ANC, LR, PP ออกมา 3 แถว
-            //             const { data: rotSubjects } = await supabase
-            //                 .from('rotation_subjects')
-            //                 .select('subject_id')
-            //                 .eq('rotation_id', parseInt(as.rotation_id));
-
-            //             if (rotSubjects && rotSubjects.length > 0) {
-            //                 // 🚩 2. ลูปบันทึกแยกทีละวิชาย่อยลง student_assignments
-            //                 for (const rs of rotSubjects) {
-            //                     const { data: assignment, error: asError } = await supabase
-            //                         .from('student_assignments')
-            //                         .insert([{
-            //                             student_id: student.id,
-            //                             rotation_id: parseInt(as.rotation_id),
-            //                             subject_id: rs.subject_id, // ✅ บันทึก ID วิชาย่อย (ไม่เป็น NULL แล้ว)
-            //                             site_id: parseInt(as.site_id),
-            //                             status: 'active'
-            //                         }]).select().single();
-
-            //                     if (asError) throw asError;
-
-            //                     // 🚩 3. บันทึกรายชื่อพี่เลี้ยงให้เชื่อมกับ "ทุกวิชาย่อย"
-            //                     if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-            //                         const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-            //                             assignment_id: assignment.id, // เชื่อมกับ ID ของวิชาย่อยแต่ละอัน
-            //                             supervisor_id: parseInt(sId),
-            //                             is_evaluated: false
-            //                         }));
-            //                         await supabase.from('assignment_supervisors').insert(mentorRecords);
-            //                     }
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
-
-            // 🚩 แก้ไขภายในฟังก์ชัน handleRegister (ส่วนที่ 5)
-            // 🚩 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
-            // if (form.assignments && form.assignments.length > 0) {
-            //     for (const as of form.assignments) {
-            //         if (as.site_id) {
-            //             // STEP A: ดึง ID วิชาหลักที่ผูกกับผลัดนี้จาก rotation_subjects
-            //             const { data: rotSubs } = await supabase
-            //                 .from('rotation_subjects')
-            //                 .select('subject_id')
-            //                 .eq('rotation_id', parseInt(as.rotation_id));
-
-            //             if (rotSubs && rotSubs.length > 0) {
-            //                 for (const rs of rotSubs) {
-            //                     const mainSubjectId = rs.subject_id;
-
-            //                     // STEP B: ไปเช็กในตาราง sub_subjects ว่าวิชาหลักนี้มี "วิชาย่อย" หรือไม่
-            //                     const { data: subSubjects } = await supabase
-            //                         .from('sub_subjects')
-            //                         .select('id')
-            //                         .eq('parent_subject_id', mainSubjectId);
-
-            //                     if (subSubjects && subSubjects.length > 0) {
-            //                         // 🚩 กรณีมีวิชาย่อย (เช่น ผดุงครรภ์ -> ANC, LR, PP)
-            //                         // ให้บันทึกแยกแถวตามจำนวนวิชาย่อย
-            //                         for (const sub of subSubjects) {
-            //                             const { data: assignment, error: asError } = await supabase
-            //                                 .from('student_assignments')
-            //                                 .insert([{
-            //                                     student_id: student.id,
-            //                                     rotation_id: parseInt(as.rotation_id),
-            //                                     subject_id: mainSubjectId,
-            //                                     sub_subject_id: sub.id, // ✅ ใส่ ID วิชาย่อย (เช่น ANC)
-            //                                     site_id: parseInt(as.site_id),
-            //                                     status: 'active'
-            //                                 }]).select().single();
-
-            //                             if (asError) throw asError;
-
-            //                             // บันทึกพี่เลี้ยงให้เชื่อมกับทุกวิชาย่อย
-            //                             if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-            //                                 const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-            //                                     assignment_id: assignment.id,
-            //                                     supervisor_id: parseInt(sId)
-            //                                 }));
-            //                                 await supabase.from('assignment_supervisors').insert(mentorRecords);
-            //                             }
-
-            //                         }
-            //                     } else {
-            //                         // 🚩 กรณีไม่มีวิชาย่อย (วิชาทั่วไป) -> บันทึก 1 แถวปกติ
-            //                         const { data: assignment, error: asError } = await supabase
-            //                             .from('student_assignments')
-            //                             .insert([{
-            //                                 student_id: student.id,
-            //                                 rotation_id: parseInt(as.rotation_id),
-            //                                 subject_id: mainSubjectId,
-            //                                 sub_subject_id: null,
-            //                                 site_id: parseInt(as.site_id),
-            //                                 status: 'active'
-            //                             }]).select().single();
-
-            //                         if (asError) throw asError;
-
-            //                         if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-            //                             const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-            //                                 assignment_id: assignment.id,
-            //                                 supervisor_id: parseInt(sId)
-            //                             }));
-            //                             await supabase.from('assignment_supervisors').insert(mentorRecords);
-            //                         }
-            //                     }
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
-
-
-
-            if (form.assignments && form.assignments.length > 0) {
-                for (const as of form.assignments) {
-                    if (as.site_id) {
-                        // STEP A: ดึง ID วิชาหลัก
-                        const { data: rotSubs } = await supabase
-                            .from('rotation_subjects')
-                            .select('subject_id')
-                            .eq('rotation_id', parseInt(as.rotation_id));
-
-                        if (rotSubs && rotSubs.length > 0) {
-                            for (const rs of rotSubs) {
-                                const mainSubjectId = rs.subject_id;
-
-                                // STEP B: เช็คว่ามีวิชาย่อยไหม
-                                const { data: subSubjects } = await supabase
-                                    .from('sub_subjects')
-                                    .select('id')
-                                    .eq('parent_subject_id', mainSubjectId);
-
-                                if (subSubjects && subSubjects.length > 0) {
-                                    // 🟢 CASE 1: มีวิชาย่อย (เช่น ผดุงครรภ์)
-
-                                    // 1.1 วนลูปสร้างวิชาย่อย (ANC, LR, PP)
-                                    for (const sub of subSubjects) {
-                                        const { data: assignment, error: asError } = await supabase
-                                            .from('student_assignments')
-                                            .insert([{
-                                                student_id: student.id,
-                                                rotation_id: parseInt(as.rotation_id),
-                                                subject_id: mainSubjectId,
-                                                sub_subject_id: sub.id, // ใส่ ID วิชาย่อย
-                                                site_id: parseInt(as.site_id),
-                                                status: 'active'
-                                            }]).select().single();
-
-                                        if (asError) throw asError;
-
-                                        // บันทึกพี่เลี้ยงวิชาย่อย
-                                        if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-                                            const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-                                                assignment_id: assignment.id,
-                                                supervisor_id: parseInt(sId)
-                                            }));
-                                            await supabase.from('assignment_supervisors').insert(mentorRecords);
-                                        }
-                                    }
-
-                                    // 1.2 🚩 สร้าง "เล่มรายงาน/Portfolio" (ทำแค่ครั้งเดียว นอกลูป sub)
-                                    const { data: mainAssign, error: mainErr } = await supabase
-                                        .from('student_assignments')
-                                        .insert([{
-                                            student_id: student.id,
-                                            rotation_id: parseInt(as.rotation_id),
-                                            subject_id: mainSubjectId,
-                                            sub_subject_id: null, // เป็น NULL คือเล่มรายงาน
-                                            site_id: parseInt(as.site_id),
-                                            status: 'active'
-                                        }]).select().single();
-
-                                    if (mainErr) throw mainErr;
-
-                                    // บันทึกพี่เลี้ยงให้เล่มรายงานด้วย (จะได้เห็นทุกคน)
-                                    if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-                                        const mainMentorRecords = as.supervisor_ids.map((sId: any) => ({
-                                            assignment_id: mainAssign.id,
-                                            supervisor_id: parseInt(sId)
-                                        }));
-                                        await supabase.from('assignment_supervisors').insert(mainMentorRecords);
-                                    }
-
-                                } else {
-                                    // 🔵 CASE 2: วิชาทั่วไป (ไม่มีวิชาย่อย)
-                                    const { data: assignment, error: asError } = await supabase
-                                        .from('student_assignments')
-                                        .insert([{
-                                            student_id: student.id,
-                                            rotation_id: parseInt(as.rotation_id),
-                                            subject_id: mainSubjectId,
-                                            sub_subject_id: null,
-                                            site_id: parseInt(as.site_id),
-                                            status: 'active'
-                                        }]).select().single();
-
-                                    if (asError) throw asError;
-
-                                    if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-                                        const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-                                            assignment_id: assignment.id,
-                                            supervisor_id: parseInt(sId)
-                                        }));
-                                        await supabase.from('assignment_supervisors').insert(mentorRecords);
-                                    }
-                                }
-                            }
-                        }
-                    }
+            // 3. บันทึกวิชาที่รับผิดชอบลง supervisor_subjects
+            const subjectInserts: any[] = [];
+            selectedSubjects.forEach(subId => {
+                const relatedSubSubs = subSubjects.filter(ss => ss.parent_subject_id === subId);
+                if (relatedSubSubs.length > 0) {
+                    const pickedSubSubs = selectedSubSubjects.filter(ssId => relatedSubSubs.some(rss => rss.id === ssId));
+                    pickedSubSubs.forEach(ssId => {
+                        subjectInserts.push({ supervisor_id: supervisor.id, subject_id: subId, sub_subject_id: ssId });
+                    });
+                } else {
+                    subjectInserts.push({ supervisor_id: supervisor.id, subject_id: subId, sub_subject_id: null });
                 }
+            });
+
+            if (subjectInserts.length > 0) {
+                await supabase.from('supervisor_subjects').insert(subjectInserts);
             }
-            // --- 7. ส่วนการ RESET FORM เมื่อสำเร็จ ---
+
             Swal.fire({
-                icon: 'success',
                 title: 'ลงทะเบียนสำเร็จ',
-                text: 'ข้อมูลของคุณถูกบันทึกเข้าระบบเรียบร้อยแล้ว',
-                timer: 2000,
-                showConfirmButton: false
+                text: 'ข้อมูลของคุณถูกส่งไปรอการอนุมัติจากแอดมินแล้ว',
+                icon: 'success',
+                confirmButtonColor: '#2563eb'
+            }).then(() => {
+                // liff.closeWindow() // ปิดหน้าต่าง LIFF ทันทีเมื่อเสร็จ
+                window.location.reload(); // ให้รีเฟรชหน้าแทนเพื่อดูผลลัพธ์
             });
-
-            // รีเซ็ตค่าใน State ทั้งหมด
-            setForm({
-                student_code: '',
-                prefix: 'นางสาว',
-                first_name: '',
-                last_name: '',
-                nickname: '',
-                phone: '',
-                email: '',
-                assignments: form.assignments.map((as: any) => ({
-                    ...as,
-                    site_id: '',
-                    supervisor_ids: []
-                }))
-            });
-
-            // ล้างรูปภาพที่เลือกไว้
-            setAvatarFile(null);
-            setAvatarPreview(null); // ถ้าคุณมี State สำหรับแสดงตัวอย่างรูป (Preview) อย่าลืมล้างตัวนี้ด้วย
-
         } catch (error: any) {
-            console.error('Registration Error:', error);
             Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
         } finally {
             setLoading(false);
         }
-    };
+    }
 
     return (
-        <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900 font-sans antialiased">
-            <div className="bg-white border-b border-slate-100 py-10 text-center mb-10 shadow-sm">
-                <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
-                    <GraduationCap className="text-white" size={36} />
-                </div>
-                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-800">Nurse Registry</h1>
-                <p className="text-slate-400 text-[11px] font-bold uppercase tracking-[0.2em] mt-1">ระบบลงทะเบียนฝึกปฏิบัติงานปี 4</p>
-            </div>
-
-            <div className="max-w-md mx-auto px-5 space-y-4">
-                <div className="flex flex-col items-center gap-3">
-                    <div className={`w-36 h-36 rounded-[3rem] bg-white border-4 ${errors.avatar ? 'border-red-400' : 'border-white'} shadow-2xl flex items-center justify-center relative overflow-hidden ring-1 ring-slate-100 group`}>
-                        {avatarPreview ? <img src={avatarPreview} className="w-full h-full object-cover transition group-hover:scale-110" /> : <Camera size={40} className="text-slate-300" />}
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[10px] font-bold uppercase">คลิกเพื่อเปลี่ยนรูป</div>
-                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) { setAvatarFile(file); setAvatarPreview(URL.createObjectURL(file)); }
-                        }} />
+        <div className="min-h-screen bg-[#F8FAFC] p-6 pb-20 font-sans">
+            <div className="max-w-md mx-auto space-y-8">
+                {/* <div className="text-center">
+                    <div className="inline-block p-4 bg-blue-600 rounded-[2rem] shadow-xl text-white mb-4">
+                        <UserCircle2 size={32} />
                     </div>
-                    {errors.avatar && <span className="text-red-500 text-[11px] font-bold italic animate-bounce">*{errors.avatar}</span>}
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight">ลงทะเบียนบุคลากร</h1>
+                    <p className="text-slate-500 font-medium">เข้าใช้งานระบบประเมินผลการฝึกงาน</p>
+                    
+                    {lineDisplayName && (
+                        <div className="flex items-center gap-2 mb-6 p-3 bg-emerald-50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2">
+                            <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white">
+                                <UserCircle2 size={18} />
+                            </div>
+                            <p className="text-[11px] font-bold text-emerald-700">
+                                เชื่อมต่อกับบัญชี LINE: <span className="font-black">{lineDisplayName}</span>
+                            </p>
+                        </div>
+                    )}
+                </div> */}
+
+                <div className="text-center">
+                    <div className="inline-block p-4 bg-blue-600 rounded-[2rem] shadow-xl text-white mb-4">
+                        <UserCircle2 size={32} />
+                    </div>
+                    <h1 className="text-3xl font-black text-slate-900 tracking-tight">ลงทะเบียนบุคลากร</h1>
+                    <p className="text-slate-500 font-medium">เข้าใช้งานระบบประเมินผลการฝึกงาน</p>
+
+                    {/* ส่วนที่แก้ไข: เพิ่ม mt-6 และ justify-center */}
+                    {lineDisplayName && (
+                        <div className="flex items-center justify-center gap-2 mt-8 mb-4 p-3 bg-emerald-50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2 mx-auto max-w-[280px]">
+                            <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
+                                <UserCircle2 size={18} />
+                            </div>
+                            <p className="text-[11px] font-bold text-emerald-700 text-left">
+                                เชื่อมต่อกับบัญชี LINE: <br />
+                                <span className="font-black text-emerald-900">{lineDisplayName}</span>
+                            </p>
+                        </div>
+                    )}
                 </div>
 
-                <Card className="p-8 rounded-[3rem] border-none shadow-2xl shadow-blue-100/50 -space-y-2">
-                    <div className="grid grid-cols-12 gap-3">
-                        <div className="col-span-5 space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">คำนำหน้า</label>
-                            <div className="relative">
-                                <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <select className="w-full h-14 rounded-2xl bg-slate-50 pl-11 pr-4 font-bold border-none appearance-none focus:ring-2 ring-blue-500 transition-all" value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value })}>
-                                    <option>นางสาว</option><option>นาย</option>
-                                </select>
+                {/* ส่วนเลือกประเภทผู้ใช้งาน */}
+                <div className="flex p-1.5 bg-slate-200/50 rounded-2xl">
+                    <button
+                        type="button"
+                        onClick={() => { setUserType('supervisor'); setSelectedSite(null); setSearchTerm(''); }}
+                        className={`flex-1 h-12 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${userType === 'supervisor' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
+                    >
+                        <Hospital size={18} /> พี่เลี้ยงแหล่งฝึก
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setUserType('teacher'); setSelectedSite(null); setSearchTerm(''); }}
+                        className={`flex-1 h-12 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${userType === 'teacher' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
+                    >
+                        <User size={18} /> อาจารย์
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* ส่วนแนบรูปถ่าย */}
+                    <div className="flex flex-col items-center">
+                        <label className="relative cursor-pointer transition-all hover:scale-105 active:scale-95">
+                            <div className="w-36 h-36 rounded-[2.5rem] bg-white shadow-xl border-4 border-white overflow-hidden flex items-center justify-center">
+                                {preview ? <img src={preview} className="w-full h-full object-cover" /> : <Camera size={48} className="text-slate-200" />}
                             </div>
+                            <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-2.5 rounded-2xl shadow-lg border-4 border-[#F8FAFC]">
+                                <ImagePlus size={20} />
+                            </div>
+                            <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                                if (e.target.files?.[0]) {
+                                    setFile(e.target.files[0]);
+                                    setPreview(URL.createObjectURL(e.target.files[0]));
+                                }
+                            }} />
+                        </label>
+                    </div>
+
+                    {/* ข้อมูลส่วนตัว */}
+                    <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 space-y-5">
+                        <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">ข้อมูลพื้นฐาน</label>
+                        <div className="relative">
+                            <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                            <input placeholder="ชื่อ-นามสกุลจริง" className="w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={fullName} onChange={e => setFullName(e.target.value)} />
                         </div>
-                        <div className="col-span-7 space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                                รหัสนักศึกษา {allowedBatch && <span className="text-blue-500">(เฉพาะรหัส {allowedBatch})</span>}
-                            </label>
-                            <div className="relative">
-                                <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <Input
-                                    className={`h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none focus:ring-2 ${errors.student_code ? 'ring-red-500' : 'ring-blue-500'}`}
-                                    placeholder={`${allowedBatch || '6X'}XXXXXX`}
-                                    value={form.student_code}
-                                    onChange={e => setForm({ ...form, student_code: e.target.value })}
+                        <div className="relative">
+                            <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                            <input placeholder="เบอร์โทรศัพท์" className="w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={phone} onChange={handlePhoneChange} />
+                        </div>
+                    </div>
+
+                    {/* ช่องเลือกสถานที่ฝึก (แสดงเฉพาะพี่เลี้ยง) */}
+                    {userType === 'supervisor' && (
+                        <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 space-y-5">
+                            <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">สถานที่ฝึกประสบการณ์</label>
+                            <div className="relative" ref={dropdownRef}>
+                                <Building2 className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-600 z-10" size={20} />
+                                <input
+                                    type="text"
+                                    placeholder="พิมพ์ค้นหาชื่อหน่วยงาน หรือ จังหวัด..."
+                                    className="w-full h-14 pl-14 pr-12 rounded-2xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700"
+                                    value={selectedSite ? selectedSite.site_name : searchTerm}
+                                    onChange={(e) => {
+                                        setSearchTerm(e.target.value);
+                                        setSelectedSite(null);
+                                        setIsDropdownOpen(true);
+                                    }}
+                                    onFocus={() => setIsDropdownOpen(true)}
                                 />
-                            </div>
-                            {errors.student_code && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.student_code}</span>}
-                        </div>
-                    </div>
+                                <ChevronDown className={`absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} size={20} />
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อจริง</label>
-                            <div className="relative">
-                                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none" placeholder="ชื่อ" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} />
-                            </div>
-                            {errors.first_name && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.first_name}</span>}
-                        </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">นามสกุล</label>
-                            <div className="relative">
-                                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none" placeholder="นามสกุล" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} />
-                            </div>
-                            {errors.last_name && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.last_name}</span>}
-                        </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-blue-500">ชื่อเล่น (NICKNAME)</label>
-                        <div className="relative">
-                            <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-300" size={18} />
-                            <Input className="h-14 pl-11 rounded-2xl bg-blue-50/50 font-bold border-none text-blue-600 placeholder:text-blue-300" placeholder="ชื่อเล่น" value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} />
-                        </div>
-                        {errors.nickname && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.nickname}</span>}
-                    </div>
-
-                    <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">อีเมลติดต่อ</label>
-                        <div className="relative">
-                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                            <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none" placeholder="example@psu.ac.th" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-                        </div>
-                        {errors.email && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.email}</span>}
-                    </div>
-
-                    <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">เบอร์โทรศัพท์ (10 หลัก)</label>
-                        <div className="relative">
-                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                            <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none" placeholder="0XXXXXXXXX" value={form.phone} maxLength={10} onChange={e => setForm({ ...form, phone: e.target.value.replace(/[^0-9]/g, '') })} />
-                        </div>
-                        {errors.phone && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.phone}</span>}
-                    </div>
-                </Card>
-
-                <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3 px-2 pt-6">
-                    <CalendarDays className="text-blue-600" size={28} /> Internship Plan
-                </h3>
-                {errors.rotation && <p className="bg-red-50 text-red-500 text-[11px] font-bold italic p-3 rounded-xl animate-pulse">*{errors.rotation}</p>}
-
-                {form.assignments.map((item: any, idx: number) => (
-                    <Card key={idx} className="p-8 rounded-[3rem] border-none shadow-2xl space-y-6 relative group hover:ring-2 ring-blue-500 transition-all">
-                        <div className="flex items-center gap-4">
-                            <div className="bg-blue-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-black italic shadow-lg shadow-blue-100">0{idx + 1}</div>
-                            <div>
-                                <span className="font-black text-sm uppercase tracking-tight block">{item.rotation_name}</span>
-                                <span className="text-[10px] font-bold text-slate-400 italic">{item.dates}</span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            {/* Province & Hospital Select (เหมือนเดิม) */}
-                            <div className="relative">
-                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <Input className="h-12 pl-12 rounded-xl bg-slate-50 border-none font-bold text-sm" placeholder="ระบุจังหวัดที่ฝึก..." onFocus={() => setOpenDropdownIndex(idx)} value={item.provinceSearch || ""} onChange={(e) => handleAssignChange(idx, 'provinceSearch', e.target.value)} />
-                                {openDropdownIndex === idx && (
-                                    <div className="absolute z-20 w-full mt-2 bg-white rounded-2xl shadow-2xl max-h-56 overflow-auto border border-slate-100 ring-1 ring-slate-200 py-2">
-                                        {allProvinces.filter(p => !item.provinceSearch || p.includes(item.provinceSearch)).map(p => (
-                                            <div key={p} className="px-5 py-3 hover:bg-blue-50 cursor-pointer font-bold text-sm text-slate-600 flex items-center justify-between" onClick={() => { handleAssignChange(idx, 'province', p); setOpenDropdownIndex(null); }}>
-                                                {p} <span className="text-[10px] text-blue-300 uppercase font-black">Select</span>
-                                            </div>
-                                        ))}
+                                {isDropdownOpen && (
+                                    <div className="absolute z-50 w-full mt-2 bg-white rounded-3xl shadow-2xl border border-slate-100 max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                                        {displayedSites.length > 0 ? (
+                                            displayedSites.map((site) => (
+                                                <div
+                                                    key={site.id}
+                                                    className="p-4 hover:bg-blue-50 cursor-pointer flex items-center justify-between border-b border-slate-50 last:border-none group"
+                                                    onClick={() => {
+                                                        setSelectedSite(site);
+                                                        setSearchTerm(site.site_name);
+                                                        setIsDropdownOpen(false);
+                                                    }}
+                                                >
+                                                    <div>
+                                                        <p className="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{site.site_name}</p>
+                                                        <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">{site.province}</p>
+                                                    </div>
+                                                    {selectedSite?.id === site.id && <CheckCircle2 size={18} className="text-blue-600" />}
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="p-8 text-center text-slate-400 italic font-medium">ไม่พบรายชื่อสถานที่</div>
+                                        )}
                                     </div>
                                 )}
                             </div>
-
-                            <select className="w-full h-12 rounded-xl bg-slate-100/50 px-5 font-bold text-sm border-none focus:ring-2 ring-blue-500 appearance-none disabled:opacity-30" disabled={!item.province} value={item.site_id || ""} onChange={(e) => handleAssignChange(idx, 'site_id', e.target.value)}>
-                                <option value="">เลือกโรงพยาบาลใน {item.province || 'จังหวัด'}</option>
-                                {sites.filter((s: any) => String(s.province || "").trim() === String(item.province || "").trim()).map(s => (<option key={s.id} value={String(s.id)}>{s.site_name}</option>))}
-                            </select>
-
-                            {/* ปรับปรุงส่วนเลือกพี่เลี้ยงแบบเพิ่มทีละคน */}
-                            <div className="bg-blue-50/50 p-5 rounded-3xl border border-blue-100 space-y-3">
-                                <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1 block italic">รายชื่อพี่เลี้ยงที่เลือก (SUPERVISORS)</label>
-
-                                {/* แสดงรายชื่อที่เลือกแล้ว */}
-                                <div className="space-y-2">
-                                    {item.supervisor_ids.map((sId: string) => {
-                                        const mentor = mentors.find((m: any) => String(m.id) === String(sId));
-                                        return (
-                                            <div key={sId} className="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-blue-100">
-                                                <span className="text-xs font-bold text-blue-700">{mentor?.full_name || 'ไม่พบข้อมูล'}</span>
-                                                <button onClick={() => removeSupervisor(idx, sId)} className="text-red-400 hover:text-red-600 transition-colors">
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Dropdown สำหรับกดเพิ่มพี่เลี้ยง */}
-                                <div className="pt-2">
-                                    <select
-                                        className="w-full bg-white h-10 rounded-lg px-4 font-bold text-slate-500 text-xs border border-blue-100 outline-none disabled:opacity-30 shadow-sm"
-                                        disabled={!item.site_id}
-                                        value=""
-                                        onChange={(e) => addSupervisor(idx, e.target.value)}
-                                    >
-                                        <option value="">+ เพิ่มรายชื่อพี่เลี้ยง...</option>
-                                        {/* {mentors
-                                            .filter((m: any) => String(m.site_id) === String(item.site_id) && !item.supervisor_ids.includes(String(m.id)))
-                                            .map((m: any) => (<option key={m.id} value={String(m.id)}>{m.full_name}</option>))
-                                        } */}
-                                        {mentors
-                                            .filter((m: any) => {
-                                                // 1. เช็กโรงพยาบาล (ต้องตรงกัน)
-                                                const isSameSite = String(m.site_id) === String(item.site_id);
-
-                                                // 2. เช็กวิชา (ถ้าใน m.supervisor_subjects มี subject_id ตรงกับผลัด)
-                                                const teachesThisSubject = m.supervisor_subjects?.some((sub: any) =>
-                                                    Number(sub.subject_id) === Number(item.subject_id)
-                                                );
-
-                                                // 3. ยังไม่ถูกเลือก
-                                                const isNotSelected = !item.supervisor_ids.includes(String(m.id));
-
-                                                return isSameSite && teachesThisSubject && isNotSelected;
-                                            })
-                                            .map((m: any) => (
-                                                <option key={m.id} value={String(m.id)}>
-                                                    {m.full_name}
-                                                </option>
-                                            ))
-                                        }
-                                    </select>
-                                    {!item.site_id && <p className="text-[8px] text-blue-400 mt-1 ml-1 font-bold">* กรุณาเลือกโรงพยาบาลก่อน</p>}
-                                </div>
-                            </div>
                         </div>
-                    </Card>
-                ))}
+                    )}
 
-                <Button onClick={handleRegister} disabled={loading} className="w-full h-24 bg-slate-900 hover:bg-black text-white rounded-[3rem] font-black text-2xl shadow-2xl transition-all active:scale-[0.97] mb-10">
-                    {loading ? <Loader2 className="animate-spin mr-3" size={28} /> : <Save className="mr-3" size={28} />} {loading ? 'PROCESSING...' : 'CONFIRM & REGISTER'}
-                </Button>
+                    {/* ส่วนเลือกวิชาที่รับผิดชอบ (2 คอลัมน์) */}
+                    <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 space-y-6">
+                        <div className="flex items-center gap-3">
+                            <BookOpen size={20} className="text-blue-600" />
+                            <h3 className="font-black text-slate-800 leading-none">วิชาที่รับผิดชอบ</h3>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {allSubjects.map(sub => {
+                                const hasSub = subSubjects.some(ss => ss.parent_subject_id === sub.id);
+                                const isSelected = selectedSubjects.includes(sub.id);
+
+                                return (
+                                    <div key={sub.id} className={`col-span-1 ${isSelected && hasSub ? 'sm:col-span-2' : ''} transition-all duration-300`}>
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleSubject(sub.id)}
+                                            className={`w-full h-16 px-5 rounded-2xl border-2 transition-all flex items-center justify-between group ${isSelected ? 'border-blue-600 bg-blue-50/30 shadow-md shadow-blue-100' : 'border-slate-50 bg-slate-50 hover:border-blue-200'}`}
+                                        >
+                                            <span className={`font-bold ${isSelected ? 'text-blue-700' : 'text-slate-600'}`}>{sub.name}</span>
+                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white scale-110' : 'border-slate-200 bg-white'}`}>
+                                                {isSelected && <CheckCircle2 size={14} strokeWidth={3} />}
+                                            </div>
+                                        </button>
+
+                                        {isSelected && hasSub && (
+                                            <div className="mt-3 p-4 bg-blue-50/50 rounded-[1.5rem] border border-blue-100 animate-in zoom-in-95 duration-300">
+                                                <div className="flex flex-wrap gap-2">
+                                                    {subSubjects.filter(ss => ss.parent_subject_id === sub.id).map(ss => (
+                                                        <button key={ss.id} type="button" onClick={() => toggleSubSubject(ss.id)} className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all ${selectedSubSubjects.includes(ss.id) ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-white text-slate-400 border border-slate-100'}`}>
+                                                            {ss.name}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    <button disabled={loading} className="w-full h-16 bg-slate-900 text-white rounded-[2rem] font-black text-xl shadow-xl active:scale-95 transition-all disabled:bg-slate-300 flex items-center justify-center gap-3">
+                        {loading ? <Loader2 className="animate-spin" /> : "ยืนยันการลงทะเบียน"}
+                    </button>
+                </form>
             </div>
         </div>
     )
 }
-
-// เพิ่มมอดอลนี้เข้าไปใน StudentManagement.tsx
-
-// function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
-//     const [loading, setLoading] = useState(false);
-//     const [siteSearch, setSiteSearch] = useState("");
-//     const [activeEditIdx, setActiveEditIdx] = useState<number | null>(null);
-//     const [form, setForm] = useState<any>({
-//         student_code: '', prefix: 'นางสาว', first_name: '', last_name: '',
-//         phone: '', email: '',
-//         assignments: []
-//     });
-
-//     // เตรียมผลัดการฝึกอัตโนมัติเมื่อเปิดมอดอล
-//     useEffect(() => {
-//         if (isOpen) {
-//             const initRotations = async () => {
-//                 const { data } = await supabase.from('rotations').select('*').order('round_number', { ascending: true }).limit(3);
-//                 if (data) {
-//                     setForm((prev: any) => ({
-//                         ...prev,
-//                         assignments: data.map(r => ({
-//                             rotation_id: r.id,
-//                             rotation_name: r.name,
-//                             site_id: "",
-//                             supervisor_ids: []
-//                         }))
-//                     }));
-//                 }
-//             };
-//             initRotations();
-//         }
-//     }, [isOpen]);
-
-//     const handleSave = async () => {
-//         if (!form.student_code || !form.first_name) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
-
-//         setLoading(true);
-//         try {
-//             // 1. เพิ่มนักศึกษา
-//             const { data: student, error: stError } = await supabase.from('students').insert([{
-//                 student_code: form.student_code, prefix: form.prefix,
-//                 first_name: form.first_name, last_name: form.last_name,
-//                 phone: form.phone, email: form.email
-//             }]).select().single();
-//             if (stError) throw stError;
-
-//             // 2. เพิ่มผลัดและพี่เลี้ยง
-//             for (const as of form.assignments) {
-//                 if (as.site_id) {
-//                     const { data: assignment } = await supabase.from('student_assignments').insert([{
-//                         student_id: student.id, rotation_id: as.rotation_id,
-//                         site_id: as.site_id, status: 'active'
-//                     }]).select().single();
-
-//                     if (as.supervisor_ids.length > 0) {
-//                         const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-//                             assignment_id: assignment.id, supervisor_id: sId
-//                         }));
-//                         await supabase.from('assignment_supervisors').insert(mentorRecords);
-//                     }
-//                 }
-//             }
-
-//             Swal.fire({ icon: 'success', title: 'เพิ่มนักศึกษาสำเร็จ', timer: 1500, showConfirmButton: false });
-//             fetchData();
-//             onClose();
-//         } catch (e: any) { Swal.fire('Error', e.message, 'error'); }
-//         finally { setLoading(false); }
-//     };
-
-//     return (
-//         <Dialog open={isOpen} onOpenChange={onClose}>
-//             <DialogContent className="max-w-5xl rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl bg-white focus:outline-none">
-//                 <div className="flex flex-col h-[90vh]">
-//                     <div className="px-10 py-6 border-b border-slate-50 flex justify-between items-center bg-blue-600 text-white">
-//                         <div className="flex items-center gap-3">
-//                             <Plus size={24} />
-//                             <h2 className="text-xl font-black uppercase tracking-tight">เพิ่มนักศึกษาใหม่ (Manual Add)</h2>
-//                         </div>
-//                         <Button onClick={onClose} variant="ghost" className="text-white hover:bg-blue-700 rounded-full w-10 h-10 p-0"><X size={20} /></Button>
-//                     </div>
-
-//                     <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-10">
-//                         {/* ส่วนข้อมูลส่วนตัว */}
-//                         <div className="bg-slate-50 p-8 rounded-[2rem] space-y-6">
-//                             <div className="grid grid-cols-3 gap-4">
-//                                 <div className="space-y-2">
-//                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสนักศึกษา</label>
-//                                     <Input value={form.student_code} onChange={e => setForm({ ...form, student_code: e.target.value })} className="h-12 rounded-xl bg-white border-none font-bold shadow-sm" placeholder="เช่น 64XXXXX" />
-//                                 </div>
-//                                 <div className="space-y-2">
-//                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อ</label>
-//                                     <div className="flex gap-2">
-//                                         <select className="h-12 rounded-xl bg-white border-none font-bold shadow-sm px-3 text-sm" value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value })}>
-//                                             <option>นางสาว</option><option>นาย</option>
-//                                         </select>
-
-//                                         <Input value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} className="h-12 rounded-xl bg-white border-none font-bold shadow-sm flex-1" />
-//                                     </div>
-//                                 </div>
-//                                 <div className="space-y-2">
-//                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">นามสกุล</label>
-//                                     <Input value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} className="h-12 rounded-xl bg-white border-none font-bold shadow-sm" />
-//                                 </div>
-//                             </div>
-//                         </div>
-
-//                         {/* ส่วนจัดสรรผลัด */}
-//                         <div className="space-y-6">
-//                             <label className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-//                                 <Hospital size={18} className="text-blue-500" /> การจัดการสถานที่ฝึกงานและพี่เลี้ยง
-//                             </label>
-//                             <div className="grid grid-cols-1 gap-4">
-//                                 {form.assignments.map((as: any, idx: number) => (
-//                                     <div key={idx} className="p-6 border border-slate-100 rounded-[2rem] bg-white shadow-sm flex gap-6">
-//                                         <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black shrink-0">{idx + 1}</div>
-//                                         <div className="flex-1 space-y-4">
-//                                             <div className="relative">
-//                                                 <Input
-//                                                     placeholder="ค้นหา รพ./จังหวัด..."
-//                                                     className="h-11 rounded-xl bg-slate-50 border-none font-bold text-xs"
-//                                                     onFocus={() => setActiveEditIdx(idx)}
-//                                                     onChange={(e) => setSiteSearch(e.target.value)}
-//                                                 />
-//                                                 {activeEditIdx === idx && (
-//                                                     <div className="absolute z-50 w-full mt-1 bg-white rounded-xl shadow-xl border p-2 max-h-40 overflow-auto">
-//                                                         {sites.filter((s: any) => s.site_name.includes(siteSearch) || s.province.includes(siteSearch)).map((s: any) => (
-//                                                             <div key={s.id} onClick={() => {
-//                                                                 const nAs = [...form.assignments];
-//                                                                 nAs[idx].site_id = s.id;
-//                                                                 nAs[idx].site_name = s.site_name;
-//                                                                 setForm({ ...form, assignments: nAs });
-//                                                                 setActiveEditIdx(null);
-//                                                             }} className="p-2 hover:bg-blue-50 cursor-pointer rounded-lg text-xs font-bold">{s.site_name} ({s.province})</div>
-//                                                         ))}
-//                                                     </div>
-//                                                 )}
-//                                                 {as.site_name && <p className="mt-1 text-blue-600 text-[10px] font-black uppercase">เลือกแล้ว: {as.site_name}</p>}
-//                                             </div>
-
-//                                             {/* เลือกพี่เลี้ยง */}
-//                                             <div className="flex flex-wrap gap-2">
-//                                                 {mentors.filter((m: any) => m.site_id === as.site_id).map((m: any) => (
-//                                                     <button key={m.id} onClick={() => {
-//                                                         const nAs = [...form.assignments];
-//                                                         const current = nAs[idx].supervisor_ids;
-//                                                         nAs[idx].supervisor_ids = current.includes(m.id) ? current.filter((id: any) => id !== m.id) : [...current, m.id];
-//                                                         setForm({ ...form, assignments: nAs });
-//                                                     }} className={`px-3 py-1.5 rounded-lg text-[9px] font-black border transition-all ${as.supervisor_ids.includes(m.id) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white text-slate-400 border-slate-100'}`}>{m.full_name}</button>
-//                                                 ))}
-//                                             </div>
-//                                         </div>
-//                                     </div>
-//                                 ))}
-//                             </div>
-//                         </div>
-//                     </div>
-
-//                     <div className="p-8 border-t bg-slate-50">
-//                         <Button onClick={handleSave} disabled={loading} className="w-full h-16 rounded-2xl bg-slate-900 font-black text-lg gap-3">
-//                             {loading ? <Loader2 className="animate-spin" /> : <Save />} บันทึกและเพิ่มรายชื่อนักศึกษา
-//                         </Button>
-//                     </div>
-//                 </div>
-//             </DialogContent>
-//         </Dialog>
-//     );
-// }
