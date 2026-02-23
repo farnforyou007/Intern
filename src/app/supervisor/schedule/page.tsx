@@ -25,9 +25,9 @@
 // //     const fetchData = async () => {
 // //         setLoading(true)
 // //         const userId = 'U678862bd992a4cda7aaf972743b585ac' // จำลอง ID
-        
+
 // //         const { data: sv } = await supabase.from('supervisors').select('id, site_id').eq('line_user_id', userId).single()
-        
+
 // //         if (sv) {
 // //             const { data, error } = await supabase
 // //                 .from('student_assignments')
@@ -42,7 +42,7 @@
 // //             if (!error && data) {
 // //                 // 🛠️ Logic การจัดกลุ่ม (Group by Rotation + Subject)
 // //                 const groups: { [key: string]: any } = {}
-                
+
 // //                 data.forEach((item: any) => {
 // //                     const rotationId = item.rotations?.id
 // //                     const subjectId = item.subjects?.id
@@ -141,7 +141,7 @@
 // //                                             {group.subjectName}
 // //                                         </h3>
 // //                                     </div>
-                                    
+
 // //                                     {/* Countdown Circle */}
 // //                                     <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-2xl border-2 ${daysLeft < 0 ? 'border-slate-100 bg-slate-50 text-slate-300' : isEndingSoon ? 'border-amber-100 bg-amber-50 text-amber-600' : 'border-emerald-50 bg-emerald-50 text-emerald-600'}`}>
 // //                                         <span className="text-lg font-black leading-none">{daysLeft < 0 ? '-' : daysLeft}</span>
@@ -164,7 +164,7 @@
 // //                                             </span>
 // //                                         )}
 // //                                     </div>
-                                    
+
 // //                                     {/* Simple Progress Bar (Optional) */}
 // //                                     <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
 // //                                         <div 
@@ -183,7 +183,7 @@
 // //                     </div>
 // //                 )}
 // //             </div>
-            
+
 // //             {/* Bottom Gradient Fade */}
 // //             <div className="fixed bottom-0 left-0 w-full h-12 bg-gradient-to-t from-[#F8FAFC] to-transparent pointer-events-none" />
 // //         </div>
@@ -219,9 +219,9 @@
 //     const fetchData = async () => {
 //         setLoading(true)
 //         const userId = 'U678862bd992a4cda7aaf972743b585ac' // LIFF ID
-        
+
 //         const { data: sv } = await supabase.from('supervisors').select('id, site_id').eq('line_user_id', userId).single()
-        
+
 //         if (sv) {
 //             const { data, error } = await supabase
 //                 .from('student_assignments')
@@ -236,11 +236,11 @@
 //             if (!error && data) {
 //                 // 🛠️ Logic: รวมกลุ่มตาม Rotation ID
 //                 const groups: { [key: string]: any } = {}
-                
+
 //                 data.forEach((item: any) => {
 //                     const r = item.rotations
 //                     if (!r) return
-                    
+
 //                     if (!groups[r.id]) {
 //                         groups[r.id] = {
 //                             rotation: r,
@@ -248,7 +248,7 @@
 //                             studentIds: new Set<string>()
 //                         }
 //                     }
-                    
+
 //                     const subName = item.sub_subjects?.name || item.subjects?.name
 //                     if (subName) groups[r.id].subjects.add(subName)
 //                     groups[r.id].studentIds.add(item.student_id)
@@ -379,8 +379,8 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
-import { 
-    Search, ArrowLeft, Calendar, 
+import {
+    Search, ArrowLeft, Calendar,
     Clock, AlertCircle, Users, BookOpen
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -402,10 +402,11 @@ export default function RotationSchedule() {
 
     const fetchData = async () => {
         setLoading(true)
-        const userId = 'U678862bd992a4cda7aaf972743b585ac' 
-        
+        // const userId = 'U678862bd992a4cda7aaf972743b585ac' 
+        const userId = 'test-somruk'
+
         const { data: sv } = await supabase.from('supervisors').select('id, site_id').eq('line_user_id', userId).single()
-        
+
         if (sv) {
             const { data, error } = await supabase
                 .from('student_assignments')
@@ -419,11 +420,11 @@ export default function RotationSchedule() {
 
             if (!error && data) {
                 const groups: { [key: string]: any } = {}
-                
+
                 data.forEach((item: any) => {
                     const r = item.rotations
                     if (!r) return
-                    
+
                     if (!groups[r.id]) {
                         groups[r.id] = {
                             rotation: r,
@@ -431,7 +432,7 @@ export default function RotationSchedule() {
                             studentIds: new Set<string>()
                         }
                     }
-                    
+
                     const subName = item.sub_subjects?.name || item.subjects?.name
                     if (subName) groups[r.id].subjects.add(subName)
                     groups[r.id].studentIds.add(item.student_id)
@@ -456,7 +457,7 @@ export default function RotationSchedule() {
         return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     }
 
-    const filteredList = groupedSchedule.filter(g => 
+    const filteredList = groupedSchedule.filter(g =>
         g.rotation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         g.subjects.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase()))
     )
@@ -480,9 +481,9 @@ export default function RotationSchedule() {
 
                 <div className="relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input 
-                        type="text" 
-                        placeholder="ค้นหาผลัด หรือ วิชา..." 
+                    <input
+                        type="text"
+                        placeholder="ค้นหาผลัด หรือ วิชา..."
                         className="w-full h-12 pl-12 pr-4 rounded-2xl bg-slate-100 outline-none font-bold text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -514,7 +515,7 @@ export default function RotationSchedule() {
                                                 <span>{group.studentCount} คน</span>
                                             </div>
                                         </div>
-                                        
+
                                         <div className="flex flex-wrap gap-1.5">
                                             {/* ✅ แก้ไข Error .map() โดยการใส่ ?. */}
                                             {group.subjects?.map((s: string) => (
@@ -526,13 +527,12 @@ export default function RotationSchedule() {
                                     </div>
 
                                     {/* 🎯 สไตล์ Countdown แบบกล่องตัวเลขใหญ่ (ไสตล์ก่อนหน้า) */}
-                                    <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-2xl border-2 shrink-0 shadow-sm ${
-                                        daysLeft < 0 
-                                        ? 'border-slate-100 bg-slate-50 text-slate-300' 
-                                        : isEndingSoon 
-                                        ? 'border-amber-100 bg-amber-50 text-amber-600' 
-                                        : 'border-emerald-50 bg-emerald-50 text-emerald-600'
-                                    }`}>
+                                    <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-2xl border-2 shrink-0 shadow-sm ${daysLeft < 0
+                                            ? 'border-slate-100 bg-slate-50 text-slate-300'
+                                            : isEndingSoon
+                                                ? 'border-amber-100 bg-amber-50 text-amber-600'
+                                                : 'border-emerald-50 bg-emerald-50 text-emerald-600'
+                                        }`}>
                                         <span className="text-lg font-black leading-none">
                                             {daysLeft < 0 ? '-' : daysLeft}
                                         </span>

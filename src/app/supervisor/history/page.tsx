@@ -23,7 +23,8 @@ export default function EvaluationHistory() {
     useEffect(() => {
         const init = async () => {
             // 1. จำลอง User (ของจริงใช้ LIFF)
-            const userId = 'U678862bd992a4cda7aaf972743b585ac'
+            // const userId = 'U678862bd992a4cda7aaf972743b585ac'
+            const userId = 'test-somruk'
 
             // 2. ดึงข้อมูลพี่เลี้ยง
             const { data: sv } = await supabase.from('supervisors').select('id').eq('line_user_id', userId).single()

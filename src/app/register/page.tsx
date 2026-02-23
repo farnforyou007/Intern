@@ -624,8 +624,8 @@ export default function SmartRegister() {
                 //     liff.login({ redirectUri: window.location.href });
                 //     // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
                 // }
-                setLineUserId("test-c");
-                setLineDisplayName("Tester Teacher");
+                setLineUserId("test-somruk");
+                setLineDisplayName("Tester Teacher somruk");
             } catch (err) {
                 console.error("LIFF Init Error", err)
 

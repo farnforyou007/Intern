@@ -689,7 +689,7 @@ export default function TeacherDashboard() {
             ? assignments
             : assignments.filter(a => a.subject_id === subjectId);
 
-        const total = filtered.length; // จำนวนรายการทั้งหมด
+        const total = filtered.length;
         const evaluated = filtered.filter((a: any) =>
             a.assignment_supervisors?.some((sv: any) => sv.is_evaluated === true)
         ).length;
@@ -883,7 +883,6 @@ export default function TeacherDashboard() {
 
                     {/* --- KPI Cards Section --- */}
                     <div className="grid grid-cols-12 gap-3 mb-4">
-                        {/* 🚩 แก้ไขจุดที่ 2: ปรับความกว้างกล่องสีขาว (col-span-8) */}
                         <div className="col-span-8 bg-white/90 backdrop-blur-md p-4 rounded-[2.5rem] shadow-sm flex items-center gap-3">
                             <div className="relative w-12 h-12 shrink-0">
                                 <svg className="w-full h-full transform -rotate-90">
@@ -904,7 +903,6 @@ export default function TeacherDashboard() {
                             </div>
                         </div>
 
-                        {/* 🚩 แก้ไขจุดที่ 3: ปรับความกว้างกล่อง Indigo (col-span-4) */}
                         <div className="col-span-4 bg-indigo-600 p-4 rounded-[2.5rem] text-white flex flex-col items-center justify-center shadow-lg shadow-indigo-200 active:scale-95 transition-all">
                             <span className="text-2xl font-black leading-none">
                                 {[...new Set((selectedSubject === 'all' ? allAssignments : allAssignments.filter(a => a.subject_id === selectedSubject)).map(a => a.student_id))].length}

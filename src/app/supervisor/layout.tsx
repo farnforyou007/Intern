@@ -84,9 +84,10 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                 // }
                 // const profile = await liff.getProfile()
                 // const lineUserId = profile.userId
-                
+
                 // 🛠️ ช่วง DEV: ใช้ Mock ID ของพี่ก่อน (ตัวอย่าง)
-                const lineUserId = 'U678862bd992a4cda7aaf972743b585ac' 
+                // const lineUserId = 'U678862bd992a4cda7aaf972743b585ac'
+                const lineUserId = 'test-somruk'
 
                 const { data: user } = await supabase
                     .from('supervisors')

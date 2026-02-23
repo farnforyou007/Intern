@@ -242,6 +242,31 @@ export default function EvaluationPage() {
         await saveDataToSupabase()
 
         if (isFinal) {
+            // 🚩 เช็คว่าตอบครบทุกข้อทุกหมวดหรือยัง
+            const totalItems = groups.reduce((sum: number, g: any) => sum + (g.evaluation_items?.length || 0), 0)
+            const answeredItems = groups.reduce((sum: number, g: any) => {
+                return sum + (g.evaluation_items?.filter((item: any) => scores[item.id] !== undefined).length || 0)
+            }, 0)
+
+            if (answeredItems < totalItems) {
+                const remaining = totalItems - answeredItems
+                const result = await Swal.fire({
+                    icon: 'warning',
+                    title: 'ยังประเมินไม่ครบ',
+                    html: `<p>ยังเหลืออีก <b>${remaining}</b> ข้อ จากทั้งหมด <b>${totalItems}</b> ข้อ</p><p class="text-sm text-slate-400 mt-2">ต้องการบันทึกและส่งผลอยู่หรือไม่?</p>`,
+                    showCancelButton: true,
+                    confirmButtonText: 'ส่งเลย',
+                    cancelButtonText: 'กลับไปทำต่อ',
+                    confirmButtonColor: '#064e3b',
+                    cancelButtonColor: '#94a3b8',
+                    customClass: { popup: 'rounded-[2.5rem] p-6 font-sans' }
+                })
+                if (!result.isConfirmed) {
+                    setSaving(false)
+                    return
+                }
+            }
+
             await supabase.from('assignment_supervisors').update({ is_evaluated: true }).eq('id', id)
             Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: 'ส่งผลการประเมินเรียบร้อยแล้ว', timer: 2000, showConfirmButton: false })
             router.back()

@@ -19,7 +19,7 @@ export default function SupervisorDashboard() {
     const router = useRouter()
     const [loading, setLoading] = useState(true)
     const [supervisor, setSupervisor] = useState<any>(null)
-    const [stats, setStats] = useState({ total: 0, evaluated: 0, pending: 0 })
+    const [stats, setStats] = useState({ total: 0, evaluated: 0, pending: 0, partial: 0 })
     const [daysLeft, setDaysLeft] = useState<number | null>(null)
     const [pendingStudentsCount, setPendingStudentsCount] = useState(0)
     const [alertStatus, setAlertStatus] = useState<'normal' | 'overdue'>('normal') // เพิ่มบรรทัดนี้
@@ -38,7 +38,7 @@ export default function SupervisorDashboard() {
                     sites: { name: "รพ.สมเด็จพระยุพราชสายบุรี" },
                     avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
                 })
-                setStats({ total: 12, evaluated: 8, pending: 4 })
+                setStats({ total: 12, evaluated: 8, pending: 2, partial: 2 })
                 setLoading(false)
             }, 1500)
         } else {
@@ -157,7 +157,8 @@ export default function SupervisorDashboard() {
 
             // ❌ ลบส่วนจำลอง (Hardcode) นี้ทิ้งไปได้เลยครับ
             const profile = {
-                userId: 'U678862bd992a4cda7aaf972743b585ac',
+                // userId: 'U678862bd992a4cda7aaf972743b585ac',
+                userId: 'test-somruk',
                 displayName: '🐼 FARN 🌙'
             };
 
@@ -190,6 +191,7 @@ export default function SupervisorDashboard() {
                 .select(`
                     is_evaluated,
                     student_assignments:assignment_id (
+                        id,
                         student_id,
                         students:student_id ( id ), 
                         sub_subjects ( name ),
@@ -280,7 +282,27 @@ export default function SupervisorDashboard() {
 
                 const totalMyStudentsCount = new Set(uniqueStudentIds).size;
                 const evaluatedCount = assignments.filter((a: any) => a.is_evaluated).length;
-                const pendingTasksCount = assignments.length - evaluatedCount;
+
+                // 🟡 ดึง evaluation_logs แยก เพื่อหาว่า assignment ไหน "ประเมินบางส่วน"
+                const notEvaluatedAssignments = assignments.filter((a: any) => !a.is_evaluated);
+                const notEvalAssignmentIds = notEvaluatedAssignments
+                    .map((a: any) => a.student_assignments?.id)
+                    .filter(Boolean);
+
+                let partialCount = 0;
+                if (notEvalAssignmentIds.length > 0) {
+                    const { data: logs } = await supabase
+                        .from('evaluation_logs')
+                        .select('assignment_id')
+                        .eq('supervisor_id', svData.id)
+                        .in('assignment_id', notEvalAssignmentIds);
+                    const logsSet = new Set((logs || []).map((l: any) => l.assignment_id));
+                    partialCount = notEvaluatedAssignments.filter((a: any) =>
+                        logsSet.has(a.student_assignments?.id)
+                    ).length;
+                }
+
+                const pendingTasksCount = assignments.length - evaluatedCount - partialCount;
 
                 const pendingPeopleCount = new Set(
                     pendingTasksData
@@ -292,7 +314,8 @@ export default function SupervisorDashboard() {
                 setStats({
                     total: totalMyStudentsCount,
                     evaluated: evaluatedCount,
-                    pending: pendingTasksCount
+                    pending: pendingTasksCount,
+                    partial: partialCount
                 });
             }
         } catch (error) {
@@ -400,10 +423,11 @@ export default function SupervisorDashboard() {
                     <KPICard label="ยังไม่ประเมิน" value={stats.pending} icon={<AlertCircle size={16} />} color="bg-rose-500/40 text-rose-100" />
                 </div> */}
 
-                <div className="p-2 relative z-10 grid grid-cols-3 gap-4">
+                <div className="p-2 relative z-10 grid grid-cols-2 gap-3">
                     <KPICard label="นศ. ในความดูแล" value={stats.total} icon={<Users size={16} />} color="bg-white/10 text-white" />
-                    <KPICard label="ประเมินแล้ว (รายการ)" value={stats.evaluated} icon={<CheckCircle size={16} />} color="bg-emerald-500/40 text-emerald-100" />
-                    <KPICard label="ยังไม่ประเมิน (รายการ)" value={stats.pending} icon={<AlertCircle size={16} />} color="bg-rose-500/40 text-rose-100" />
+                    <KPICard label="ประเมินครบ" value={stats.evaluated} icon={<CheckCircle size={16} />} color="bg-emerald-500/40 text-emerald-100" />
+                    <KPICard label="ประเมินบางส่วน" value={stats.partial} icon={<Clock size={16} />} color="bg-amber-500/40 text-amber-100" />
+                    <KPICard label="ยังไม่ประเมิน" value={stats.pending} icon={<AlertCircle size={16} />} color="bg-rose-500/40 text-rose-100" />
                 </div>
 
 

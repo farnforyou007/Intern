@@ -16,7 +16,7 @@ export default function EvaluationSummary() {
     const searchParams = useSearchParams()
     const subjectId = searchParams.get('id') || 'all'
 
-    const [viewMode, setViewMode] = useState<'list' | 'overview'>('list')
+
     const [loading, setLoading] = useState(true)
     const [subjects, setSubjects] = useState<any[]>([])
     const [data, setData] = useState<any[]>([])
@@ -593,82 +593,65 @@ export default function EvaluationSummary() {
                             <button key={i} onClick={() => handleFilterChange(s.subject_id)} className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${String(subjectId) === String(s.subject_id) ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{s.subjects.name}</button>
                         ))}
                     </div>
-
-                    <div className="flex p-1 bg-slate-100 rounded-[1.2rem] mx-2">
-                        <button onClick={() => setViewMode('list')} className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-400'}`}>รายชื่อนักศึกษา</button>
-                        <button onClick={() => setViewMode('overview')} className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${viewMode === 'overview' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-400'}`}>สถิติภาพรวม</button>
-                    </div>
                 </div>
             </div>
 
-            {/* Student List: ปรับปรุง Card สำหรับมือถือ */}
+            {/* Student List */}
             <div className="max-w-4xl mx-auto px-4 mt-8 space-y-4">
-                {viewMode === 'list' ? (
-                    <>
-
-                        <div className="flex gap-3 px-2 mb-8 items-center">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนักศึกษา..." className="w-full bg-white border border-slate-200 rounded-2xl py-4.5 pl-14 pr-4 text-sm font-bold shadow-sm focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all" onChange={(e) => setSearchTerm(e.target.value)} />
-                            </div>
-                            <button onClick={handleExportExcel} className="h-[54px] px-6 bg-emerald-600 text-white rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-100 hover:bg-emerald-700 active:scale-95 transition-all shrink-0">
-                                <FileSpreadsheet size={18} />
-                                <span className="hidden sm:inline">EXPORT EXCEL</span>
-                            </button>
-                        </div>
-
-                        {filteredData.map((item, idx) => {
-                            const totalNet = item.evaluations.reduce((acc: number, ev: any) => {
-                                const max = (ev.answers?.length || 8) * 5; // Default 40
-                                return acc + (ev.rawScore / max * (ev.weight * 100));
-                            }, 0).toFixed(2);
-                            const isMultiMentor = item.mentorCount > 1;
-
-                            return (
-                                <div key={idx} className="bg-white p-5 rounded-[2.2rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 hover:border-indigo-300 transition-all relative overflow-hidden group">
-                                    <div className="flex items-center gap-4 flex-1">
-                                        <div className="w-14 h-14 rounded-2xl bg-slate-50 overflow-hidden shrink-0 border border-slate-100">
-                                            {item.student?.avatar_url ? <img src={item.student.avatar_url} className="w-full h-full object-cover" /> : <User size={20} className="m-auto mt-4 text-slate-200" />}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <h3 className="font-black text-slate-800 text-base leading-tight truncate">{item.student?.first_name} {item.student?.last_name}</h3>
-                                            <p className="text-[10px] font-bold text-slate-400 mt-0.5 tracking-tight uppercase">รหัส: {item.student?.student_code}</p>
-                                            {isMultiMentor && (
-                                                <p className="text-[9px] font-black text-violet-500 mt-1 flex items-center gap-1"><Users size={10} /> {item.mentorCount} พี่เลี้ยงประเมิน</p>
-                                            )}
-                                        </div>
-                                        <div className="text-right sm:hidden pr-2">
-                                            <p className="text-xl font-black text-indigo-600 leading-none">{totalNet}</p>
-                                            <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">{isMultiMentor ? 'Avg Net' : 'Net %'}</p>
-                                        </div>
-                                    </div>
-
-                                    {/* ส่วนข้อมูลที่ขยายบนมือถือ */}
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 sm:border-l sm:pl-6 border-slate-50">
-                                        <div className="flex flex-col gap-1 flex-1">
-                                            <div className="flex items-center gap-2 text-[10px] font-black text-indigo-500 uppercase"><BookOpen size={10} /> {item.subjectName}</div>
-                                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase"><MapPin size={10} /> {item.place?.site_name || 'ไม่ระบุสถานที่'}</div>
-                                        </div>
-                                        <div className="hidden sm:block text-right min-w-[70px]">
-                                            <p className="text-2xl font-black text-indigo-600 leading-none">{totalNet}</p>
-                                            <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">{isMultiMentor ? 'Avg Net' : 'Net Score'}</p>
-                                        </div>
-                                        <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                                            <button onClick={() => { setSelectedStudent(item); setModalMode('summary'); setIsModalOpen(true); setSelectedSupervisorIdx(0); }} className="flex-1 sm:flex-none h-11 px-4 sm:px-0 sm:w-11 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><FileText size={18} /></button>
-                                            <button onClick={() => openDetailModal(item)} className="flex-1 sm:flex-none h-11 px-4 sm:px-0 sm:w-11 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><ListChecks size={18} /></button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </>
-                ) : (
-                    <div className="bg-indigo-600 p-10 rounded-[3rem] text-white shadow-xl relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
-                        <h2 className="text-3xl font-black mb-1">Analytics Summary</h2>
-                        <p className="opacity-70 text-xs font-bold uppercase tracking-widest tracking-tighter">ประมวลผลจากนิสิตทั้งหมด {data.length} คน</p>
+                <div className="flex gap-3 px-2 mb-8 items-center">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนักศึกษา..." className="w-full bg-white border border-slate-200 rounded-2xl py-4.5 pl-14 pr-4 text-sm font-bold shadow-sm focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all" onChange={(e) => setSearchTerm(e.target.value)} />
                     </div>
-                )}
+                    <button onClick={handleExportExcel} className="h-[54px] px-6 bg-emerald-600 text-white rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-100 hover:bg-emerald-700 active:scale-95 transition-all shrink-0">
+                        <FileSpreadsheet size={18} />
+                        <span className="hidden sm:inline">EXPORT EXCEL</span>
+                    </button>
+                </div>
+
+                {filteredData.map((item, idx) => {
+                    const totalNet = item.evaluations.reduce((acc: number, ev: any) => {
+                        const max = (ev.answers?.length || 8) * 5;
+                        return acc + (ev.rawScore / max * (ev.weight * 100));
+                    }, 0).toFixed(2);
+                    const isMultiMentor = item.mentorCount > 1;
+
+                    return (
+                        <div key={idx} className="bg-white p-5 rounded-[2.2rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 hover:border-indigo-300 transition-all relative overflow-hidden group">
+                            <div className="flex items-center gap-4 flex-1">
+                                <div className="w-14 h-14 rounded-2xl bg-slate-50 overflow-hidden shrink-0 border border-slate-100">
+                                    {item.student?.avatar_url ? <img src={item.student.avatar_url} className="w-full h-full object-cover" /> : <User size={20} className="m-auto mt-4 text-slate-200" />}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="font-black text-slate-800 text-base leading-tight truncate">{item.student?.first_name} {item.student?.last_name}</h3>
+                                    <p className="text-[10px] font-bold text-slate-400 mt-0.5 tracking-tight uppercase">รหัส: {item.student?.student_code}</p>
+                                    {isMultiMentor && (
+                                        <p className="text-[9px] font-black text-violet-500 mt-1 flex items-center gap-1"><Users size={10} /> {item.mentorCount} พี่เลี้ยงประเมิน</p>
+                                    )}
+                                </div>
+                                <div className="text-right sm:hidden pr-2">
+                                    <p className="text-xl font-black text-indigo-600 leading-none">{totalNet}</p>
+                                    <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">{isMultiMentor ? 'Avg Net' : 'Net %'}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 sm:border-l sm:pl-6 border-slate-50">
+                                <div className="flex flex-col gap-1 flex-1">
+                                    <div className="flex items-center gap-2 text-[10px] font-black text-indigo-500 uppercase"><BookOpen size={10} /> {item.subjectName}</div>
+                                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase"><MapPin size={10} /> {item.place?.site_name || 'ไม่ระบุสถานที่'}</div>
+                                </div>
+                                <div className="hidden sm:block text-right min-w-[70px]">
+                                    <p className="text-2xl font-black text-indigo-600 leading-none">{totalNet}</p>
+                                    <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">{isMultiMentor ? 'Avg Net' : 'Net Score'}</p>
+                                </div>
+                                <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                                    <button onClick={() => { setSelectedStudent(item); setModalMode('summary'); setIsModalOpen(true); setSelectedSupervisorIdx(0); }} className="flex-1 sm:flex-none h-11 px-4 sm:px-0 sm:w-11 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><FileText size={18} /></button>
+                                    <button onClick={() => openDetailModal(item)} className="flex-1 sm:flex-none h-11 px-4 sm:px-0 sm:w-11 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><ListChecks size={18} /></button>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })}
             </div>
 
             {/* Modal: สวยงามและครบถ้วน */}

@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     Users, Hospital, BookOpen, GraduationCap,
-    AlertCircle, Clock, UserPlus, CheckCircle2, 
-    ArrowUpRight, ListFilter, TrendingUp, FileText, 
+    AlertCircle, Clock, UserPlus, CheckCircle2,
+    ArrowUpRight, ListFilter, TrendingUp, FileText,
     Activity, BellRing
 } from 'lucide-react'
 import Link from 'next/link'
@@ -40,7 +40,7 @@ export default function AdminDashboard() {
         pendingSupervisors: 0,
         subjects: 0
     })
-    
+
     // เก็บข้อมูลแยกตามประเภท
     const [rawActivities, setRawActivities] = useState({
         supervisors: [],
@@ -57,7 +57,7 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         fetchData()
-        
+
         // Real-time Listener
         const channel = supabase.channel('admin-dashboard-realtime')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => fetchData())
@@ -107,20 +107,20 @@ export default function AdminDashboard() {
                     id: `sv-${item.id}`, type: 'supervisor',
                     text: item.is_verified ? `อนุมัติ: คุณ${item.full_name}` : `สมัครใหม่: คุณ${item.full_name}`,
                     rawTime: item.created_at, time: timeAgo(item.created_at),
-                    icon: item.is_verified ? <CheckCircle2 size={14}/> : <Users size={14}/>,
+                    icon: item.is_verified ? <CheckCircle2 size={14} /> : <Users size={14} />,
                     color: item.is_verified ? "bg-emerald-100 text-emerald-600" : "bg-orange-100 text-orange-600"
                 })) as never[],
                 sites: (newSites.data || []).map((item: any) => ({
                     id: `st-${item.id}`, type: 'site',
                     text: `เพิ่มแหล่งฝึก: ${item.site_name}`,
                     rawTime: item.created_at, time: timeAgo(item.created_at),
-                    icon: <Hospital size={14}/>, color: "bg-blue-100 text-blue-600"
+                    icon: <Hospital size={14} />, color: "bg-blue-100 text-blue-600"
                 })) as never[],
                 students: (newStudents.data || []).map((item: any) => ({
                     id: `std-${item.id}`, type: 'student',
                     text: `นศ. ใหม่: ${item.first_name} ${item.last_name}`,
                     rawTime: item.created_at, time: timeAgo(item.created_at),
-                    icon: <UserPlus size={14}/>, color: "bg-purple-100 text-purple-600"
+                    icon: <UserPlus size={14} />, color: "bg-purple-100 text-purple-600"
                 })) as never[]
             });
 
@@ -170,7 +170,7 @@ export default function AdminDashboard() {
     return (
         <AdminLayout>
             <div className="max-w-7xl mx-auto space-y-8 font-sans">
-                
+
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                     <div>
@@ -194,7 +194,7 @@ export default function AdminDashboard() {
                             <h3 className="text-lg font-black text-orange-800">มีการร้องขอสิทธิ์เข้าใช้งาน {stats.pendingSupervisors} รายการ</h3>
                             <p className="text-orange-600/80 text-sm mt-1">พี่เลี้ยงลงทะเบียนใหม่ กำลังรอการอนุมัติ</p>
                         </div>
-                        <Link href="/admin/personnel">
+                        <Link href="/admin/supervisors">
                             <button className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-orange-200 transition-all active:scale-95">ตรวจสอบ</button>
                         </Link>
                     </div>
@@ -210,24 +210,24 @@ export default function AdminDashboard() {
 
                 {/* Main Content */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    
+
                     {/* Left Column (Menu & Chart) */}
                     <div className="lg:col-span-2 space-y-8">
                         {/* Quick Menu */}
                         <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
                             <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
-                                <ArrowUpRight size={24} className="text-slate-400"/> เมนูด่วน
+                                <ArrowUpRight size={24} className="text-slate-400" /> เมนูด่วน
                             </h3>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                <QuickMenuCard href="/admin/students" icon={<UserPlus size={24}/>} label="จัดการนักศึกษา" color="text-blue-600 bg-blue-50 hover:bg-blue-100" />
-                                <QuickMenuCard href="/admin/sites" icon={<Hospital size={24}/>} label="จัดการแหล่งฝึก" color="text-emerald-600 bg-emerald-50 hover:bg-emerald-100" />
-                                <QuickMenuCard href="/admin/rotations" icon={<Clock size={24}/>} label="จัดการผลัด" color="text-orange-600 bg-orange-50 hover:bg-orange-100" />
-                                <QuickMenuCard href="/admin/templates" icon={<FileText size={24}/>} label="แบบประเมิน" color="text-pink-600 bg-pink-50 hover:bg-pink-100" />
-                                <QuickMenuCard href="/admin/supervisors" icon={<CheckCircle2 size={24}/>} label="อนุมัติผู้ใช้" color="text-purple-600 bg-purple-50 hover:bg-purple-100" />
+                                <QuickMenuCard href="/admin/students" icon={<UserPlus size={24} />} label="จัดการนักศึกษา" color="text-blue-600 bg-blue-50 hover:bg-blue-100" />
+                                <QuickMenuCard href="/admin/sites" icon={<Hospital size={24} />} label="จัดการแหล่งฝึก" color="text-emerald-600 bg-emerald-50 hover:bg-emerald-100" />
+                                <QuickMenuCard href="/admin/rotations" icon={<Clock size={24} />} label="จัดการผลัด" color="text-orange-600 bg-orange-50 hover:bg-orange-100" />
+                                <QuickMenuCard href="/admin/templates" icon={<FileText size={24} />} label="แบบประเมิน" color="text-pink-600 bg-pink-50 hover:bg-pink-100" />
+                                <QuickMenuCard href="/admin/supervisors" icon={<CheckCircle2 size={24} />} label="อนุมัติผู้ใช้" color="text-purple-600 bg-purple-50 hover:bg-purple-100" />
                                 {/* ปุ่มส่งแจ้งเตือน (เผื่อไว้) */}
                                 <button onClick={handleNotify} className="flex flex-col items-center justify-center gap-3 p-6 rounded-[1.8rem] border border-transparent transition-all cursor-pointer group bg-slate-50 hover:bg-slate-100 text-slate-600">
                                     <div className="p-3 rounded-xl bg-white shadow-sm group-hover:scale-110 transition-transform duration-300 text-slate-600">
-                                        <BellRing size={24}/>
+                                        <BellRing size={24} />
                                     </div>
                                     <span className="font-bold text-sm text-slate-600">แจ้งเตือน</span>
                                 </button>
@@ -252,23 +252,23 @@ export default function AdminDashboard() {
                     {/* Right Column: Recent Activity */}
                     <div className="space-y-8">
                         <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 h-full flex flex-col min-h-[600px]">
-                            
+
                             {/* Header & Small Filter Tabs */}
                             <div className="flex items-center justify-between mb-6 px-2">
                                 <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                                    <ListFilter size={20} className="text-slate-400"/> ความเคลื่อนไหว
+                                    <ListFilter size={20} className="text-slate-400" /> ความเคลื่อนไหว
                                 </h3>
                                 {/* Small Tabs (Icon Only) */}
                                 <div className="flex bg-slate-100 p-1 rounded-lg gap-1">
-                                    <button 
+                                    <button
                                         onClick={() => setFilterType('all')}
                                         className={`px-3 py-1 rounded-md text-[10px] font-black transition-all ${filterType === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                                     >
                                         ALL
                                     </button>
-                                    <FilterIconBtn active={filterType === 'supervisor'} onClick={() => setFilterType('supervisor')} icon={<Users size={14}/>} />
-                                    <FilterIconBtn active={filterType === 'site'} onClick={() => setFilterType('site')} icon={<Hospital size={14}/>} />
-                                    <FilterIconBtn active={filterType === 'student'} onClick={() => setFilterType('student')} icon={<GraduationCap size={14}/>} />
+                                    <FilterIconBtn active={filterType === 'supervisor'} onClick={() => setFilterType('supervisor')} icon={<Users size={14} />} />
+                                    <FilterIconBtn active={filterType === 'site'} onClick={() => setFilterType('site')} icon={<Hospital size={14} />} />
+                                    <FilterIconBtn active={filterType === 'student'} onClick={() => setFilterType('student')} icon={<GraduationCap size={14} />} />
                                 </div>
                             </div>
 
@@ -310,7 +310,7 @@ export default function AdminDashboard() {
                                     )}
                                 </div>
                             </div>
-                            
+
                             <div className="pt-4 border-t border-slate-50 text-center">
                                 <span className="text-[10px] text-slate-300 font-bold">แสดงข้อมูลล่าสุด</span>
                             </div>
@@ -327,7 +327,7 @@ export default function AdminDashboard() {
 
 function FilterIconBtn({ active, onClick, icon }: any) {
     return (
-        <button 
+        <button
             onClick={onClick}
             className={`w-7 h-7 flex items-center justify-center rounded-md transition-all ${active ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/50'}`}
         >
