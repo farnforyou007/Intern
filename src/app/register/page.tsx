@@ -611,21 +611,21 @@ export default function SmartRegister() {
         const initLiff = async () => {
             try {
                 // ใส่ LIFF ID ที่คุณได้จาก LINE Developers Console
-                // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
 
-                // if (liff.isLoggedIn()) {
-                //     const profile = await liff.getProfile()
-                //     setLineUserId(profile.userId)
-                //     setLineDisplayName(profile.displayName)
-                //     // ถ้าใน LINE มีชื่ออยู่แล้ว สามารถเอามาตั้งเป็นค่าเริ่มต้นได้
+                if (liff.isLoggedIn()) {
+                    const profile = await liff.getProfile()
+                    setLineUserId(profile.userId)
+                    setLineDisplayName(profile.displayName)
+                    // ถ้าใน LINE มีชื่ออยู่แล้ว สามารถเอามาตั้งเป็นค่าเริ่มต้นได้
 
-                // } else {
-                //     // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
-                //     liff.login({ redirectUri: window.location.href });
-                //     // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
-                // }
-                setLineUserId("test-ccc");
-                setLineDisplayName("Tester Teacher ccc");
+                } else {
+                    // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
+                    liff.login({ redirectUri: window.location.href });
+                    // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
+                }
+                // setLineUserId("test-ccc");
+                // setLineDisplayName("Tester Teacher ccc");
             } catch (err) {
                 console.error("LIFF Init Error", err)
 
