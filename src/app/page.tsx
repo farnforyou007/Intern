@@ -298,7 +298,7 @@
 
 //     return (
 //         <div className="min-h-screen bg-white flex flex-col lg:flex-row font-sans">
-            
+
 //             {/* --- ฝั่งซ้าย: Visual Side (ใช้รูปในเครื่อง) --- */}
 //             <div className="relative w-full lg:w-1/2 flex flex-col justify-center p-12 lg:p-24 overflow-hidden min-h-[450px]">
 //                 <Image 
@@ -331,7 +331,7 @@
 //                         </p>
 //                     </div>
 //                 </div>
-                
+
 //                 <div className="absolute bottom-12 left-12 lg:left-24 z-20">
 //                     <p className="text-white/30 text-[10px] font-black uppercase tracking-[0.3em]">
 //                         Faculty of Thai Traditional Medicine
@@ -342,7 +342,7 @@
 //             {/* --- ฝั่งขวา: Menu Side (Registration & Login) --- */}
 //             <div className="w-full lg:w-1/2 flex flex-col bg-slate-50 relative p-8 lg:p-24 justify-center">
 //                 <div className="max-w-md mx-auto w-full space-y-16">
-                    
+
 //                     {/* ส่วนที่ 1: ลงทะเบียนใหม่ */}
 //                     <div className="space-y-6">
 //                         <div className="flex items-center gap-3 mb-2">
@@ -423,8 +423,8 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { 
-    GraduationCap, UserCheck, ShieldCheck, ArrowRight, 
+import {
+    GraduationCap, UserCheck, ShieldCheck, ArrowRight,
     UserPlus, LogIn, Sprout, ChevronRight, Sparkles
 } from 'lucide-react'
 import liff from '@line/liff'
@@ -437,6 +437,44 @@ export default function SplitHomePage() {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
+    // ภายในฟังก์ชัน SplitHomePage
+    useEffect(() => {
+        const autoCheckLogin = async () => {
+            try {
+                // 1. เริ่มการทำงาน LIFF ทันทีที่โหลดหน้า
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+
+                // 2. ถ้าผู้ใช้ Login อยู่แล้ว (ซึ่งรวมถึงจังหวะที่เพิ่ง Login กลับมาด้วย)
+                if (liff.isLoggedIn()) {
+                    const profile = await liff.getProfile();
+
+                    // 3. ไปเช็กข้อมูลใน Supabase อัตโนมัติโดยไม่ต้องรอให้ผู้ใช้กดปุ่ม
+                    const { data: user } = await supabase
+                        .from('supervisors')
+                        .select('is_verified, role')
+                        .eq('line_user_id', profile.userId)
+                        .single();
+
+                    if (user) {
+                        if (user.is_verified) {
+                            router.replace(user.role === 'teacher' ? '/teacher/dashboard' : '/supervisor/dashboard');
+                        } else {
+                            router.replace('/supervisor/pending');
+                        }
+                        return; // จบการทำงาน
+                    }
+                }
+
+                // 4. ถ้ายังไม่ได้ Login หรือไม่มีข้อมูลในระบบ ค่อยปิด Loading เพื่อโชว์หน้า UI ปกติ
+                setIsChecking(false);
+            } catch (err) {
+                console.error("Auto Login Check Failed:", err);
+                setIsChecking(false);
+            }
+        };
+
+        autoCheckLogin();
+    }, [router, supabase]); // ทำงานทุกครั้งที่หน้าเว็บถูกเปิดขึ้นมา
 
     const handleLineLogin = async () => {
         try {
@@ -481,18 +519,18 @@ export default function SplitHomePage() {
 
     return (
         <div className="min-h-screen bg-white flex flex-col lg:flex-row font-sans selection:bg-indigo-100 selection:text-indigo-900">
-            
+
             {/* --- ฝั่งซ้าย: Visual Experience (Hidden on small mobile if needed, but here we keep it) --- */}
             <div className="relative w-full lg:w-5/12 xl:w-1/2 flex flex-col justify-end lg:justify-center p-8 lg:p-24 overflow-hidden min-h-[350px] lg:min-h-screen">
-                <Image 
-                    src="/images/bg-thai-medicine.jpg" 
+                <Image
+                    src="/images/bg-thai-medicine.jpg"
                     alt="Thai Traditional Medicine"
                     fill
                     className="object-cover z-0"
                     priority
                 />
                 <div className="absolute inset-0 z-10 bg-gradient-to-b from-indigo-950/40 via-indigo-950/80 to-indigo-950"></div>
-                
+
                 <div className="relative z-20 space-y-6 lg:space-y-10">
                     <div className="inline-flex items-center gap-3 px-4 py-2 bg-white/10 backdrop-blur-md rounded-full border border-white/20">
                         <Sparkles size={16} className="text-indigo-300" />
@@ -519,10 +557,10 @@ export default function SplitHomePage() {
             {/* --- ฝั่งขวา: Menu Interaction --- */}
             <div className="w-full lg:w-7/12 xl:w-1/2 flex flex-col bg-slate-50/50 relative p-6 lg:p-20 justify-center">
                 <div className="max-w-xl mx-auto w-full space-y-12 lg:space-y-20">
-                    
+
                     {/* Header for Mobile */}
                     <div className="lg:hidden flex items-center gap-3 mb-4">
-                         <div className="p-2 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-200">
+                        <div className="p-2 bg-indigo-600 rounded-xl shadow-lg shadow-indigo-200">
                             <Sprout size={24} className="text-white" />
                         </div>
                         <span className="text-xl font-black text-slate-900 tracking-tighter">INTERN<span className="text-indigo-600">Ship</span></span>
@@ -533,10 +571,10 @@ export default function SplitHomePage() {
                         <div className="flex items-center justify-between">
                             <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">เริ่มต้นใช้งาน / Registration</h2>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
                             {/* Card: Student */}
-                            <button 
+                            <button
                                 onClick={() => window.location.href = 'https://psusso.ttmedpsu.org/login.php?app=internship'}
                                 className="group relative bg-white p-6 lg:p-8 rounded-[2.5rem] border border-slate-200/60 shadow-sm hover:shadow-2xl hover:shadow-indigo-200/40 hover:-translate-y-1 transition-all duration-300 text-left overflow-hidden"
                             >
@@ -553,7 +591,7 @@ export default function SplitHomePage() {
                             </button>
 
                             {/* Card: Supervisor */}
-                            <button 
+                            <button
                                 onClick={() => router.push('/register')}
                                 className="group relative bg-white p-6 lg:p-8 rounded-[2.5rem] border border-slate-200/60 shadow-sm hover:shadow-2xl hover:shadow-emerald-200/40 hover:-translate-y-1 transition-all duration-300 text-left overflow-hidden"
                             >
@@ -574,7 +612,7 @@ export default function SplitHomePage() {
                     {/* Login Section */}
                     <div className="space-y-6">
                         <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">เข้าสู่ระบบ / Already Registered</h2>
-                        <button 
+                        <button
                             onClick={handleLineLogin}
                             className="w-full relative group overflow-hidden"
                         >
@@ -598,7 +636,7 @@ export default function SplitHomePage() {
 
                     {/* Bottom Actions */}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-6 border-t border-slate-200 pt-10">
-                        <button 
+                        <button
                             onClick={() => router.push('/auth/login')}
                             className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-all"
                         >

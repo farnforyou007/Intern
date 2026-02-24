@@ -6,7 +6,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import {
     Users, ClipboardCheck, Clock,
     Bell, ChevronRight, CheckCircle,
-    AlertCircle, PieChart, GraduationCap , LogOut
+    AlertCircle, PieChart, GraduationCap, LogOut
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import liff from '@line/liff'
@@ -451,14 +451,7 @@ export default function SupervisorDashboard() {
                         <img src={supervisor?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=fallback`} alt="avatar" className="w-full h-full object-cover" />
                     </div> */}
                     <div className="flex items-center gap-3">
-                        {/* ปุ่ม Logout แบบวงกลม */}
-                        <button
-                            onClick={handleLogout}
-                            className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-rose-500/80 transition-all active:scale-95 shadow-lg"
-                            title="ออกจากระบบ"
-                        >
-                            <LogOut size={18} />
-                        </button>
+
                         <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
                             <img
                                 src={profileImage}
@@ -470,6 +463,15 @@ export default function SupervisorDashboard() {
                                 }}
                             />
                         </div>
+
+                        {/* ปุ่ม Logout แบบวงกลม */}
+                        <button
+                            onClick={handleLogout}
+                            className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-rose-500/80 transition-all active:scale-95 shadow-lg"
+                            title="ออกจากระบบ"
+                        >
+                            <LogOut size={18} />
+                        </button>
                     </div>
                 </div>
 
