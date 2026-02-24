@@ -207,7 +207,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                     .eq('line_user_id', lineUserId)
                     .single()
                 setUser(user);
-                
+
                 if (!user) {
                     setStatus('unregistered')
                     setIsAuthorized(false)
@@ -222,6 +222,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
                     // ตรวจสอบทั้ง Role และการผูกวิชา
                     if (user.role === 'teacher' && hasSubjects) {
+                        sessionStorage.setItem('teacher_auth_status', 'authorized')
                         setStatus('authorized')
                         setIsAuthorized(true)
                     } else {
