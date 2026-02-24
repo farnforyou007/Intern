@@ -6,7 +6,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import {
     Users, ClipboardCheck, Clock,
     Bell, ChevronRight, CheckCircle,
-    AlertCircle, PieChart, GraduationCap
+    AlertCircle, PieChart, GraduationCap , LogOut
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import liff from '@line/liff'
@@ -16,7 +16,7 @@ interface AssignmentItem {
     student_assignments?: {
         id: string;
     };
-    
+
 }
 
 export default function SupervisorDashboard() {
@@ -357,7 +357,45 @@ export default function SupervisorDashboard() {
         fetchRealData(); // ดึงข้อมูลใหม่ทุกครั้งที่เข้ามาที่หน้านี้
     }, []);
 
+    const handleLogout = async () => {
+        const result = await Swal.fire({
+            title: 'ออกจากระบบ?',
+            text: "คุณต้องการออกจากระบบและล้างข้อมูลแคชทั้งหมดใช่หรือไม่?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#064e3b',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'ยืนยัน',
+            cancelButtonText: 'ยกเลิก',
+            customClass: { popup: 'rounded-[2rem] font-sans' }
+        });
 
+        if (result.isConfirmed) {
+            setLoading(true);
+            try {
+                // 1. ล้างข้อมูลใน Storage ของเบราว์เซอร์
+                localStorage.clear();
+                sessionStorage.clear();
+
+                // 2. ล้าง Cache Storage (ถ้ามี)
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(cacheNames.map(name => caches.delete(name)));
+                }
+
+                // 3. ออกจากระบบ LINE LIFF
+                if (liff.isLoggedIn()) {
+                    liff.logout();
+                }
+
+                // 4. ส่งกลับหน้าหลักและบังคับรีโหลดเพื่อล้าง Memory
+                window.location.href = '/';
+            } catch (error) {
+                console.error("Logout error:", error);
+                window.location.href = '/';
+            }
+        }
+    };
 
     // --- Skeleton Loading Component ---
     if (loading) return (
@@ -410,17 +448,26 @@ export default function SupervisorDashboard() {
                     {/* <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
                         <img src={supervisor?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=fallback`} alt="avatar" className="w-full h-full object-cover" />
                     </div> */}
-
-                    <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
-                        <img
-                            src={profileImage}
-                            alt="avatar"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                                // ถ้าโหลดรูปจาก Storage ไม่สำเร็จ ให้ใช้รูปสำรองทันที
-                                e.currentTarget.src = "https://api.dicebear.com/7.x/avataaars/svg?seed=fallback";
-                            }}
-                        />
+                    <div className="flex items-center gap-3">
+                        {/* ปุ่ม Logout แบบวงกลม */}
+                        <button
+                            onClick={handleLogout}
+                            className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-rose-500/80 transition-all active:scale-95 shadow-lg"
+                            title="ออกจากระบบ"
+                        >
+                            <LogOut size={18} />
+                        </button>
+                        <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
+                            <img
+                                src={profileImage}
+                                alt="avatar"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    // ถ้าโหลดรูปจาก Storage ไม่สำเร็จ ให้ใช้รูปสำรองทันที
+                                    e.currentTarget.src = "https://api.dicebear.com/7.x/avataaars/svg?seed=fallback";
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
 

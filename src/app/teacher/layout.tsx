@@ -182,6 +182,12 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     useEffect(() => {
         const checkTeacherAccess = async () => {
             try {
+                const cachedAuth = sessionStorage.getItem('teacher_auth_status')
+                if (cachedAuth === 'authorized' && status !== 'authorized') {
+                    setStatus('authorized')
+                    return // จบทันที ไม่ต้องรอโหลด LINE/DB ใหม่
+                }
+                
                 setStatus('loading')
 
                 // 🟢 1. เริ่มต้นใช้งาน LIFF (เปิดใช้งานส่วนนี้)

@@ -70,60 +70,110 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
     //     checkAccess()
     // }, [pathname])
 
-    useEffect(() => {
+        // useEffect(() => {
+        //     const checkAccess = async () => {
+        //         try {
+        //             // 1. เริ่มต้นด้วยการ Loading
+        //             const cachedAuth = sessionStorage.getItem('supervisor_auth_status')
+        //             if (cachedAuth === 'authorized' && status !== 'authorized') {
+        //                 setStatus('authorized')
+        //                 return // จบทันที ไม่ต้องรอโหลด LINE/DB ใหม่
+        //             }
+        //             setStatus('loading')
+
+        //             // 2. ถ้าใช้ LINE LIFF ให้เอาคอมเมนต์ออก (ช่วง DEV อาจจะใช้ Mock ID ไปก่อน)
+        //             await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+        //             if (!liff.isLoggedIn()) {
+        //                 liff.login({ redirectUri: window.location.href })
+        //                 return
+        //             }
+        //             const profile = await liff.getProfile()
+        //             const lineUserId = profile.userId
+
+        //             // 🛠️ ช่วง DEV: ใช้ Mock ID ของพี่ก่อน (ตัวอย่าง)
+        //             // const lineUserId = 'U678862bd992a4cda7aaf972743b585ac'
+        //             // const lineUserId = 'test-somruk'
+
+        //             const { data: user } = await supabase
+        //                 .from('supervisors')
+        //                 .select('is_verified')
+        //                 .eq('line_user_id', lineUserId)
+        //                 .single()
+
+        //             if (!user) {
+        //                 setStatus('unregistered')
+        //                 setIsAuthorized(false)
+        //             } else if (!user.is_verified) {
+        //                 // ✅ ถ้าเจอ user แต่ verified เป็น false จะติดตรงนี้
+        //                 setStatus('pending')
+        //                 setIsAuthorized(false)
+        //                 // ถ้าพยายามเข้าหน้าอื่นที่ไม่ใช่ pending ให้ดีดไปหน้า pending
+        //                 if (pathname !== '/supervisor/pending') {
+        //                     router.replace('/supervisor/pending')
+        //                 }
+        //             } else {
+        //                 // ✅ อนุมัติแล้ว ถึงจะให้ผ่าน
+        //                 sessionStorage.setItem('supervisor_auth_status', 'authorized')
+        //                 setStatus('authorized')
+        //                 setIsAuthorized(true)
+        //             }
+        //         } catch (err) {
+        //             console.error("Access check failed", err)
+        //             setStatus('unregistered')
+        //         }
+        //     }
+        //     checkAccess()
+        // }, [pathname])
+
+
+        useEffect(() => {
         const checkAccess = async () => {
+            // 🚀 1. เช็ก Cache เป็นอย่างแรกสุด (ก่อนทำอย่างอื่น)
+            const cachedAuth = sessionStorage.getItem('supervisor_auth_status');
+            
+            if (cachedAuth === 'authorized') {
+                // ถ้ามีบัตรผ่านแล้ว ปรับสถานะเป็นผ่านทันทีและจบฟังก์ชัน
+                if (status !== 'authorized') setStatus('authorized');
+                return; 
+            }
+
+            // 🟡 2. ถ้าไม่มี Cache ค่อยสั่งเริ่ม Loading
+            setStatus('loading');
+
             try {
-                // 1. เริ่มต้นด้วยการ Loading
-                const cachedAuth = sessionStorage.getItem('supervisor_auth_status')
-                if (cachedAuth === 'authorized' && status !== 'authorized') {
-                    setStatus('authorized')
-                    return // จบทันที ไม่ต้องรอโหลด LINE/DB ใหม่
-                }
-                setStatus('loading')
-
-                // 2. ถ้าใช้ LINE LIFF ให้เอาคอมเมนต์ออก (ช่วง DEV อาจจะใช้ Mock ID ไปก่อน)
-                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                // ติดต่อ LINE (ส่วนที่ช้า)
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
                 if (!liff.isLoggedIn()) {
-                    liff.login({ redirectUri: window.location.href })
-                    return
+                    liff.login({ redirectUri: window.location.href });
+                    return;
                 }
-                const profile = await liff.getProfile()
-                const lineUserId = profile.userId
 
-                // 🛠️ ช่วง DEV: ใช้ Mock ID ของพี่ก่อน (ตัวอย่าง)
-                // const lineUserId = 'U678862bd992a4cda7aaf972743b585ac'
-                // const lineUserId = 'test-somruk'
-
+                const profile = await liff.getProfile();
+                
+                // ติดต่อ Database (ส่วนที่ช้า)
                 const { data: user } = await supabase
                     .from('supervisors')
                     .select('is_verified')
-                    .eq('line_user_id', lineUserId)
-                    .single()
+                    .eq('line_user_id', profile.userId)
+                    .single();
 
                 if (!user) {
-                    setStatus('unregistered')
-                    setIsAuthorized(false)
+                    setStatus('unregistered');
                 } else if (!user.is_verified) {
-                    // ✅ ถ้าเจอ user แต่ verified เป็น false จะติดตรงนี้
-                    setStatus('pending')
-                    setIsAuthorized(false)
-                    // ถ้าพยายามเข้าหน้าอื่นที่ไม่ใช่ pending ให้ดีดไปหน้า pending
-                    if (pathname !== '/supervisor/pending') {
-                        router.replace('/supervisor/pending')
-                    }
+                    setStatus('pending');
+                    if (pathname !== '/supervisor/pending') router.replace('/supervisor/pending');
                 } else {
-                    // ✅ อนุมัติแล้ว ถึงจะให้ผ่าน
-                    sessionStorage.setItem('supervisor_auth_status', 'authorized')
-                    setStatus('authorized')
-                    setIsAuthorized(true)
+                    // ✅ ผ่านสิทธิ์: บันทึกเข้า Cache
+                    sessionStorage.setItem('supervisor_auth_status', 'authorized');
+                    setStatus('authorized');
                 }
             } catch (err) {
-                console.error("Access check failed", err)
-                setStatus('unregistered')
+                console.error("Access check failed", err);
+                setStatus('unregistered');
             }
-        }
-        checkAccess()
-    }, [pathname])
+        };
+        checkAccess();
+    }, [pathname]); // การใส่ pathname ตรงนี้ถูกต้องแล้วเพื่อให้ Layout คอยคุมทุกหน้า
 
     // --- ส่วนแสดงผลหน้าแจ้งเตือน (ค้างไว้ให้กดเอง) ---
     if (status === 'unregistered') {
