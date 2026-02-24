@@ -94,7 +94,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { ShieldAlert, ArrowLeft, UserPlus, LayoutDashboard, Users, BookOpen, Settings, Menu, X, LogOut, GraduationCap } from 'lucide-react'
+import { ShieldAlert, ArrowLeft, UserPlus, LayoutDashboard, Users, BookOpen, Settings, Menu, X, LogOut, GraduationCap ,ArrowRight} from 'lucide-react'
 import Link from 'next/link'
 import Swal from 'sweetalert2'
 import liff from '@line/liff'
@@ -105,7 +105,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     const [isAuthorized, setIsAuthorized] = useState(false)
     const [status, setStatus] = useState<'loading' | 'unregistered' | 'pending' | 'unauthorized' | 'authorized'>('loading')
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-
+    const [user, setUser] = useState<any>(null);
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -178,7 +178,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     // }, [pathname])
 
     // Close sidebar on route change
-    
+
     useEffect(() => {
         const checkTeacherAccess = async () => {
             try {
@@ -186,7 +186,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
                 // 🟢 1. เริ่มต้นใช้งาน LIFF (เปิดใช้งานส่วนนี้)
                 await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
-                
+
                 // 🟢 2. ตรวจสอบการ Login
                 if (!liff.isLoggedIn()) {
                     liff.login({ redirectUri: window.location.href })
@@ -206,7 +206,8 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                     .select('id, is_verified, role, supervisor_subjects(id)')
                     .eq('line_user_id', lineUserId)
                     .single()
-
+                setUser(user);
+                
                 if (!user) {
                     setStatus('unregistered')
                     setIsAuthorized(false)
@@ -218,7 +219,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                     }
                 } else {
                     const hasSubjects = user.supervisor_subjects && user.supervisor_subjects.length > 0
-                    
+
                     // ตรวจสอบทั้ง Role และการผูกวิชา
                     if (user.role === 'teacher' && hasSubjects) {
                         setStatus('authorized')
@@ -235,7 +236,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         }
         checkTeacherAccess()
     }, [pathname])
-    
+
     useEffect(() => { setIsSidebarOpen(false) }, [pathname])
 
     // --- Loading ---
@@ -280,19 +281,63 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     }
 
     // --- Unauthorized ---
+    /* The above code is a TypeScript React component that checks if the `status` variable is equal to 'unauthorized'. If the condition is met, it renders a UI displaying a message indicating that no courses are found for the user to manage. It includes a title, description, and a button that allows the user to navigate back to the authentication check page. The UI is styled using Tailwind CSS classes for layout, colors, typography, and animations. */
+    // if (status === 'unauthorized') {
+    //     return (
+    //         <div className="h-screen flex flex-col items-center justify-center p-8 text-center bg-[#F0F7FF] animate-in fade-in duration-500">
+    //             <div className="w-24 h-24 bg-white text-indigo-600 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-xl shadow-indigo-100">
+    //                 <ShieldAlert size={48} />
+    //             </div>
+    //             <h2 className="text-2xl font-black text-slate-900 mb-3">ไม่พบรายวิชาที่ดูแล</h2>
+    //             <p className="text-slate-500 font-medium mb-10 max-w-xs leading-relaxed text-sm">
+    //                 คุณได้รับการอนุมัติแล้ว แต่ยังไม่มีรายวิชาที่รับผิดชอบในระบบ กรุณาติดต่อแอดมินเพื่อผูกข้อมูลวิชา
+    //             </p>
+    //             <button onClick={() => router.replace('/auth/check')} className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black text-sm shadow-xl shadow-indigo-200 flex items-center justify-center gap-3 active:scale-95 transition-all">
+    //                 <ArrowLeft size={20} /> กลับไปตรวจสอบสิทธิ์
+    //             </button>
+    //         </div>
+    //     )
+    // }
+
     if (status === 'unauthorized') {
+        // เช็คว่าจริงๆ แล้วเขาเป็นใคร
+        const isActuallySupervisor = user?.role === 'supervisor';
+
         return (
-            <div className="h-screen flex flex-col items-center justify-center p-8 text-center bg-[#F0F7FF] animate-in fade-in duration-500">
+            <div className="h-screen flex flex-col items-center justify-center p-8 text-center bg-[#F0F7FF] animate-in fade-in duration-500 font-sans">
                 <div className="w-24 h-24 bg-white text-indigo-600 rounded-[2.5rem] flex items-center justify-center mb-8 shadow-xl shadow-indigo-100">
                     <ShieldAlert size={48} />
                 </div>
-                <h2 className="text-2xl font-black text-slate-900 mb-3">ไม่พบรายวิชาที่ดูแล</h2>
-                <p className="text-slate-500 font-medium mb-10 max-w-xs leading-relaxed text-sm">
-                    คุณได้รับการอนุมัติแล้ว แต่ยังไม่มีรายวิชาที่รับผิดชอบในระบบ กรุณาติดต่อแอดมินเพื่อผูกข้อมูลวิชา
-                </p>
-                <button onClick={() => router.replace('/auth/check')} className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black text-sm shadow-xl shadow-indigo-200 flex items-center justify-center gap-3 active:scale-95 transition-all">
-                    <ArrowLeft size={20} /> กลับไปตรวจสอบสิทธิ์
-                </button>
+
+                {isActuallySupervisor ? (
+                    // กรณี A: เป็นพี่เลี้ยงแต่หลงเข้ามาหน้าอาจารย์
+                    <>
+                        <h2 className="text-2xl font-black text-slate-900 mb-3">เข้าถึงเฉพาะอาจารย์</h2>
+                        <p className="text-slate-500 font-medium mb-10 max-w-xs leading-relaxed text-sm">
+                            บัญชีของคุณคือ <span className="text-indigo-600 font-bold">"พี่เลี้ยง"</span> ไม่สามารถเข้าใช้งานระบบในส่วนของอาจารย์ได้ กรุณากลับไปที่หน้า Dashboard ของคุณ
+                        </p>
+                        <button
+                            onClick={() => router.replace('/supervisor/dashboard')}
+                            className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black text-sm shadow-xl shadow-indigo-200 flex items-center justify-center gap-3 active:scale-95 transition-all"
+                        >
+                            ไปยังหน้าพี่เลี้ยง <ArrowRight size={20} />
+                        </button>
+                    </>
+                ) : (
+                    // กรณี B: เป็นอาจารย์จริงๆ แต่ยังไม่มีวิชา (เหมือนเดิม)
+                    <>
+                        <h2 className="text-2xl font-black text-slate-900 mb-3">ไม่พบรายวิชาที่ดูแล</h2>
+                        <p className="text-slate-500 font-medium mb-10 max-w-xs leading-relaxed text-sm">
+                            คุณมีสิทธิ์เป็นอาจารย์แล้ว แต่ยังไม่มีรายวิชาที่รับผิดชอบในระบบ กรุณาติดต่อแอดมินเพื่อผูกข้อมูลวิชา
+                        </p>
+                        <button
+                            onClick={() => router.replace('/')}
+                            className="w-full max-w-xs py-5 bg-slate-800 text-white rounded-3xl font-black text-sm shadow-xl shadow-slate-200 flex items-center justify-center gap-3 active:scale-95 transition-all"
+                        >
+                            <ArrowLeft size={20} /> กลับหน้าหลัก
+                        </button>
+                    </>
+                )}
             </div>
         )
     }
