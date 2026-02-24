@@ -25,7 +25,17 @@ export default function EvaluationHistory() {
             // 1. จำลอง User (ของจริงใช้ LIFF)
             // const userId = 'U678862bd992a4cda7aaf972743b585ac'
             // const userId = 'test-somruk'
+            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
 
+            // 🟢 2. ตรวจสอบการ Login
+            if (!liff.isLoggedIn()) {
+                liff.login({ redirectUri: window.location.href })
+                return
+            }
+
+            // 🟢 3. ดึง Profile จริง
+            const profile = await liff.getProfile()
+            const userId = profile.userId
             // 2. ดึงข้อมูลพี่เลี้ยง
             const { data: sv } = await supabase.from('supervisors').select('id').eq('line_user_id', userId).single()
 
