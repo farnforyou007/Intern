@@ -10,6 +10,8 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import liff from '@line/liff'
+import Swal from 'sweetalert2'
+
 interface AssignmentItem {
     id: string;
     is_evaluated: boolean;
