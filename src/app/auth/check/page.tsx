@@ -14,13 +14,13 @@ export default function AuthCheckPage() {
         const checkAuth = async () => {
             // 🛠️ ช่วง DEV: ใช้ Mock ID ของพี่
             // const lineUserId = 'U678862bd992a4cda7aaf972743b585ac'
-            const lineUserId = 'test-c'
+            // const lineUserId = 'test-c'
 
-            /* 🛠️ ช่วงต่อจริง (Uncomment ส่วนนี้):
-            // if (!liff.isLoggedIn()) { liff.login(); return; }
-            // const profile = await liff.getProfile();
-            // const lineUserId = profile.userId;
-            */
+            // 🛠️ ช่วงต่อจริง (Uncomment ส่วนนี้):
+            if (!liff.isLoggedIn()) { liff.login(); return; }
+            const profile = await liff.getProfile();
+            const lineUserId = profile.userId;
+            
 
             try {
                 // 1. ดึงข้อมูล User (ดึง role มาด้วยเพื่อแยกหน้า Pending)

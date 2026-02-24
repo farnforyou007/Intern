@@ -573,7 +573,7 @@ export default function SplitHomePage() {
 
                     {/* Login Section */}
                     <div className="space-y-6">
-                        <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">เข้าสู่ระบบเดิม / Already Registered</h2>
+                        <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">เข้าสู่ระบบ / Already Registered</h2>
                         <button 
                             onClick={handleLineLogin}
                             className="w-full relative group overflow-hidden"
