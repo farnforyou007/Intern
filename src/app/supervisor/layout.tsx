@@ -74,12 +74,12 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
         const checkAccess = async () => {
             try {
                 // 1. เริ่มต้นด้วยการ Loading
-                setStatus('loading')
                 const cachedAuth = sessionStorage.getItem('supervisor_auth_status')
                 if (cachedAuth === 'authorized' && status !== 'authorized') {
                     setStatus('authorized')
                     return // จบทันที ไม่ต้องรอโหลด LINE/DB ใหม่
                 }
+                setStatus('loading')
 
                 // 2. ถ้าใช้ LINE LIFF ให้เอาคอมเมนต์ออก (ช่วง DEV อาจจะใช้ Mock ID ไปก่อน)
                 await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
