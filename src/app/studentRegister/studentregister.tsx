@@ -1,6 +1,6 @@
 // //ver4
 "use client"
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,8 +11,7 @@ import {
     Plus, X, Hospital
 } from "lucide-react"
 import Swal from 'sweetalert2'
-import { jwtVerify } from 'jose'
-import { decodeJwt } from 'jose';
+
 import {
     Dialog,
     DialogContent,
@@ -33,84 +32,23 @@ interface Mentor {
 
 export default function StudentRegisterPage() {
     const [loading, setLoading] = useState(false)
-    // const [allowedBatch, setAllowedBatch] = useState('')
-    const [user, setUser] = useState<any>(null)
+    const [allowedBatch, setAllowedBatch] = useState('')
     const [allProvinces, setAllProvinces] = useState<string[]>([])
     const [sites, setSites] = useState<any[]>([])
     const [mentors, setMentors] = useState<any[]>([])
     const [openDropdownIndex, setOpenDropdownIndex] = useState<number | null>(null)
     const [errors, setErrors] = useState<any>({})
-    const [isAuthenticating, setIsAuthenticating] = useState(true)
+
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
     const [avatarFile, setAvatarFile] = useState<File | null>(null)
 
     const [form, setForm] = useState<any>({
-        student_code: '', prefix: '',
+        student_code: '', prefix: 'นางสาว',
         first_name: '', last_name: '',
         nickname: '', phone: '',
         email: '', class_year: '4',
         assignments: []
     })
-
-    const handleAuth = useCallback(async () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const jwtFromUrl = urlParams.get('jwt');
-        const savedToken = localStorage.getItem('student_token');
-
-        // ใช้ค่าจาก ENV ถ้าไม่มีให้ใช้ค่าสำรอง (Fallback) กันพัง
-        const secretKey = process.env.NEXT_PUBLIC_JWT_SECRET;
-        // console.log("Secret from ENV:", secretKey);
-        if (!secretKey) {
-            console.error("หา Secret Key ไม่เจอใน Environment Variable!");
-            return;
-        }
-
-        const encodedSecret = new TextEncoder().encode(secretKey);
-
-        try {
-            // 1. ลำดับการเช็ค: เช็คจาก URL ก่อน (คนเพิ่ง Login) -> ถ้าไม่มีให้เช็คจาก LocalStorage (คนหน้าเดิม)
-            const tokenToVerify = jwtFromUrl || savedToken;
-
-            if (tokenToVerify) {
-                const { payload } = await jwtVerify(tokenToVerify, encodedSecret, {
-                    algorithms: ['HS256'],
-                });
-
-                setUser(payload);
-
-                // ถ้าเป็น Token ใหม่จาก URL ให้บันทึกลงเครื่องและล้าง URL
-                if (jwtFromUrl) {
-                    localStorage.setItem('student_token', jwtFromUrl);
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
-            }
-        } catch (err) {
-            console.error("Auth System Error:", err);
-            // ถ้า Token ปลอมหรือหมดอายุ ให้ล้างค่าทิ้งเพื่อให้ Login ใหม่ได้
-            localStorage.removeItem('student_token');
-            setUser(null);
-        } finally {
-            // ✅ ไม่ว่าจะเกิดอะไรขึ้น ต้องปิดหน้า Loading เสมอ
-            setIsAuthenticating(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        handleAuth();
-    }, [handleAuth]);
-
-
-    useEffect(() => {
-        if (user) {
-            setForm((prev: any) => ({
-                ...prev,
-                student_code: user.username || '',
-                first_name: user.first_name_th || '',
-                last_name: user.last_name_th || '',
-                email: user.email || ''
-            }));
-        }
-    }, [user]);
 
     // ฟังก์ชันสำหรับดึงข้อมูล (ใช้ซ้ำได้ทั้งตอนโหลดครั้งแรกและตอน Real-time Update)
     const fetchSites = async () => {
@@ -158,7 +96,7 @@ export default function StudentRegisterPage() {
             .maybeSingle();
 
         if (data) {
-            // setAllowedBatch(data.key_value);
+            setAllowedBatch(data.key_value);
             console.log("Allowed Batch loaded:", data.key_value); // เช็คใน Console ดูได้เลยว่าเลข 65 มาหรือยัง
         } else {
             console.warn("Could not find configuration for allowed_student_batch");
@@ -255,30 +193,21 @@ export default function StudentRegisterPage() {
     const validate = () => {
         let tempErrors: any = {}
 
-        if (!form.prefix) tempErrors.prefix = "กรุณาเลือกคำนำหน้า" // เช็คคำนำหน้า
-
         if (!form.student_code) {
             tempErrors.student_code = "กรุณากรอกรหัสนักศึกษา"
         }
+        // เพิ่มการดักรหัส 2 ตัวหน้าตรงนี้
+        else if (allowedBatch && !form.student_code.startsWith(allowedBatch)) {
+            tempErrors.student_code = `(รหัสต้องขึ้นต้นด้วย ${allowedBatch} เท่านั้น)`
+        }
+
         if (!form.first_name || !form.last_name) tempErrors.name = "กรุณากรอกชื่อ-นามสกุล"
-        if (!avatarFile) tempErrors.avatar = "กรุณาแนบรูปโปรไฟล์"
-        if (!form.phone || form.phone.length < 10) tempErrors.phone = "กรุณากรอกเบอร์โทร 10 หลัก"
+        if (!avatarFile) tempErrors.avatar = "กรุณาใส่รูป"
+
         const mentorMissing = form.assignments.some((as: any) => as.supervisor_ids.length === 0)
         if (mentorMissing) tempErrors.rotation = "กรุณาเลือกพี่เลี้ยงอย่างน้อย 1 คนในทุกผลัด"
 
         setErrors(tempErrors)
-
-        if (Object.keys(tempErrors).length > 0) {
-            // รอให้ State อัปเดตแป๊บนึง แล้วหา Error ตัวแรก
-            setTimeout(() => {
-                const firstErrorElement = document.querySelector('.text-red-500');
-                if (firstErrorElement) {
-                    firstErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 100);
-            return false;
-        }
-        return true;
         return Object.keys(tempErrors).length === 0
     }
 
@@ -358,27 +287,6 @@ export default function StudentRegisterPage() {
             return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษาเพื่อลงทะเบียน', 'warning');
         }
 
-        const confirmResult = await Swal.fire({
-            title: 'ตรวจสอบข้อมูลอีกครั้ง?',
-            html: `
-            <div className="text-left text-sm space-y-1 font-sans">
-                <p><b>ชื่อ-นามสกุล:</b> ${form.prefix}${form.first_name} ${form.last_name}</p>
-                <p><b>รหัส:</b> ${form.student_code}</p>
-                <p><b>เบอร์โทร:</b> ${form.phone}</p>
-                <hr className="my-2"/>
-                <p className="text-center text-blue-600 font-bold">กรุณาตรวจสอบ "พี่เลี้ยง" และ "โรงพยาบาล" ในทุกผลัดให้ถูกต้องก่อนยืนยัน</p>
-            </div>
-        `,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#1e293b', // Slate-900
-            cancelButtonColor: '#cbd5e1', // Slate-300
-            confirmButtonText: 'ยืนยันข้อมูลถูกต้อง',
-            cancelButtonText: 'กลับไปแก้ไข',
-        });
-
-        if (!confirmResult.isConfirmed) return;
-
         setLoading(true);
         try {
             // 2. เช็คข้อมูลซ้ำในระบบ
@@ -420,6 +328,154 @@ export default function StudentRegisterPage() {
             }]).select().single();
 
             if (stError) throw stError;
+
+            // 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
+            // if (form.assignments && form.assignments.length > 0) {
+            //     for (const as of form.assignments) {
+            //         if (as.site_id) {
+            //             const { data: assignment, error: asError } = await supabase
+            //                 .from('student_assignments')
+            //                 .insert([{
+            //                     student_id: student.id, 
+            //                     rotation_id: parseInt(as.rotation_id),
+            //                     site_id: parseInt(as.site_id), 
+            //                     status: 'active'
+            //                 }]).select().single();
+
+            //             if (asError) throw asError;
+
+            //             // 6. บันทึกรายชื่อพี่เลี้ยง
+            //             if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                 const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                     assignment_id: assignment.id, 
+            //                     supervisor_id: parseInt(sId)
+            //                 }));
+            //                 await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //             }
+            //         }
+            //     }
+            // }
+
+            // 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
+            // 🚩 แก้ไขภายในฟังก์ชัน handleRegister
+            // if (form.assignments && form.assignments.length > 0) {
+            //     for (const as of form.assignments) {
+            //         if (as.site_id) {
+            //             // 🚩 1. ดึง "วิชาย่อยทั้งหมด" ที่ผูกกับผลัดนี้ออกมา 
+            //             // เช่น ถ้าผลัดนี้คือ ผดุงครรภ์ จะได้ ID ของ ANC, LR, PP ออกมา 3 แถว
+            //             const { data: rotSubjects } = await supabase
+            //                 .from('rotation_subjects')
+            //                 .select('subject_id')
+            //                 .eq('rotation_id', parseInt(as.rotation_id));
+
+            //             if (rotSubjects && rotSubjects.length > 0) {
+            //                 // 🚩 2. ลูปบันทึกแยกทีละวิชาย่อยลง student_assignments
+            //                 for (const rs of rotSubjects) {
+            //                     const { data: assignment, error: asError } = await supabase
+            //                         .from('student_assignments')
+            //                         .insert([{
+            //                             student_id: student.id,
+            //                             rotation_id: parseInt(as.rotation_id),
+            //                             subject_id: rs.subject_id, // ✅ บันทึก ID วิชาย่อย (ไม่เป็น NULL แล้ว)
+            //                             site_id: parseInt(as.site_id),
+            //                             status: 'active'
+            //                         }]).select().single();
+
+            //                     if (asError) throw asError;
+
+            //                     // 🚩 3. บันทึกรายชื่อพี่เลี้ยงให้เชื่อมกับ "ทุกวิชาย่อย"
+            //                     if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                         const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                             assignment_id: assignment.id, // เชื่อมกับ ID ของวิชาย่อยแต่ละอัน
+            //                             supervisor_id: parseInt(sId),
+            //                             is_evaluated: false
+            //                         }));
+            //                         await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
+
+            // 🚩 แก้ไขภายในฟังก์ชัน handleRegister (ส่วนที่ 5)
+            // 🚩 5. บันทึกข้อมูลการมอบหมายสถานที่ฝึก (Assignments)
+            // if (form.assignments && form.assignments.length > 0) {
+            //     for (const as of form.assignments) {
+            //         if (as.site_id) {
+            //             // STEP A: ดึง ID วิชาหลักที่ผูกกับผลัดนี้จาก rotation_subjects
+            //             const { data: rotSubs } = await supabase
+            //                 .from('rotation_subjects')
+            //                 .select('subject_id')
+            //                 .eq('rotation_id', parseInt(as.rotation_id));
+
+            //             if (rotSubs && rotSubs.length > 0) {
+            //                 for (const rs of rotSubs) {
+            //                     const mainSubjectId = rs.subject_id;
+
+            //                     // STEP B: ไปเช็กในตาราง sub_subjects ว่าวิชาหลักนี้มี "วิชาย่อย" หรือไม่
+            //                     const { data: subSubjects } = await supabase
+            //                         .from('sub_subjects')
+            //                         .select('id')
+            //                         .eq('parent_subject_id', mainSubjectId);
+
+            //                     if (subSubjects && subSubjects.length > 0) {
+            //                         // 🚩 กรณีมีวิชาย่อย (เช่น ผดุงครรภ์ -> ANC, LR, PP)
+            //                         // ให้บันทึกแยกแถวตามจำนวนวิชาย่อย
+            //                         for (const sub of subSubjects) {
+            //                             const { data: assignment, error: asError } = await supabase
+            //                                 .from('student_assignments')
+            //                                 .insert([{
+            //                                     student_id: student.id,
+            //                                     rotation_id: parseInt(as.rotation_id),
+            //                                     subject_id: mainSubjectId,
+            //                                     sub_subject_id: sub.id, // ✅ ใส่ ID วิชาย่อย (เช่น ANC)
+            //                                     site_id: parseInt(as.site_id),
+            //                                     status: 'active'
+            //                                 }]).select().single();
+
+            //                             if (asError) throw asError;
+
+            //                             // บันทึกพี่เลี้ยงให้เชื่อมกับทุกวิชาย่อย
+            //                             if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                                 const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                                     assignment_id: assignment.id,
+            //                                     supervisor_id: parseInt(sId)
+            //                                 }));
+            //                                 await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                             }
+
+            //                         }
+            //                     } else {
+            //                         // 🚩 กรณีไม่มีวิชาย่อย (วิชาทั่วไป) -> บันทึก 1 แถวปกติ
+            //                         const { data: assignment, error: asError } = await supabase
+            //                             .from('student_assignments')
+            //                             .insert([{
+            //                                 student_id: student.id,
+            //                                 rotation_id: parseInt(as.rotation_id),
+            //                                 subject_id: mainSubjectId,
+            //                                 sub_subject_id: null,
+            //                                 site_id: parseInt(as.site_id),
+            //                                 status: 'active'
+            //                             }]).select().single();
+
+            //                         if (asError) throw asError;
+
+            //                         if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                             const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                                 assignment_id: assignment.id,
+            //                                 supervisor_id: parseInt(sId)
+            //                             }));
+            //                             await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
+
+
 
             if (form.assignments && form.assignments.length > 0) {
                 for (const as of form.assignments) {
@@ -531,7 +587,7 @@ export default function StudentRegisterPage() {
             // รีเซ็ตค่าใน State ทั้งหมด
             setForm({
                 student_code: '',
-                prefix: '',
+                prefix: 'นางสาว',
                 first_name: '',
                 last_name: '',
                 nickname: '',
@@ -556,71 +612,14 @@ export default function StudentRegisterPage() {
         }
     };
 
-    if (isAuthenticating) {
-        return (
-            <div className="h-screen flex flex-col items-center justify-center gap-4 bg-white">
-                <div className="relative">
-                    <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
-                    <GraduationCap className="absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 text-blue-600" size={24} />
-                </div>
-                <p className="font-black text-slate-400 uppercase tracking-widest text-xs animate-pulse">Checking Authorization...</p>
-            </div>
-        )
-    }
-
-    // if (!user) {
-    //     return (
-    //         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-5">
-    //             <Card className="max-w-md w-full p-10 rounded-[3rem] text-center space-y-6 shadow-2xl">
-    //                 <div className="bg-[#193C6C] w-20 h-20 rounded-3xl flex items-center justify-center mx-auto shadow-xl">
-    //                     <Hospital className="text-white" size={40} />
-    //                 </div>
-    //                 <div className="space-y-2">
-    //                     <h2 className="text-2xl font-black uppercase">Internship Registry</h2>
-    //                     <p className="text-slate-500 text-sm">กรุณาเข้าสู่ระบบด้วย PSU One Passport<br />เพื่อดำเนินการลงทะเบียนฝึกงาน</p>
-    //                 </div>
-    //                 <a href={process.env.NEXT_PUBLIC_LOGIN_URL}>
-    //                     <Button className="w-full h-16 bg-[#193C6C] hover:bg-[#294787] rounded-2xl font-black text-lg gap-3">
-    //                         🔑 เข้าสู่ระบบด้วย PSU One Passport
-    //                     </Button>
-    //                 </a>
-    //             </Card>
-    //         </div>
-    //     )
-    // }
-
-
-    if (!user) {
-        return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-                <Card className="max-w-sm w-full p-8 rounded-[3rem] text-center space-y-8 shadow-2xl border-none">
-                    <div className="bg-[#193C6C] w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto shadow-xl ring-8 ring-blue-50">
-                        <Hospital className="text-white" size={32} />
-                    </div>
-                    <div className="space-y-2">
-                        <h2 className="text-2xl font-black uppercase tracking-tight text-slate-800">Internship</h2>
-                        <p className="text-slate-400 text-xs font-bold leading-relaxed">
-                            กรุณาเข้าสู่ระบบด้วย PSU Passport<br />เพื่อดำเนินการลงทะเบียนฝึกงาน
-                        </p>
-                    </div>
-                    <a href={process.env.NEXT_PUBLIC_LOGIN_URL} className="block">
-                        <Button className="w-full py-8 bg-[#193C6C] hover:bg-[#294787] rounded-2xl font-black text-base shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 px-4">
-                            <UserCircle size={24} className="shrink-0" />
-                            <span className="whitespace-normal leading-tight">LOGIN WITH PSU PASSPORT</span>
-                        </Button>
-                    </a>
-                </Card>
-            </div>
-        )
-    }
     return (
         <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900 font-sans antialiased">
             <div className="bg-white border-b border-slate-100 py-10 text-center mb-10 shadow-sm">
                 <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
                     <GraduationCap className="text-white" size={36} />
                 </div>
-                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-800">Student Registry</h1>
-                <p className="text-slate-400 text-[11px] font-bold uppercase tracking-[0.2em] mt-1">ระบบลงทะเบียนฝึกปฏิบัติงาน</p>
+                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-800">Nurse Registry</h1>
+                <p className="text-slate-400 text-[11px] font-bold uppercase tracking-[0.2em] mt-1">ระบบลงทะเบียนฝึกปฏิบัติงานปี 4</p>
             </div>
 
             <div className="max-w-md mx-auto px-5 space-y-4">
@@ -642,27 +641,21 @@ export default function StudentRegisterPage() {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">คำนำหน้า</label>
                             <div className="relative">
                                 <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <select className="w-full h-14 rounded-2xl bg-slate-50 pl-11 pr-4 font-bold border-none appearance-none focus:ring-2 ring-blue-500 transition-all"
-                                    value={form.prefix}
-                                    onChange={e => setForm({ ...form, prefix: e.target.value })}>
-                                    <option value="" disabled>เลือก...</option>
-                                    <option value="นาย">นาย</option>
-                                    <option value="นางสาว">นางสาว</option>
+                                <select className="w-full h-14 rounded-2xl bg-slate-50 pl-11 pr-4 font-bold border-none appearance-none focus:ring-2 ring-blue-500 transition-all" value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value })}>
+                                    <option>นางสาว</option><option>นาย</option>
                                 </select>
                             </div>
-                            {errors.prefix && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.prefix}</span>}
                         </div>
                         <div className="col-span-7 space-y-1.5">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                                รหัสนักศึกษา
+                                รหัสนักศึกษา {allowedBatch && <span className="text-blue-500">(เฉพาะรหัส {allowedBatch})</span>}
                             </label>
                             <div className="relative">
                                 <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <Input
                                     className={`h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none focus:ring-2 ${errors.student_code ? 'ring-red-500' : 'ring-blue-500'}`}
-                                    placeholder="67xxxxxxxxx"
+                                    placeholder={`${allowedBatch || '6X'}XXXXXX`}
                                     value={form.student_code}
-                                    readOnly
                                     onChange={e => setForm({ ...form, student_code: e.target.value })}
                                 />
                             </div>
@@ -675,10 +668,7 @@ export default function StudentRegisterPage() {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อจริง</label>
                             <div className="relative">
                                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none"
-                                    placeholder="ชื่อ" value={form.first_name}
-                                    readOnly
-                                    onChange={e => setForm({ ...form, first_name: e.target.value })} />
+                                <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none" placeholder="ชื่อ" value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} />
                             </div>
                             {errors.first_name && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.first_name}</span>}
                         </div>
@@ -686,10 +676,7 @@ export default function StudentRegisterPage() {
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">นามสกุล</label>
                             <div className="relative">
                                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none"
-                                    placeholder="นามสกุล"
-                                    readOnly
-                                    value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} />
+                                <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none" placeholder="นามสกุล" value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} />
                             </div>
                             {errors.last_name && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.last_name}</span>}
                         </div>
@@ -762,7 +749,6 @@ export default function StudentRegisterPage() {
                             {/* ปรับปรุงส่วนเลือกพี่เลี้ยงแบบเพิ่มทีละคน */}
                             <div className="bg-blue-50/50 p-5 rounded-3xl border border-blue-100 space-y-3">
                                 <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1 block italic">รายชื่อพี่เลี้ยงที่เลือก (SUPERVISORS)</label>
-                                
 
                                 {/* แสดงรายชื่อที่เลือกแล้ว */}
                                 <div className="space-y-2">
@@ -822,10 +808,9 @@ export default function StudentRegisterPage() {
                 ))}
 
                 <Button onClick={handleRegister} disabled={loading} className="w-full h-24 bg-slate-900 hover:bg-black text-white rounded-[3rem] font-black text-2xl shadow-2xl transition-all active:scale-[0.97] mb-10">
-                    {loading ? <Loader2 className="animate-spin mr-3" size={28} /> : <Save className="mr-3" size={28} />} {loading ? 'กำลังประมวลผล...' : 'ยืนยันการลงทะเบียน'}
+                    {loading ? <Loader2 className="animate-spin mr-3" size={28} /> : <Save className="mr-3" size={28} />} {loading ? 'PROCESSING...' : 'CONFIRM & REGISTER'}
                 </Button>
             </div>
         </div>
     )
 }
-

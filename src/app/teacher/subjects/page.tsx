@@ -6,24 +6,31 @@ import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     ChevronLeft, User, Users, Search, GraduationCap, FileText, X,
-    Download, MapPin, Phone, ListChecks, BookOpen, ChevronRight, FileSpreadsheet, Clock
+    Download, MapPin, Phone, ListChecks, BookOpen, ChevronRight, FileSpreadsheet, Clock, ChevronDown
 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import html2canvas from 'html2canvas'
 import XLSX from 'xlsx-js-style'
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import liff from '@line/liff'
+import Swal from 'sweetalert2'
 
 export default function EvaluationSummary() {
     const router = useRouter()
     const searchParams = useSearchParams()
-    const subjectId = searchParams.get('id') || 'all'
+    const subjectId = searchParams.get('id') || ''
 
 
     const [loading, setLoading] = useState(true)
     const [subjects, setSubjects] = useState<any[]>([])
     const [data, setData] = useState<any[]>([])
     const [searchTerm, setSearchTerm] = useState('')
+
+    // Pagination & Year Filter
+    const [currentPage, setCurrentPage] = useState(1)
+    const [itemsPerPage, setItemsPerPage] = useState(10)
+    const [selectedYear, setSelectedYear] = useState('all')
 
     // Modal States
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -49,7 +56,28 @@ export default function EvaluationSummary() {
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true)
-            const lineId = 'test-c'
+            // const lineId = 'test-c'
+            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+
+            // 🟢 2. ตรวจสอบการ Login
+            if (!liff.isLoggedIn()) {
+                liff.login({ redirectUri: window.location.href })
+                return
+            }
+
+            // 🟢 3. ดึง Profile จริง
+            const profile = await liff.getProfile()
+            const lineId = profile.userId // ใช้ ID จาก LINE จริงๆ
+
+            if (!lineId) {
+                Swal.fire({
+                    title: 'ไม่พบสิทธิ์การเข้าถึง',
+                    text: 'กรุณาลงทะเบียนหรือติดต่อแอดมิน',
+                    icon: 'error'
+                }).then(() => router.replace('/'));
+                return;
+            }
+
             const { data: user } = await supabase.from('supervisors').select('id').eq('line_user_id', lineId).single()
             const PRIORITY_MAP: { [key: string]: number } = {
                 "บุคลิก": 1,
@@ -69,6 +97,13 @@ export default function EvaluationSummary() {
                 const { data: subData } = await supabase.from('supervisor_subjects').select('subject_id, subjects(name, id)').eq('supervisor_id', user.id)
                 setSubjects(subData || [])
 
+                // ถ้ายังไม่มี subjectId ให้ default เป็นวิชาแรก
+                if (!subjectId && subData && subData.length > 0) {
+                    handleFilterChange(subData[0].subject_id)
+                    setLoading(false)
+                    return
+                }
+
                 // 🚩 Query รวม supervisor info
                 let query = supabase.from('student_assignments').select(`
                     id, 
@@ -83,7 +118,7 @@ export default function EvaluationSummary() {
                     )
                 `)
 
-                if (subjectId !== 'all') query = query.eq('subject_id', subjectId)
+                if (subjectId) query = query.eq('subject_id', subjectId)
                 else if (subData) query = query.in('subject_id', subData.map(s => s.subject_id))
 
                 const { data: res } = await query
@@ -253,9 +288,23 @@ export default function EvaluationSummary() {
         setLoadingDetail(false);
     };
 
-    const filteredData = data.filter(item =>
-        `${item.student?.first_name} ${item.student?.last_name} ${item.student?.student_code}`.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    // Reset page on filter change
+    useEffect(() => { setCurrentPage(1) }, [searchTerm, selectedYear, subjectId])
+
+    // Derive unique year codes from data
+    const yearCodes = Array.from(new Set(
+        data.map(item => (item.student?.student_code || '').substring(0, 2)).filter(Boolean)
+    )).sort()
+
+    const filteredData = data.filter(item => {
+        const matchSearch = `${item.student?.first_name} ${item.student?.last_name} ${item.student?.student_code}`.toLowerCase().includes(searchTerm.toLowerCase())
+        const matchYear = selectedYear === 'all' || (item.student?.student_code || '').startsWith(selectedYear)
+        return matchSearch && matchYear
+    })
+
+    // Pagination helpers
+    const totalPages = Math.ceil(filteredData.length / itemsPerPage)
+    const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
     const handleExportExcel = () => {
         const workbook = XLSX.utils.book_new();
@@ -270,156 +319,107 @@ export default function EvaluationSummary() {
         const defaultColor = 'F3F4F6';
         const summaryColor = '105030';
 
-        if (subjectId === 'all') {
-            const subjectList = Array.from(new Set(data.map(d => d.subjectName)));
-            subjectList.forEach(subName => {
-                const studentsInSub = data.filter(d => d.subjectName === subName);
-                const sheetData = studentsInSub.map(item => {
-                    const row: any = {
-                        'รหัสประจำตัว': item.student?.student_code,
-                        'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
-                        'หน่วยงาน': item.place?.site_name || 'N/A'
-                    };
+        if (data.length > 0) {
+            const allEvalTitles = Array.from(new Set(data.flatMap(d => d.evaluations.map((e: any) => e.title))));
 
-                    let grandRaw = 0;
-                    let grandFull = 0;
-                    let grandNetTotal = 0; // 🚩 สำหรับรวมคะแนนสุทธิทุกหมวด
+            allEvalTitles.forEach(title => {
+                const config = evaluationSettings[title] || { short: title.replace('แบบประเมิน', '').trim(), color: defaultColor };
+                const sheetData: any[] = [];
 
-                    item.evaluations.forEach((ev: any) => {
-                        const config = evaluationSettings[ev.title] || { short: ev.title.replace('แบบประเมิน', '').trim(), color: defaultColor };
-                        const max = (ev.answers?.length || 0) * 5;
-                        const net = ev.rawScore ? ((ev.rawScore / max) * (ev.weight * 100)) : 0;
+                data.forEach(item => {
+                    const isMulti = item.mentorCount > 1;
 
-                        row[`${config.short} (ที่ได้/เต็ม)`] = ev.rawScore !== null ? `${ev.rawScore}/${max}` : 'N/A';
-                        row[`${config.short} (น้ำหนัก)`] = `${(ev.weight * 100)}%`;
-                        row[`${config.short} (สุทธิ)`] = ev.rawScore ? net.toFixed(2) : 'N/A';
-
-                        if (ev.rawScore) {
-                            grandRaw += ev.rawScore;
-                            grandFull += max;
-                            grandNetTotal += parseFloat(net.toFixed(2));
-                        }
-                    });
-
-                    // 🚩 เพิ่มคอลัมน์รวมคะแนนสุทธิ และคะแนนดิบรวม
-                    row['คะแนนรวมสุทธิ'] = grandNetTotal.toFixed(2);
-                    row['คะแนนดิบรวม (ดิบ/เต็ม)'] = grandFull > 0 ? `${grandRaw}/${grandFull}` : 'N/A';
-                    row['เปอร์เซ็นต์รวมสุทธิ (%)'] = grandFull > 0 ? ((grandRaw / grandFull) * 100).toFixed(2) : 'N/A';
-
-                    // 🆕 เพิ่มคอลัมน์ชื่อผู้ประเมินและจำนวน
-                    row['จำนวนผู้ประเมิน'] = item.mentorCount > 1 ? `เฉลี่ย ${item.mentorCount} คน` : '1';
-                    row['ผู้ประเมิน'] = item.supervisorEvaluations?.map((sv: any) => sv.supervisorName).join(', ') || '-';
-
-                    return row;
-                });
-
-                const worksheet = XLSX.utils.json_to_sheet(sheetData);
-                applyStyles(worksheet, evaluationSettings, defaultColor, summaryColor, 'summary');
-                XLSX.utils.book_append_sheet(workbook, worksheet, subName.substring(0, 31));
-            });
-        } else {
-            if (data.length > 0) {
-                const allEvalTitles = Array.from(new Set(data.flatMap(d => d.evaluations.map((e: any) => e.title))));
-
-                allEvalTitles.forEach(title => {
-                    const config = evaluationSettings[title] || { short: title.replace('แบบประเมิน', '').trim(), color: defaultColor };
-                    const sheetData: any[] = [];
-
-                    data.forEach(item => {
-                        const isMulti = item.mentorCount > 1;
-
-                        if (isMulti && item.supervisorEvaluations) {
-                            // 🆕 แยกแถวรายพี่เลี้ยง
-                            item.supervisorEvaluations.forEach((sv: any) => {
-                                const svEval = sv.evaluations.find((e: any) => e.title === title);
-                                const row: any = {
-                                    'รหัสประจำตัว': item.student?.student_code,
-                                    'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
-                                };
-                                if (svEval) {
-                                    svEval.answers.forEach((ans: any, idx: number) => {
-                                        row[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
-                                    });
-                                    const maxCur = (svEval.answers?.length || 0) * 5;
-                                    row[`รวม ${config.short} (ดิบ/เต็ม)`] = `${svEval.rawScore}/${maxCur}`;
-                                    row[`สุทธิหมวดนี้ (${(svEval.weight * 100)}%)`] = svEval.rawScore ? ((svEval.rawScore / maxCur) * (svEval.weight * 100)).toFixed(2) : 'N/A';
-                                    row['ข้อเสนอแนะ'] = svEval.comment || '-';
-                                }
-                                row['ผู้ประเมิน'] = sv.supervisorName;
-                                row['_rowType'] = 'mentor'; // marker สำหรับไฮไลท์
-                                sheetData.push(row);
-                            });
-
-                            // 🆕 แถวเฉลี่ย
-                            const avgEval = item.evaluations.find((e: any) => e.title === title);
-                            const avgRow: any = {
-                                'รหัสประจำตัว': item.student?.student_code,
-                                'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
-                            };
-                            if (avgEval) {
-                                avgEval.answers.forEach((ans: any, idx: number) => {
-                                    avgRow[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
-                                });
-                                const maxCur = (avgEval.answers?.length || 0) * 5;
-                                avgRow[`รวม ${config.short} (ดิบ/เต็ม)`] = `${avgEval.rawScore}/${maxCur}`;
-                                avgRow[`สุทธิหมวดนี้ (${(avgEval.weight * 100)}%)`] = avgEval.rawScore ? ((avgEval.rawScore / maxCur) * (avgEval.weight * 100)).toFixed(2) : 'N/A';
-                                avgRow['ข้อเสนอแนะ'] = avgEval.comment || '-';
-                            }
-                            avgRow['ผู้ประเมิน'] = `⭐ เฉลี่ย (${item.mentorCount} คน)`;
-                            avgRow['_rowType'] = 'average'; // marker สำหรับไฮไลท์
-                            sheetData.push(avgRow);
-
-                        } else {
-                            // พี่เลี้ยงคนเดียว — แสดงเหมือนเดิม
-                            const currentEval = item.evaluations.find((e: any) => e.title === title);
+                    if (isMulti && item.supervisorEvaluations) {
+                        // 🆕 แยกแถวรายพี่เลี้ยง
+                        item.supervisorEvaluations.forEach((sv: any) => {
+                            const svEval = sv.evaluations.find((e: any) => e.title === title);
                             const row: any = {
                                 'รหัสประจำตัว': item.student?.student_code,
                                 'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
                             };
-                            if (currentEval) {
-                                currentEval.answers.forEach((ans: any, idx: number) => {
+                            if (svEval) {
+                                svEval.answers.forEach((ans: any, idx: number) => {
                                     row[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
                                 });
-                                const maxCur = (currentEval.answers?.length || 0) * 5;
-                                row[`รวม ${config.short} (ดิบ/เต็ม)`] = currentEval.rawScore !== null ? `${currentEval.rawScore}/${maxCur}` : 'N/A';
-                                row[`สุทธิหมวดนี้ (${(currentEval.weight * 100)}%)`] = currentEval.rawScore ? ((currentEval.rawScore / maxCur) * (currentEval.weight * 100)).toFixed(2) : 'N/A';
-                                row['ข้อเสนอแนะ'] = currentEval?.comment || '-';
+                                const maxCur = (svEval.answers?.length || 0) * 5;
+                                row[`รวม ${config.short} (ดิบ/เต็ม)`] = `${svEval.rawScore}/${maxCur}`;
+                                row[`สุทธิหมวดนี้ (${(svEval.weight * 100)}%)`] = svEval.rawScore ? ((svEval.rawScore / maxCur) * (svEval.weight * 100)).toFixed(2) : 'N/A';
+                                row['ข้อเสนอแนะ'] = svEval.comment || '-';
                             }
-                            row['ผู้ประเมิน'] = item.supervisorEvaluations?.[0]?.supervisorName || '-';
+                            row['ผู้ประเมิน'] = sv.supervisorName;
+                            row['_rowType'] = 'mentor'; // marker สำหรับไฮไลท์
                             sheetData.push(row);
+                        });
+
+                        // 🆕 แถวเฉลี่ย
+                        const avgEval = item.evaluations.find((e: any) => e.title === title);
+                        const avgRow: any = {
+                            'รหัสประจำตัว': item.student?.student_code,
+                            'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
+                        };
+                        if (avgEval) {
+                            avgEval.answers.forEach((ans: any, idx: number) => {
+                                avgRow[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
+                            });
+                            const maxCur = (avgEval.answers?.length || 0) * 5;
+                            avgRow[`รวม ${config.short} (ดิบ/เต็ม)`] = `${avgEval.rawScore}/${maxCur}`;
+                            avgRow[`สุทธิหมวดนี้ (${(avgEval.weight * 100)}%)`] = avgEval.rawScore ? ((avgEval.rawScore / maxCur) * (avgEval.weight * 100)).toFixed(2) : 'N/A';
+                            avgRow['ข้อเสนอแนะ'] = avgEval.comment || '-';
                         }
-                    });
+                        avgRow['ผู้ประเมิน'] = `⭐ เฉลี่ย (${item.mentorCount} คน)`;
+                        avgRow['_rowType'] = 'average'; // marker สำหรับไฮไลท์
+                        sheetData.push(avgRow);
 
-                    // ลบ _rowType ก่อนสร้าง sheet แต่เก็บไว้ใช้ highlight
-                    const rowTypes = sheetData.map(r => r._rowType || 'normal');
-                    sheetData.forEach(r => delete r._rowType);
-
-                    const worksheet = XLSX.utils.json_to_sheet(sheetData);
-                    applyStyles(worksheet, evaluationSettings, defaultColor, summaryColor, 'detail');
-
-                    // 🆕 Highlight แถวพี่เลี้ยงและเฉลี่ย
-                    const wsRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-                    rowTypes.forEach((type, rowIdx) => {
-                        if (type === 'normal') return;
-                        const bgColor = type === 'average' ? 'E8F5E9' : 'FFF8E1'; // เขียวอ่อน = เฉลี่ย, เหลืองอ่อน = พี่เลี้ยง
-                        const fontWeight = type === 'average';
-                        for (let C = wsRange.s.c; C <= wsRange.e.c; ++C) {
-                            const addr = XLSX.utils.encode_cell({ r: rowIdx + 1, c: C }); // +1 เพราะ header อยู่แถว 0
-                            if (!worksheet[addr]) worksheet[addr] = { v: '', t: 's' };
-                            worksheet[addr].s = {
-                                ...(worksheet[addr].s || {}),
-                                fill: { fgColor: { rgb: bgColor } },
-                                font: { bold: fontWeight, color: { rgb: type === 'average' ? '1B5E20' : '000000' } }
-                            };
+                    } else {
+                        // พี่เลี้ยงคนเดียว — แสดงเหมือนเดิม
+                        const currentEval = item.evaluations.find((e: any) => e.title === title);
+                        const row: any = {
+                            'รหัสประจำตัว': item.student?.student_code,
+                            'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
+                        };
+                        if (currentEval) {
+                            currentEval.answers.forEach((ans: any, idx: number) => {
+                                row[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
+                            });
+                            const maxCur = (currentEval.answers?.length || 0) * 5;
+                            row[`รวม ${config.short} (ดิบ/เต็ม)`] = currentEval.rawScore !== null ? `${currentEval.rawScore}/${maxCur}` : 'N/A';
+                            row[`สุทธิหมวดนี้ (${(currentEval.weight * 100)}%)`] = currentEval.rawScore ? ((currentEval.rawScore / maxCur) * (currentEval.weight * 100)).toFixed(2) : 'N/A';
+                            row['ข้อเสนอแนะ'] = currentEval?.comment || '-';
                         }
-                    });
-
-                    XLSX.utils.book_append_sheet(workbook, worksheet, config.short.substring(0, 31));
+                        row['ผู้ประเมิน'] = item.supervisorEvaluations?.[0]?.supervisorName || '-';
+                        sheetData.push(row);
+                    }
                 });
-            }
+
+                // ลบ _rowType ก่อนสร้าง sheet แต่เก็บไว้ใช้ highlight
+                const rowTypes = sheetData.map(r => r._rowType || 'normal');
+                sheetData.forEach(r => delete r._rowType);
+
+                const worksheet = XLSX.utils.json_to_sheet(sheetData);
+                applyStyles(worksheet, evaluationSettings, defaultColor, summaryColor, 'detail');
+
+                // 🆕 Highlight แถวพี่เลี้ยงและเฉลี่ย
+                const wsRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+                rowTypes.forEach((type, rowIdx) => {
+                    if (type === 'normal') return;
+                    const bgColor = type === 'average' ? 'E8F5E9' : 'FFF8E1'; // เขียวอ่อน = เฉลี่ย, เหลืองอ่อน = พี่เลี้ยง
+                    const fontWeight = type === 'average';
+                    for (let C = wsRange.s.c; C <= wsRange.e.c; ++C) {
+                        const addr = XLSX.utils.encode_cell({ r: rowIdx + 1, c: C }); // +1 เพราะ header อยู่แถว 0
+                        if (!worksheet[addr]) worksheet[addr] = { v: '', t: 's' };
+                        worksheet[addr].s = {
+                            ...(worksheet[addr].s || {}),
+                            fill: { fgColor: { rgb: bgColor } },
+                            font: { bold: fontWeight, color: { rgb: type === 'average' ? '1B5E20' : '000000' } }
+                        };
+                    }
+                });
+
+                XLSX.utils.book_append_sheet(workbook, worksheet, config.short.substring(0, 31));
+            });
         }
 
-        const fileName = subjectId !== 'all' && data.length > 0 ? data[0].subjectName : 'สรุปผลรวม';
+        const fileName = data.length > 0 ? data[0].subjectName : 'สรุปผลรวม';
         XLSX.writeFile(workbook, `Report_${fileName}_${new Date().toLocaleDateString()}.xlsx`);
     };
 
@@ -593,90 +593,182 @@ export default function EvaluationSummary() {
     };
 
 
+
+
     return (
-        <div className="min-h-screen bg-[#F0F7FF] pb-24 font-sans text-slate-900">
-            {/* Header: ปรับปรุงระยะห่าง */}
-            <div className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-                <div className="max-w-4xl mx-auto px-4 pt-10 pb-6">
-                    <div className="flex items-center justify-between mb-8 px-2">
-                        <button onClick={() => router.push('/teacher/dashboard')} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-600 transition-all active:scale-90"><ChevronLeft size={20} /></button>
-                        <div className="text-center">
-                            <h1 className="text-lg font-black text-slate-800 leading-none">ผลการประเมินวิชา</h1>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Weighted Summary</p>
-                        </div>
-                        <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><GraduationCap size={20} /></div>
-                    </div>
-
-                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-6 px-2">
-                        <button onClick={() => handleFilterChange('all')} className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${subjectId === 'all' ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>ทุกวิชา</button>
-                        {subjects.map((s, i) => (
-                            <button key={i} onClick={() => handleFilterChange(s.subject_id)} className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${String(subjectId) === String(s.subject_id) ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>{s.subjects.name}</button>
-                        ))}
+        <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-slate-900">
+            {/* Admin-style Header */}
+            <div className="max-w-7xl mx-auto pb-20 px-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
+                    <div>
+                        <h1 className="text-4xl font-black text-slate-900 flex items-center gap-4">
+                            <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200">
+                                <GraduationCap size={32} className="text-white" />
+                            </div>
+                            <span>EVALUATION <span className="text-indigo-600">Results</span></span>
+                        </h1>
+                        <p className="text-slate-400 font-bold mt-2 ml-1 text-xs uppercase tracking-[0.2em]">ผลการประเมินรายวิชา — Weighted Summary</p>
                     </div>
                 </div>
-            </div>
 
-            {/* Student List */}
-            <div className="max-w-4xl mx-auto px-4 mt-8 space-y-4">
-                <div className="flex gap-3 px-2 mb-8 items-center">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนักศึกษา..." className="w-full bg-white border border-slate-200 rounded-2xl py-4.5 pl-14 pr-4 text-sm font-bold shadow-sm focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all" onChange={(e) => setSearchTerm(e.target.value)} />
-                    </div>
-                    <button onClick={handleExportExcel} className="h-[54px] px-6 bg-emerald-600 text-white rounded-2xl font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-100 hover:bg-emerald-700 active:scale-95 transition-all shrink-0">
-                        <FileSpreadsheet size={18} />
-                        <span className="hidden sm:inline">EXPORT EXCEL</span>
-                    </button>
+                {/* Subject pills */}
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-4 mb-6">
+                    {subjects.map((s, i) => (
+                        <button key={i} onClick={() => handleFilterChange(s.subject_id)} className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${String(subjectId) === String(s.subject_id) ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>{s.subjects.name}</button>
+                    ))}
                 </div>
 
-                {filteredData.map((item, idx) => {
-                    const totalNet = item.evaluations.reduce((acc: number, ev: any) => {
-                        const max = (ev.answers?.length || 8) * 5;
-                        return acc + (ev.rawScore / max * (ev.weight * 100));
-                    }, 0).toFixed(2);
-                    const isMultiMentor = item.mentorCount > 1;
+                {/* Filter Bar — admin style */}
+                <div className="bg-white/50 backdrop-blur-md p-4 rounded-[2.5rem] border border-slate-100 shadow-sm mb-8">
+                    <div className="flex flex-col xl:flex-row items-center gap-4">
+                        <div className="relative w-full xl:w-64 shrink-0">
+                            <Users className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(e.target.value)}
+                                className="w-full h-14 pl-14 pr-10 rounded-[1.5rem] border-2 border-slate-50 bg-white font-bold text-sm focus:border-indigo-500 focus:ring-0 outline-none appearance-none cursor-pointer text-slate-700 transition-all"
+                            >
+                                <option value="all">ทุกรหัสชั้นปี</option>
+                                {yearCodes.map(code => (
+                                    <option key={code} value={code}>รหัส {code}</option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" size={16} />
+                        </div>
+                        <div className="relative flex-1 w-full">
+                            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                            <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนักศึกษา..." className="w-full h-14 pl-14 pr-6 rounded-[1.5rem] border-2 border-slate-50 bg-white font-bold text-sm focus:border-indigo-500 focus:ring-0 outline-none transition-all placeholder:text-slate-300" onChange={(e) => setSearchTerm(e.target.value)} />
+                        </div>
+                        <button onClick={handleExportExcel} className="h-14 px-6 bg-emerald-600 text-white rounded-[1.5rem] font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-100 hover:bg-emerald-700 active:scale-95 transition-all shrink-0">
+                            <FileSpreadsheet size={18} />
+                            <span className="hidden sm:inline">EXPORT EXCEL</span>
+                        </button>
+                    </div>
+                </div>
 
-                    return (
-                        <div key={idx} className="bg-white p-5 rounded-[2.2rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4 hover:border-indigo-300 transition-all relative overflow-hidden group">
-                            <div className="flex items-center gap-4 flex-1">
-                                <div className="w-14 h-14 rounded-2xl bg-slate-50 overflow-hidden shrink-0 border border-slate-100">
-                                    {item.student?.avatar_url ? <img src={item.student.avatar_url} className="w-full h-full object-cover" /> : <User size={20} className="m-auto mt-4 text-slate-200" />}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <h3 className="font-black text-slate-800 text-base leading-tight truncate">{item.student?.first_name} {item.student?.last_name}</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 mt-0.5 tracking-tight uppercase">รหัส : {item.student?.student_code}</p>
-                                    {isMultiMentor && (
-                                        <p className="text-[9px] font-black text-violet-500 mt-1 flex items-center gap-1"><Users size={10} /> {item.mentorCount} พี่เลี้ยงประเมิน</p>
-                                    )}
-                                    {item.evaluations?.[0]?.evaluatedAt && (
-                                        <p className="text-[9px] font-bold text-indigo-400 mt-1 flex items-center gap-1">
-                                            <Clock size={10} /> ประเมินเมื่อ: {new Date(item.evaluations[0].evaluatedAt).toLocaleDateString('th-TH')}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="text-right sm:hidden pr-2">
-                                    <p className="text-xl font-black text-indigo-600 leading-none">{totalNet}</p>
-                                    <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">{isMultiMentor ? 'Avg Net' : 'Net %'}</p>
-                                </div>
+                {/* Table */}
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50/50 border-b border-slate-100">
+                                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center w-14">#</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">นักศึกษา</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">รายวิชา</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">สถานที่ฝึก</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">คะแนนสุทธิ</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {paginatedData.map((item, idx) => {
+                                    const totalNet = item.evaluations.reduce((acc: number, ev: any) => {
+                                        const max = (ev.answers?.length || 8) * 5;
+                                        return acc + (ev.rawScore / max * (ev.weight * 100));
+                                    }, 0).toFixed(2);
+                                    const isMultiMentor = item.mentorCount > 1;
+                                    const rowNum = (currentPage - 1) * itemsPerPage + idx + 1;
+
+                                    return (
+                                        <tr key={idx} className="hover:bg-slate-50/40 transition-colors group">
+                                            <td className="px-6 py-4 text-center text-sm font-bold text-slate-300">{rowNum}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden border border-white shadow-sm shrink-0">
+                                                        {item.student?.avatar_url ? <img src={item.student.avatar_url} className="w-full h-full object-cover" /> : <User size={16} className="m-auto mt-2.5 text-slate-300" />}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-black text-slate-800 text-sm leading-tight">{item.student?.first_name} {item.student?.last_name}</div>
+                                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">รหัส {item.student?.student_code}</div>
+                                                        {isMultiMentor && (
+                                                            <div className="text-[9px] font-black text-violet-500 mt-0.5 flex items-center gap-1"><Users size={10} /> {item.mentorCount} พี่เลี้ยง</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black border border-indigo-100/50">{item.subjectName}</span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-sm font-bold text-slate-700 leading-tight">{item.place?.site_name || 'ไม่ระบุ'}</div>
+                                                <div className="text-[10px] font-bold text-slate-400 mt-0.5">{item.place?.province || ''}</div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className="text-lg font-black text-indigo-600">{totalNet}</span>
+                                                {isMultiMentor && <p className="text-[8px] font-black text-slate-300 uppercase">AVG</p>}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex justify-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => { setSelectedStudent(item); setModalMode('summary'); setIsModalOpen(true); setSelectedSupervisorIdx(0); }} className="h-9 w-9 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="สรุปผล"><FileText size={16} /></button>
+                                                    <button onClick={() => openDetailModal(item)} className="h-9 w-9 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="รายละเอียด"><ListChecks size={16} /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {paginatedData.length === 0 && (
+                        <div className="py-20 text-center">
+                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-200"><Users size={32} /></div>
+                            <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">ไม่พบข้อมูลนักศึกษา</p>
+                        </div>
+                    )}
+
+                    {/* Pagination Footer */}
+                    {filteredData.length > 0 && (
+                        <div className="px-8 py-5 bg-slate-50/30 border-t flex flex-col sm:flex-row justify-between items-center gap-4 rounded-b-[2.5rem]">
+                            <div className="flex items-center gap-3">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">แสดงแถว:</span>
+                                <select
+                                    value={itemsPerPage}
+                                    onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                                    className="bg-white border-none shadow-sm rounded-xl px-3 py-1.5 text-xs font-black text-slate-600 outline-none focus:ring-2 ring-indigo-500 cursor-pointer transition-all hover:shadow-md"
+                                >
+                                    {[5, 10, 20, 50].map(val => <option key={val} value={val}>{val}</option>)}
+                                </select>
+                                <p className="text-xs font-bold text-slate-400 ml-2">
+                                    {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredData.length)} จาก {filteredData.length} รายการ
+                                </p>
                             </div>
-
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 sm:border-l sm:pl-6 border-slate-50">
-                                <div className="flex flex-col gap-1 flex-1">
-                                    <div className="flex items-center gap-2 text-[10px] font-black text-indigo-500 uppercase"><BookOpen size={10} /> {item.subjectName}</div>
-                                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase"><MapPin size={10} /> {item.place?.site_name || 'ไม่ระบุสถานที่'}</div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                                    disabled={currentPage === 1}
+                                    className="h-9 px-4 rounded-xl font-bold text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1"
+                                >
+                                    <ChevronLeft size={16} /> ก่อนหน้า
+                                </button>
+                                <div className="flex items-center gap-1">
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+                                        if (totalPages > 7 && (page !== 1 && page !== totalPages && Math.abs(currentPage - page) > 1)) {
+                                            if (page === 2 || page === totalPages - 1) return <span key={page} className="text-slate-300 text-xs px-1">...</span>;
+                                            return null;
+                                        }
+                                        return (
+                                            <button
+                                                key={page}
+                                                onClick={() => setCurrentPage(page)}
+                                                className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === page ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 scale-110' : 'text-slate-400 hover:bg-slate-100'}`}
+                                            >
+                                                {page}
+                                            </button>
+                                        )
+                                    })}
                                 </div>
-                                <div className="hidden sm:block text-right min-w-[70px]">
-                                    <p className="text-2xl font-black text-indigo-600 leading-none">{totalNet}</p>
-                                    <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-1">{isMultiMentor ? 'Avg Net' : 'Net Score'}</p>
-                                </div>
-                                <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                                    <button onClick={() => { setSelectedStudent(item); setModalMode('summary'); setIsModalOpen(true); setSelectedSupervisorIdx(0); }} className="flex-1 sm:flex-none h-11 px-4 sm:px-0 sm:w-11 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><FileText size={18} /></button>
-                                    <button onClick={() => openDetailModal(item)} className="flex-1 sm:flex-none h-11 px-4 sm:px-0 sm:w-11 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm"><ListChecks size={18} /></button>
-                                </div>
+                                <button
+                                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                                    disabled={currentPage === totalPages}
+                                    className="h-9 px-4 rounded-xl font-bold text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1"
+                                >
+                                    ถัดไป <ChevronRight size={16} />
+                                </button>
                             </div>
                         </div>
-                    )
-                })}
+                    )}
+                </div>
             </div>
 
             {/* Modal: สวยงามและครบถ้วน */}

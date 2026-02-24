@@ -2,8 +2,8 @@
 "use client"
 import { useState, useEffect, useCallback } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
-import { 
-    ChevronLeft, User, Phone, Mail, MapPin, 
+import {
+    ChevronLeft, User, Phone, Mail, MapPin,
     UserCircle2, PhoneCall, Building2, Calendar,
     X, Maximize2, ShieldCheck, GraduationCap,
     BookOpen, Layers, Info, CheckCircle2
@@ -13,7 +13,7 @@ import { useRouter, useParams } from 'next/navigation'
 export default function StudentDetailPage() {
     const router = useRouter()
     const params = useParams()
-    
+
     // ล้างเครื่องหมาย : ออกเพื่อป้องกัน Error 400 จาก Supabase
     const studentId = params?.id ? String(params.id).replace(':', '') : null;
 
@@ -74,10 +74,10 @@ export default function StudentDetailPage() {
                             phone: sv.supervisors?.phone
                         })) || []
                     });
-                    
+
                     return acc;
                 }, {});
-                
+
                 setStudent({ ...data, rotationsGrouped: Object.values(grouped) });
             }
         } catch (err: any) {
@@ -107,22 +107,27 @@ export default function StudentDetailPage() {
     );
 
     return (
-        <div className="min-h-screen bg-[#F0F7FF] pb-12 font-sans text-slate-900">
-            {/* Header Nav */}
-            <div className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-100 shadow-sm">
-                <div className="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between">
-                    <button onClick={() => router.back()} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-600 active:scale-90 transition-all">
-                        <ChevronLeft size={20} />
-                    </button>
-                    <h1 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Student Profile</h1>
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                        <GraduationCap size={20} />
+        <div className="min-h-screen bg-[#F8FAFC] pb-12 font-sans text-slate-900">
+            {/* Admin-style Header */}
+            <div className="max-w-3xl mx-auto px-4 pt-2 pb-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                    <div>
+                        <h1 className="text-4xl font-black text-slate-900 flex items-center gap-4">
+                            <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200">
+                                <GraduationCap size={32} className="text-white" />
+                            </div>
+                            <span>STUDENT <span className="text-indigo-600">Profile</span></span>
+                        </h1>
+                        <p className="text-slate-400 font-bold mt-2 ml-1 text-xs uppercase tracking-[0.2em]">ข้อมูลนักศึกษาและแผนฝึกปฏิบัติ</p>
                     </div>
+                    <button onClick={() => router.back()} className="px-6 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all flex items-center gap-2 shadow-lg shadow-slate-200">
+                        <ChevronLeft size={16} /> ย้อนกลับ
+                    </button>
                 </div>
             </div>
 
             <div className="max-w-3xl mx-auto px-4 mt-8 space-y-6">
-                
+
                 {/* 1. Main Profile Card */}
                 <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center relative overflow-hidden">
                     <div className="absolute top-6 right-6">
@@ -131,7 +136,7 @@ export default function StudentDetailPage() {
                         </div>
                     </div>
 
-                    <div 
+                    <div
                         className="w-28 h-28 rounded-[2.5rem] overflow-hidden mx-auto mb-6 border-4 border-slate-50 shadow-md cursor-zoom-in relative group"
                         onClick={() => student?.avatar_url && setExpandedImage(student.avatar_url)}
                     >
@@ -146,7 +151,7 @@ export default function StudentDetailPage() {
                     </div>
 
                     <h2 className="text-2xl font-black text-slate-800 leading-none mb-2 uppercase tracking-tight">
-                        {student?.first_name} {student?.last_name} 
+                        {student?.first_name} {student?.last_name}
                         {student?.nickname && <span className="text-indigo-500 ml-2">({student.nickname})</span>}
                     </h2>
                     <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">ID: {student?.student_code}</p>
@@ -179,7 +184,7 @@ export default function StudentDetailPage() {
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-4 flex items-center gap-2">
                         <Layers size={14} /> รายละเอียดการฝึกปฏิบัติรายผลัด
                     </h3>
-                    
+
                     {student?.rotationsGrouped?.map((group: any, idx: number) => (
                         <div key={idx} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden transition-all hover:shadow-md">
                             <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
@@ -189,7 +194,7 @@ export default function StudentDetailPage() {
                                 </div>
                                 <div className="text-[9px] font-black bg-indigo-500 px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">Rotation</div>
                             </div>
-                            
+
                             <div className="p-8 space-y-8">
                                 {/* ส่วนแสดง โรงพยาบาล และ จังหวัด */}
                                 <div className="flex items-start gap-4 p-5 bg-slate-50 rounded-[2rem] border border-slate-100">
@@ -225,7 +230,7 @@ export default function StudentDetailPage() {
                                                             <p className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">Practice Subject</p>
                                                         </div>
                                                     </div>
-                                                    
+
                                                     {/* รายชื่อพี่เลี้ยงของวิชานี้ */}
                                                     <div className="flex flex-wrap gap-2 sm:justify-end">
                                                         {sub.mentors.length > 0 ? sub.mentors.map((m: any, mIdx: number) => (

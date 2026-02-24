@@ -104,10 +104,17 @@ const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
 const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => {
     const isClaimed = task.isClaimedByMe;
     const evaluated = isMine ? task.is_evaluated : false;
-    const isPartial = isMine && !evaluated && task.has_eval_logs;
+    // const isPartial = isMine && !evaluated && task.has_eval_logs;
     const progress = task.eval_progress; // { done, total }
+    const isPartial = isMine && !evaluated && progress && progress.done > 0 && progress.done < progress.total;
     const isCard = styleType === 'card';
-    const isFullPartial = !task.is_evaluated && (task.answer_count === task.total_questions);
+    // const isFullPartial = !task.is_evaluated && (task.answer_count === task.total_questions);
+    // ตรวจสอบว่าต้องมีการตอบอย่างน้อย 1 ข้อ และจำนวนที่ตอบต้องเท่ากับจำนวนข้อทั้งหมด
+    // const isFullPartial = !task.is_evaluated &&
+    //     task.answer_count > 0 &&
+    //     task.answer_count === task.total_questions;
+
+    const isFullPartial = isMine && !evaluated && progress && progress.done > 0 && progress.done === progress.total;
 
     let containerClass = "relative w-full flex justify-between items-center transition-all active:scale-[0.98] overflow-hidden";
     let paddingClass = isCard ? "p-4 rounded-3xl mb-3" : "p-3 rounded-2xl pl-4";
@@ -149,8 +156,17 @@ const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => 
                     </p>
                     {isMine ? (
                         <>
-                            <p className={`text-[9px] font-medium ${evaluated ? 'text-emerald-600' : isPartial ? 'text-amber-600' : 'text-slate-400'}`}>
+                            {/* <p className={`text-[9px] font-medium ${evaluated ? 'text-emerald-600' : isPartial ? 'text-amber-600' : 'text-slate-400'}`}>
                                 {evaluated ? 'บันทึกเรียบร้อย' : isPartial ? `ประเมินแล้ว ${progress?.done || 0}/${progress?.total || '?'} หมวด` : 'คลิกเพื่อประเมิน'}
+                            </p> */}
+                            <p className={`text-[9px] font-medium ${evaluated ? 'text-emerald-600' : isFullPartial ? 'text-rose-600' : isPartial ? 'text-amber-600' : 'text-slate-400'}`}>
+                                {evaluated
+                                    ? 'บันทึกเรียบร้อย'
+                                    : isFullPartial
+                                        ? 'ตอบครบแล้ว (กรุณากดบันทึก)'
+                                        : isPartial
+                                            ? `ประเมินแล้ว ${progress?.done || 0}/${progress?.total || '?'} หมวด`
+                                            : 'รอประเมิน'}
                             </p>
                             {isPartial && progress && (
                                 <div className="mt-1.5 w-full max-w-[140px]">
@@ -203,7 +219,10 @@ const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => 
                         <Clock size={10} /> บางส่วน
                     </div>
                 ) : (
-                    <ChevronRight size={isCard ? 20 : 16} className="text-slate-300 shrink-0" />
+                    // <ChevronRight size={isCard ? 20 : 16} className="text-slate-300 shrink-0" />
+                    <div className="text-[9px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                        <Clock size={10} /> รอประเมิน
+                    </div>
                 )
             ) : (
                 !isClaimed && <div className="bg-amber-100 text-amber-700 p-1.5 rounded-lg shrink-0"><ChevronRight size={16} /></div>
@@ -278,7 +297,7 @@ export default function SupervisorStudentList() {
                     id, rotation_id, student_id, subject_id, sub_subject_id,
                     students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone , email ),
                     subjects:subject_id ( id, name ), 
-                    sub_subjects:sub_subject_id ( name ),
+                    sub_subjects:sub_subject_id ( id, name ),
                     rotations:rotation_id ( name )
                 )
             `).eq('supervisor_id', supervisor.id)
@@ -338,7 +357,7 @@ export default function SupervisorStudentList() {
                 id, rotation_id, student_id, subject_id, sub_subject_id,
                 students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone ,email ),
                 subjects:subject_id ( id, name ), 
-                sub_subjects:sub_subject_id ( name ),
+                sub_subjects:sub_subject_id (id, name ),
                 rotations:rotation_id ( name )
             `).eq('site_id', supervisor.site_id)
 
@@ -356,13 +375,13 @@ export default function SupervisorStudentList() {
         const init = async () => {
             try {
                 // ✅ ใช้งานจริง: เปิดระบบ LIFF (ลบคอมเมนต์ออกถ้าขึ้น Production)
-                /* await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
                 if (!liff.isLoggedIn()) { liff.login(); return }
                 const profile = await liff.getProfile()
-                const userId = profile.userId */
+                const userId = profile.userId
 
                 // ⚠️ Dev Mode:
-                const userId = 'U678862bd992a4cda7aaf972743b585ac'
+                // const userId = 'U678862bd992a4cda7aaf972743b585ac'
                 // const userId = 'test-somruk'
 
                 if (userId) {

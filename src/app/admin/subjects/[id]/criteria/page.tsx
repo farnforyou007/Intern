@@ -402,7 +402,9 @@ import Swal from 'sweetalert2'
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-
+interface ItemForm {
+  factor: number | string; // หรือ number | null
+}
 export default function ManageCriteriaPage() {
     const params = useParams()
     const searchParams = useSearchParams()
@@ -926,7 +928,7 @@ export default function ManageCriteriaPage() {
                                                 // ถ้ามีตัวเลข ค่อยแปลงเป็น Float
                                                 setItemForm({
                                                     ...itemForm,
-                                                    factor: val === '' ? '' : parseFloat(val)
+                                                    factor: val === '' ? 0 : parseFloat(val)
                                                 })
                                             }}
                                             className="h-14 bg-white rounded-2xl font-bold shadow-sm border-none ring-1 ring-slate-100 focus:ring-2 focus:ring-blue-500"

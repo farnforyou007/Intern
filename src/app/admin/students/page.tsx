@@ -10,12 +10,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
     Search, Edit2, Trash2, GraduationCap, Save,
     Eye, Phone, Mail, MapPin, UserCircle, X, Hospital,
-    Calendar, Loader2, Filter, CheckCircle2, ChevronLeft, ChevronRight, Plus, Camera, ChevronDown, Users, Download
+    Calendar, Loader2, Filter, CheckCircle2, ChevronLeft, ChevronRight, Plus, Camera, ChevronDown, Users, Download, Building2
+    , BookOpen
 } from "lucide-react"
 import Swal from 'sweetalert2'
 import * as XLSX from 'xlsx'
 import { Skeleton } from "@/components/ui/skeleton"
-
+interface Assignment {
+    rotation_id: string;
+    training_sites?: {
+        site_name: string;
+        province: string;
+    };
+    assignment_supervisors?: {
+        supervisors?: {
+            full_name: string;
+        };
+    }[];
+}
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
 const getRotationTheme = (index: number) => {
@@ -76,9 +88,11 @@ export default function StudentManagement() {
             const { data: st } = await supabase.from('students').select(`
             *,
             student_assignments (
-                id, rotation_id, site_id,
+                id, rotation_id, site_id, subject_id,sub_subject_id,
                 training_sites (site_name, province),
                 rotations (id, name, start_date, end_date),
+                subjects:subject_id (id, name),
+                sub_subjects:sub_subject_id (id, name),
                 assignment_supervisors (
                     supervisor_id,
                     supervisors (full_name)
@@ -86,39 +100,11 @@ export default function StudentManagement() {
             )
         `).order('student_code', { ascending: true })
 
-            // 🚩 เริ่มการ Group ข้อมูลตรงนี้ครับ
-            const formattedStudents = st?.map((student: any) => {
-                if (!student.student_assignments) return student;
-
-                // รวมรายการที่อยู่ในผลัด (rotation_id) เดียวกัน
-                const groupedAssignments = student.student_assignments.reduce((acc: any, curr: any) => {
-                    const rotId = curr.rotation_id;
-                    if (!acc[rotId]) {
-                        // ถ้ายังไม่มีผลัดนี้ ให้สร้างก้อนข้อมูลใหม่
-                        acc[rotId] = {
-                            ...curr,
-                            // เก็บรายชื่อพี่เลี้ยงทุกคนจากทุกวิชาย่อยในผลัดนี้ไว้ด้วยกัน
-                            all_supervisors: [...(curr.assignment_supervisors || [])]
-                        };
-                    } else {
-                        // ถ้ามีผลัดนี้อยู่แล้ว (เช่น เป็นวิชาย่อยที่ 2) ให้รวมพี่เลี้ยงเข้าไป
-                        acc[rotId].all_supervisors.push(...(curr.assignment_supervisors || []));
-                    }
-                    return acc;
-                }, {});
-
-                return {
-                    ...student,
-                    // แทนที่ด้วยข้อมูลที่ถูก Group แล้ว (1 ผลัด จะเหลือ 1 Object)
-                    student_assignments: Object.values(groupedAssignments)
-                };
-            });
-
+            // ไม่รวม (group) ตาม rotation — แยกการ์ดตามรายวิชาในโมดอลแก้ไข
             const { data: si } = await supabase.from('training_sites').select('*').order('site_name')
-            const { data: me } = await supabase.from('supervisors').select('*')
+            const { data: me } = await supabase.from('supervisors').select('*, supervisor_subjects(subject_id)').order('full_name')
 
-            // 🚩 เปลี่ยนจาก st เป็น formattedStudents
-            setStudents(formattedStudents || [])
+            setStudents(st || [])
             setSites(si || [])
             setMentors(me || [])
         } catch (err: any) {
@@ -333,12 +319,21 @@ export default function StudentManagement() {
                 "เบอร์โทร": s.phone || '-',
                 "อีเมล": s.email || '-',
             };
-
-            // แสดงข้อมูลสถานที่ฝึกและพี่เลี้ยงแยกตามผลัด (สมมติมี 3 ผลัด)
+            // จัดกลุ่มตาม rotation_id (หนึ่งผลัดอาจมีหลายวิชา)
+            const byRot = (s.student_assignments || []).reduce((acc: any, as: any) => {
+                const rid = as.rotation_id;
+                if (!acc[rid]) acc[rid] = [];
+                acc[rid].push(as);
+                return acc;
+            }, {});
+            const rotIds = [...new Set((s.student_assignments || []).map((a: any) => a.rotation_id as string).filter(Boolean))];
             for (let i = 0; i < 3; i++) {
-                const as = s.student_assignments?.[i];
-                row[`ผลัดที่ ${i + 1} สถานที่ฝึก`] = as ? `${as.training_sites?.site_name} (${as.training_sites?.province || ''})` : '-';
-                row[`ผลัดที่ ${i + 1} พี่เลี้ยง`] = as?.assignment_supervisors?.map((sv: any) => sv.supervisors?.full_name).join(', ') || '-';
+                const rotId = rotIds[i] as string
+                const list = byRot[rotId[i]] || [];
+                const first = list[0];
+                row[`ผลัดที่ ${i + 1} สถานที่ฝึก`] = first ? `${first.training_sites?.site_name} (${first.training_sites?.province || ''})` : '-';
+                const names = [...new Set(list.flatMap((a: any) => a.assignment_supervisors?.map((sv: any) => sv.supervisors?.full_name) || []))].filter(Boolean);
+                row[`ผลัดที่ ${i + 1} พี่เลี้ยง`] = names.join(', ') || '-';
             }
             return row;
         });
@@ -650,6 +645,263 @@ export default function StudentManagement() {
         </AdminLayout>
     )
 }
+// function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }: any) {
+//     const [isEditing, setIsEditing] = useState(false);
+//     const [form, setForm] = useState<any>(null);
+//     const [loading, setLoading] = useState(false);
+//     const [siteSearch, setSiteSearch] = useState("");
+//     const [activeEditIdx, setActiveEditIdx] = useState<number | null>(null);
+
+//     useEffect(() => {
+//         if (data && isOpen) {
+//             const formattedAssignments = (data.student_assignments || []).map((as: any) => ({
+//                 ...as,
+//                 supervisor_ids: as.assignment_supervisors?.map((sv: any) => sv.supervisor_id) || []
+//             }));
+//             setForm({ ...data, student_assignments: formattedAssignments });
+//             setIsEditing(false);
+//             setSiteSearch("");
+//             setActiveEditIdx(null);
+//         }
+//     }, [data, isOpen]);
+
+//     if (!isOpen || !form) return null;
+
+//     const handleSave = async () => {
+//         setLoading(true);
+//         try {
+//             await supabase.from('students').update({
+//                 first_name: form.first_name, last_name: form.last_name,
+//                 phone: form.phone, email: form.email
+//             }).eq('id', form.id);
+
+//             for (const asm of form.student_assignments) {
+//                 await supabase.from('student_assignments').update({ site_id: asm.site_id }).eq('id', asm.id);
+//                 await supabase.from('assignment_supervisors').delete().eq('assignment_id', asm.id);
+//                 if (asm.supervisor_ids.length > 0) {
+//                     const records = asm.supervisor_ids.map((id: number) => ({ assignment_id: asm.id, supervisor_id: id }));
+//                     await supabase.from('assignment_supervisors').insert(records);
+//                 }
+//             }
+//             Swal.fire({ icon: 'success', title: 'บันทึกเรียบร้อย', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2rem]' } });
+//             fetchData();
+//             // โหลดข้อมูลนักศึกษาคนนี้ใหม่เพื่อให้โมดอลแสดงผลล่าสุด (แก้บัคหน้าไม่เปลี่ยนหลังบันทึก)
+//             const { data: updated } = await supabase.from('students').select(`
+//                 *,
+//                 student_assignments (
+//                     id, rotation_id, site_id, subject_id,
+//                     training_sites (site_name, province),
+//                     rotations (id, name, start_date, end_date),
+//                     subjects:subject_id (id, name),
+//                     assignment_supervisors (supervisor_id, supervisors (full_name))
+//                 )
+//             `).eq('id', form.id).single();
+//             if (updated) {
+//                 const formattedAssignments = (updated.student_assignments || []).map((as: any) => ({
+//                     ...as,
+//                     supervisor_ids: as.assignment_supervisors?.map((sv: any) => sv.supervisor_id) || []
+//                 }));
+//                 setForm({ ...updated, student_assignments: formattedAssignments });
+//             }
+//             setIsEditing(false);
+//         } catch (e: any) { Swal.fire('Error', 'ผิดพลาด!', 'error'); }
+//         finally { setLoading(false); }
+//     }
+
+//     return (
+//         <Dialog open={isOpen} onOpenChange={onClose}>
+//             <DialogContent className="max-w-[95vw] lg:max-w-[1100px] w-full p-0 overflow-hidden rounded-[2.5rem] border-none shadow-2xl bg-white focus:outline-none [&>button]:hidden">
+//                 <DialogHeader className="sr-only"><DialogTitle>Student Profile: {form.first_name}</DialogTitle></DialogHeader>
+
+//                 <div className="flex flex-col md:flex-row h-full min-h-[700px] max-h-[92vh]">
+//                     {/* Sidebar Profile */}
+//                     <div className="md:w-[35%] bg-slate-950 relative flex flex-col border-r border-slate-800 shrink-0">
+//                         <div className="relative h-[300px] md:h-[55%] w-full overflow-hidden">
+//                             {form.avatar_url ? <img src={form.avatar_url} className="w-full h-full object-cover opacity-90" alt="" /> :
+//                                 <div className="w-full h-full flex items-center justify-center bg-slate-900 text-slate-700"><UserCircle size={140} strokeWidth={0.5} /></div>}
+//                             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
+//                         </div>
+//                         <div className="p-10 flex-1 flex flex-col justify-start -mt-20 relative z-10">
+//                             <span className="inline-block w-fit px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] mb-4 bg-blue-600 text-white border border-blue-400">รหัสนักศึกษา: {form.student_code}</span>
+//                             <h2 className="text-2xl font-black text-white leading-[1.1] mb-4 uppercase">{form.prefix}{form.first_name} <br /> {form.last_name}</h2>
+//                             <div className="space-y-3">
+//                                 <div className="flex items-center gap-3 text-blue-400 font-bold"><Mail size={16} /><span className="text-[16px] truncate">{form.email || 'No email'}</span></div>
+//                                 <div className="flex items-center gap-3 text-blue-400 font-bold"><Phone size={16} /><span className="text-[16px]">{form.phone || 'No phone'}</span></div>
+//                             </div>
+//                         </div>
+//                     </div>
+
+//                     {/* Content area */}
+//                     <div className="flex-1 bg-white flex flex-col overflow-hidden">
+//                         <div className="px-10 py-6 border-b border-slate-50 flex justify-between items-center bg-white/80 backdrop-blur-sm sticky top-0 z-20 shrink-0">
+//                             <div className="space-y-1">
+//                                 <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">{isEditing ? 'Editing Mode' : 'Internship History'}</h3>
+//                                 <div className="h-1 w-10 bg-blue-500 rounded-full" />
+//                             </div>
+//                             <div className="flex gap-2">
+//                                 <Button variant="ghost" onClick={() => setIsEditing(!isEditing)} className={`rounded-2xl px-6 h-12 transition-all font-black text-xs ${isEditing ? "text-red-500 bg-red-50" : "text-blue-600 bg-blue-50 hover:bg-blue-100"}`}>
+//                                     {isEditing ? <><X size={18} className="mr-2" /> ยกเลิก</> : <><Edit2 size={18} className="mr-2" /> แก้ไขข้อมูล</>}
+//                                 </Button>
+//                                 <Button onClick={onClose} variant="ghost" className="rounded-full w-12 h-12 p-0 hover:bg-slate-50"><X size={20} className="text-slate-400" /></Button>
+//                             </div>
+//                         </div>
+
+//                         <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-10">
+//                             {isEditing && (
+
+//                                 <div className="p-8 bg-blue-50/50 rounded-[2.5rem] border border-blue-100/50 animate-in fade-in slide-in-from-top-4 duration-300 space-y-6">
+//                                     {/* แถวที่ 1: ชื่อ และ นามสกุล */}
+//                                     <div className="grid grid-cols-2 gap-4">
+//                                         <div className="space-y-2">
+//                                             <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">ชื่อ</label>
+//                                             <Input
+//                                                 value={form.first_name}
+//                                                 onChange={e => setForm({ ...form, first_name: e.target.value })}
+//                                                 className="h-12 rounded-xl bg-white border-none font-bold shadow-sm"
+//                                             />
+//                                         </div>
+//                                         <div className="space-y-2">
+//                                             <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">นามสกุล</label>
+//                                             <Input
+//                                                 value={form.last_name}
+//                                                 onChange={e => setForm({ ...form, last_name: e.target.value })}
+//                                                 className="h-12 rounded-xl bg-white border-none font-bold shadow-sm"
+//                                             />
+//                                         </div>
+//                                     </div>
+
+//                                     {/* แถวที่ 2: เบอร์โทรศัพท์ และ อีเมล */}
+//                                     <div className="grid grid-cols-2 gap-4">
+//                                         <div className="space-y-2">
+//                                             <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">เบอร์โทรศัพท์</label>
+//                                             <Input
+//                                                 placeholder="เบอร์โทร"
+//                                                 value={form.phone}
+//                                                 onChange={e => setForm({ ...form, phone: e.target.value })}
+//                                                 className="h-12 rounded-xl bg-white border-none font-bold shadow-sm"
+//                                             />
+//                                         </div>
+//                                         <div className="space-y-2">
+//                                             <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">อีเมล</label>
+//                                             <Input
+//                                                 placeholder="อีเมล"
+//                                                 value={form.email}
+//                                                 onChange={e => setForm({ ...form, email: e.target.value })}
+//                                                 className="h-12 rounded-xl bg-white border-none font-bold shadow-sm"
+//                                             />
+//                                         </div>
+//                                     </div>
+//                                 </div>
+//                             )}
+
+//                             <div className="space-y-6">
+//                                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-3"><div className="p-2 bg-blue-50 rounded-xl"><Hospital size={16} className="text-blue-500" /></div> สถานที่การฝึกงาน</label>
+//                                 <div className="space-y-4">
+//                                     {form.student_assignments?.map((asm: any, idx: number) => {
+//                                         const theme = getRotationTheme(idx);
+//                                         const currentSite = sites.find((s: any) => String(s.id) === String(asm.site_id))
+//                                         return (
+//                                             <div key={asm.id} className={`p-8 rounded-[2.5rem] border transition-all duration-300 ${isEditing ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100 shadow-sm'}`}>
+//                                                 <div className="flex flex-col lg:flex-row gap-8">
+//                                                     <div className="flex items-center gap-4 shrink-0 min-w-[180px]">
+//                                                         <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center text-white shrink-lg ${theme.bg}`}><span className="text-[10px] font-black uppercase opacity-100">ผลัดที่</span><span className="text-lg font-black">{idx + 1}</span></div>
+//                                                         <div>
+//                                                             <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">{asm.rotations?.name}</p>
+//                                                             {asm.subjects?.name && <p className="text-[10px] font-bold text-slate-600 mb-0.5">{asm.subjects.name}</p>}
+//                                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{new Date(asm.rotations?.start_date).toLocaleDateString('th-TH')} - {new Date(asm.rotations?.end_date).toLocaleDateString('th-TH')}</p>
+//                                                         </div>
+//                                                     </div>
+
+//                                                     <div className="flex-1 space-y-6">
+//                                                         {isEditing ? (
+//                                                             <div className="space-y-4 animate-in fade-in duration-300">
+//                                                                 <div className="relative">
+//                                                                     <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest ml-1 mb-2 block">สถานที่ฝึกงาน</label>
+//                                                                     <div className="relative">
+//                                                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+//                                                                         <input
+//                                                                             type="text" placeholder="ค้นหา รพ. หรือ จังหวัด..."
+//                                                                             className="w-full h-14 pl-12 pr-10 rounded-2xl bg-white border-2 border-slate-100 font-bold text-sm focus:border-blue-500 transition-all shadow-sm outline-none"
+//                                                                             value={activeEditIdx === idx ? siteSearch : (currentSite?.site_name || "")}
+//                                                                             onFocus={() => { setActiveEditIdx(idx); setSiteSearch(""); }}
+//                                                                             onChange={(e) => setSiteSearch(e.target.value)}
+//                                                                         />
+//                                                                         {activeEditIdx === idx && siteSearch !== "" && <button onClick={() => setSiteSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300"><X size={14} /></button>}
+//                                                                     </div>
+
+//                                                                     {/* FLOATING DROPDOWN - ส่วนสำคัญที่แก้เรื่องโดนตัด */}
+//                                                                     {activeEditIdx === idx && (
+//                                                                         <div
+//                                                                             className="absolute left-0 right-0 mt-2 bg-white rounded-[1.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-slate-100 overflow-hidden animate-in slide-in-from-top-2 duration-200"
+//                                                                             style={{ zIndex: 9999, maxHeight: '300px' }}
+//                                                                         >
+//                                                                             <div className="overflow-y-auto max-h-[300px] custom-scrollbar p-2">
+//                                                                                 {sites.filter((s: any) => s.site_name?.toLowerCase().includes(siteSearch?.toLowerCase()) || s.province?.toLowerCase().includes(siteSearch?.toLowerCase()))
+//                                                                                     .map((s: any) => (
+//                                                                                         <button key={s.id} onMouseDown={(e) => e.preventDefault()} onClick={() => {
+//                                                                                             const nAsm = [...form.student_assignments]; nAsm[idx].site_id = s.id; nAsm[idx].supervisor_ids = []; setForm({ ...form, student_assignments: nAsm }); setActiveEditIdx(null); setSiteSearch("");
+//                                                                                         }} className="w-full text-left p-4 hover:bg-blue-50 rounded-xl transition-colors flex justify-between items-center group border-b border-slate-50 last:border-none">
+//                                                                                             <div><p className="font-black text-slate-800 text-xs group-hover:text-blue-600">{s.site_name}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{s.province}</p></div>
+//                                                                                             {String(asm.site_id) === String(s.id) && <CheckCircle2 size={16} className="text-blue-500" />}
+//                                                                                         </button>
+//                                                                                     ))}
+//                                                                             </div>
+//                                                                         </div>
+//                                                                     )}
+//                                                                 </div>
+
+//                                                                 <div className="space-y-3 pt-2">
+//                                                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">พี่เลี้ยงที่ดูแล (ตามรายวิชา)</span>
+//                                                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar p-1">
+//                                                                         {mentors.filter((m: any) => String(m.site_id) === String(asm.site_id) && (m.supervisor_subjects || []).some((ss: any) => String(ss.subject_id) === String(asm.subject_id))).map((m: any) => (
+//                                                                             <button key={m.id} type="button" onClick={() => {
+//                                                                                 const nAsm = [...form.student_assignments]; const ids = [...nAsm[idx].supervisor_ids]; const i = ids.indexOf(m.id); i > -1 ? ids.splice(i, 1) : ids.push(m.id); nAsm[idx].supervisor_ids = ids; setForm({ ...form, student_assignments: nAsm });
+//                                                                             }} className={`px-3 py-2 rounded-xl text-[10px] font-black border-2 transition-all truncate text-center ${asm.supervisor_ids.includes(m.id) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200 hover:text-blue-500'}`}>{m.full_name}</button>
+//                                                                         ))}
+//                                                                         {asm.site_id && mentors.filter((m: any) => String(m.site_id) === String(asm.site_id) && (m.supervisor_subjects || []).some((ss: any) => String(ss.subject_id) === String(asm.subject_id))).length === 0 && (
+//                                                                             <p className="text-[10px] text-amber-600 font-bold col-span-full py-2">ไม่มีพี่เลี้ยงวิชานี้ในสถานที่นี้ — เลือกสถานที่อื่นหรือเพิ่มพี่เลี้ยงในวิชานี้</p>
+//                                                                         )}
+//                                                                     </div>
+//                                                                 </div>
+//                                                             </div>
+//                                                         ) : (
+//                                                             <div className="flex flex-col gap-4 animate-in fade-in duration-500">
+//                                                                 <div>
+//                                                                     {asm.subjects?.name && <p className="text-[10px] font-bold text-slate-500 mb-1">{asm.subjects.name}</p>}
+//                                                                     <p className="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight">{currentSite?.site_name || 'ยังไม่ได้มอบหมาย'}</p>
+//                                                                     <p className="text-xs font-bold text-blue-500 flex items-center gap-1.5 mt-2 uppercase tracking-widest"><MapPin size={14} /> {currentSite?.province || '-'}</p>
+//                                                                 </div>
+//                                                                 <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-50">
+//                                                                     {asm.assignment_supervisors?.length > 0 ? asm.assignment_supervisors.map((sv: any, i: number) => (
+//                                                                         <div key={i} className="px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold border border-slate-100 flex items-center gap-2"><div className={`w-1.5 h-1.5 rounded-full ${theme.bg}`} /> {sv.supervisors?.full_name}</div>
+//                                                                     )) : <span className="text-[10px] text-slate-300 italic font-bold tracking-tighter uppercase">ไม่มีข้อมูลพี่เลี้ยง</span>}
+//                                                                 </div>
+//                                                             </div>
+//                                                         )}
+//                                                     </div>
+//                                                 </div>
+//                                             </div>
+//                                         );
+//                                     })}
+//                                 </div>
+//                             </div>
+//                         </div>
+
+//                         {isEditing && (
+//                             <div className="p-8 bg-slate-50 border-t border-slate-100 animate-in slide-in-from-bottom-6 shrink-0">
+//                                 <Button onClick={handleSave} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 h-20 rounded-[2rem] font-black text-white shadow-2xl transition-all uppercase tracking-[0.2em] text-lg active:scale-95 flex items-center justify-center gap-3">
+//                                     {loading ? <Loader2 className="animate-spin" size={24} /> : <Save size={24} />} บันทึกข้อมูล
+//                                 </Button>
+//                             </div>
+//                         )}
+//                     </div>
+//                 </div>
+//             </DialogContent>
+//         </Dialog>
+//     );
+// }
+
+
 function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }: any) {
     const [isEditing, setIsEditing] = useState(false);
     const [form, setForm] = useState<any>(null);
@@ -657,13 +909,40 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
     const [siteSearch, setSiteSearch] = useState("");
     const [activeEditIdx, setActiveEditIdx] = useState<number | null>(null);
 
+    // ใช้กุญแจเดิมเพื่อให้ดึงข้อมูลถูกต้อง
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
     useEffect(() => {
         if (data && isOpen) {
-            const formattedAssignments = data.student_assignments?.map((as: any) => ({
-                ...as,
-                supervisor_ids: as.assignment_supervisors?.map((sv: any) => sv.supervisor_id) || []
-            })) || [];
-            setForm({ ...data, student_assignments: formattedAssignments });
+            const grouped = (data.student_assignments || []).reduce((acc: any, curr: any) => {
+                const rId = curr.rotation_id || 'unassigned';
+                if (!acc[rId]) {
+                    acc[rId] = {
+                        rotation_id: rId,
+                        rotation_name: curr.rotations?.name || 'ไม่ได้ระบุผลัด',
+                        start_date: curr.rotations?.start_date,
+                        end_date: curr.rotations?.end_date,
+                        site_id: curr.site_id,
+                        training_sites: curr.training_sites,
+                        subjects_in_rotation: []
+                    };
+                }
+
+                acc[rId].subjects_in_rotation.push({
+                    assignment_id: curr.id,
+                    subject_id: curr.subject_id,
+                    // ✅ แก้ไข: ลำดับการแสดงชื่อ คือ วิชาย่อย > วิชาหลัก
+                    displayName: curr.sub_subjects?.name || curr.subjects?.name || 'ไม่ระบุวิชา',
+                    supervisor_ids: curr.assignment_supervisors?.map((sv: any) => sv.supervisor_id) || [],
+                    supervisors_data: curr.assignment_supervisors?.map((sv: any) => sv.supervisors) || []
+                });
+                return acc;
+            }, {});
+
+            setForm({ ...data, grouped_assignments: Object.values(grouped) });
             setIsEditing(false);
             setSiteSearch("");
             setActiveEditIdx(null);
@@ -675,33 +954,60 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
     const handleSave = async () => {
         setLoading(true);
         try {
+            // 1. อัปเดตข้อมูลพื้นฐานนักศึกษา
             await supabase.from('students').update({
                 first_name: form.first_name, last_name: form.last_name,
                 phone: form.phone, email: form.email
             }).eq('id', form.id);
 
-            for (const asm of form.student_assignments) {
-                await supabase.from('student_assignments').update({ site_id: asm.site_id }).eq('id', asm.id);
-                await supabase.from('assignment_supervisors').delete().eq('assignment_id', asm.id);
-                if (asm.supervisor_ids.length > 0) {
-                    const records = asm.supervisor_ids.map((id: number) => ({ assignment_id: asm.id, supervisor_id: id }));
-                    await supabase.from('assignment_supervisors').insert(records);
+            // 2. อัปเดตรายวิชาและพี่เลี้ยง (วนลูปตามกลุ่มที่จัดไว้)
+            for (const rot of form.grouped_assignments) {
+                for (const sub of rot.subjects_in_rotation) {
+                    // อัปเดตสถานที่ฝึก
+                    await supabase.from('student_assignments')
+                        .update({ site_id: rot.site_id })
+                        .eq('id', sub.assignment_id);
+
+                    // อัปเดตพี่เลี้ยง (ลบเก่า-ใส่ใหม่)
+                    await supabase.from('assignment_supervisors').delete().eq('assignment_id', sub.assignment_id);
+                    if (sub.supervisor_ids.length > 0) {
+                        const records = sub.supervisor_ids.map((id: number) => ({
+                            assignment_id: sub.assignment_id,
+                            supervisor_id: id
+                        }));
+                        await supabase.from('assignment_supervisors').insert(records);
+                    }
                 }
+                const { data: updated } = await supabase.from('students').select(`
+                        *,
+                        student_assignments (
+                            id, rotation_id, site_id, subject_id, sub_subject_id,
+                            training_sites (site_name, province),
+                            rotations (id, name, start_date, end_date),
+                            subjects (id, name),
+                            sub_subjects (id, name), 
+                            assignment_supervisors (supervisor_id, supervisors (full_name))
+                        )
+                    `).eq('id', form.id).single();
             }
-            Swal.fire({ icon: 'success', title: 'บันทึกเรียบร้อย', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2rem]' } });
+
+
+
+            Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2rem]' } });
             fetchData();
-            setIsEditing(false);
-        } catch (e: any) { Swal.fire('Error', 'ผิดพลาด!', 'error'); }
-        finally { setLoading(false); }
+            onClose();
+        } catch (e) {
+            Swal.fire('Error', 'ไม่สามารถบันทึกได้', 'error');
+        } finally { setLoading(false); }
     }
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-[95vw] lg:max-w-[1100px] w-full p-0 overflow-hidden rounded-[2.5rem] border-none shadow-2xl bg-white focus:outline-none [&>button]:hidden">
-                <DialogHeader className="sr-only"><DialogTitle>Student Profile: {form.first_name}</DialogTitle></DialogHeader>
+                <DialogHeader className="sr-only"><DialogTitle>Student Profile</DialogTitle></DialogHeader>
 
                 <div className="flex flex-col md:flex-row h-full min-h-[700px] max-h-[92vh]">
-                    {/* Sidebar Profile */}
+                    {/* Sidebar Profile - คงขนาดเดิม */}
                     <div className="md:w-[35%] bg-slate-950 relative flex flex-col border-r border-slate-800 shrink-0">
                         <div className="relative h-[300px] md:h-[55%] w-full overflow-hidden">
                             {form.avatar_url ? <img src={form.avatar_url} className="w-full h-full object-cover opacity-90" alt="" /> :
@@ -709,167 +1015,150 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
                         </div>
                         <div className="p-10 flex-1 flex flex-col justify-start -mt-20 relative z-10">
-                            <span className="inline-block w-fit px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] mb-4 bg-blue-600 text-white border border-blue-400">รหัสนักศึกษา: {form.student_code}</span>
+                            <span className="inline-block w-fit px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] mb-4 bg-blue-600 text-white border border-blue-400">ID: {form.student_code}</span>
                             <h2 className="text-2xl font-black text-white leading-[1.1] mb-4 uppercase">{form.prefix}{form.first_name} <br /> {form.last_name}</h2>
                             <div className="space-y-3">
-                                <div className="flex items-center gap-3 text-blue-400 font-bold"><Mail size={16} /><span className="text-[16px] truncate">{form.email || 'No email'}</span></div>
-                                <div className="flex items-center gap-3 text-blue-400 font-bold"><Phone size={16} /><span className="text-[16px]">{form.phone || 'No phone'}</span></div>
+                                <div className="flex items-center gap-3 text-blue-400 font-bold"><Mail size={16} /><span className="text-[14px] truncate">{form.email || '-'}</span></div>
+                                <div className="flex items-center gap-3 text-blue-400 font-bold"><Phone size={16} /><span className="text-[14px]">{form.phone || '-'}</span></div>
                             </div>
                         </div>
                     </div>
 
                     {/* Content area */}
                     <div className="flex-1 bg-white flex flex-col overflow-hidden">
-                        <div className="px-10 py-6 border-b border-slate-50 flex justify-between items-center bg-white/80 backdrop-blur-sm sticky top-0 z-20 shrink-0">
+                        <div className="px-10 py-6 border-b border-slate-50 flex justify-between items-center bg-white sticky top-0 z-20 shrink-0">
                             <div className="space-y-1">
-                                <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">{isEditing ? 'Editing Mode' : 'Internship History'}</h3>
+                                <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">Internship Details</h3>
                                 <div className="h-1 w-10 bg-blue-500 rounded-full" />
                             </div>
                             <div className="flex gap-2">
-                                <Button variant="ghost" onClick={() => setIsEditing(!isEditing)} className={`rounded-2xl px-6 h-12 transition-all font-black text-xs ${isEditing ? "text-red-500 bg-red-50" : "text-blue-600 bg-blue-50 hover:bg-blue-100"}`}>
-                                    {isEditing ? <><X size={18} className="mr-2" /> ยกเลิก</> : <><Edit2 size={18} className="mr-2" /> แก้ไขข้อมูล</>}
+                                <Button variant="ghost" onClick={() => setIsEditing(!isEditing)} className={`rounded-2xl px-6 h-12 transition-all font-black text-xs ${isEditing ? "text-red-500 bg-red-50" : "text-blue-600 bg-blue-50"}`}>
+                                    {isEditing ? 'ยกเลิก' : 'แก้ไขแผนฝึก'}
                                 </Button>
-                                <Button onClick={onClose} variant="ghost" className="rounded-full w-12 h-12 p-0 hover:bg-slate-50"><X size={20} className="text-slate-400" /></Button>
+                                <Button onClick={onClose} variant="ghost" className="rounded-full w-12 h-12 p-0"><X size={20} /></Button>
                             </div>
                         </div>
 
-                        <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-10">
+                        <div className="flex-1 p-10 overflow-y-auto custom-scrollbar space-y-6">
+                            {/* แก้ไขข้อมูลส่วนตัวเมื่อกด Edit */}
                             {isEditing && (
-
-                                <div className="p-8 bg-blue-50/50 rounded-[2.5rem] border border-blue-100/50 animate-in fade-in slide-in-from-top-4 duration-300 space-y-6">
-                                    {/* แถวที่ 1: ชื่อ และ นามสกุล */}
+                                <div className="p-8 bg-blue-50/50 rounded-[2.5rem] border border-blue-100/50 space-y-4 animate-in fade-in duration-300">
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">ชื่อ</label>
-                                            <Input
-                                                value={form.first_name}
-                                                onChange={e => setForm({ ...form, first_name: e.target.value })}
-                                                className="h-12 rounded-xl bg-white border-none font-bold shadow-sm"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">นามสกุล</label>
-                                            <Input
-                                                value={form.last_name}
-                                                onChange={e => setForm({ ...form, last_name: e.target.value })}
-                                                className="h-12 rounded-xl bg-white border-none font-bold shadow-sm"
-                                            />
-                                        </div>
+                                        <Input value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} placeholder="ชื่อ" className="h-12 rounded-xl bg-white border-none font-bold" />
+                                        <Input value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} placeholder="นามสกุล" className="h-12 rounded-xl bg-white border-none font-bold" />
                                     </div>
-
-                                    {/* แถวที่ 2: เบอร์โทรศัพท์ และ อีเมล */}
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">เบอร์โทรศัพท์</label>
-                                            <Input
-                                                placeholder="เบอร์โทร"
-                                                value={form.phone}
-                                                onChange={e => setForm({ ...form, phone: e.target.value })}
-                                                className="h-12 rounded-xl bg-white border-none font-bold shadow-sm"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">อีเมล</label>
-                                            <Input
-                                                placeholder="อีเมล"
-                                                value={form.email}
-                                                onChange={e => setForm({ ...form, email: e.target.value })}
-                                                className="h-12 rounded-xl bg-white border-none font-bold shadow-sm"
-                                            />
-                                        </div>
+                                        <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="เบอร์โทร" className="h-12 rounded-xl bg-white border-none font-bold" />
+                                        <Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="อีเมล" className="h-12 rounded-xl bg-white border-none font-bold" />
                                     </div>
                                 </div>
                             )}
 
-                            <div className="space-y-6">
-                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-3"><div className="p-2 bg-blue-50 rounded-xl"><Hospital size={16} className="text-blue-500" /></div> สถานที่การฝึกงาน</label>
-                                <div className="space-y-4">
-                                    {form.student_assignments?.map((asm: any, idx: number) => {
-                                        const theme = getRotationTheme(idx);
-                                        const currentSite = sites.find((s: any) => String(s.id) === String(asm.site_id))
-                                        return (
-                                            <div key={asm.id} className={`p-8 rounded-[2.5rem] border transition-all duration-300 ${isEditing ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100 shadow-sm'}`}>
-                                                <div className="flex flex-col lg:flex-row gap-8">
-                                                    <div className="flex items-center gap-4 shrink-0 min-w-[180px]">
-                                                        <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center text-white shrink-lg ${theme.bg}`}><span className="text-[10px] font-black uppercase opacity-100">ผลัดที่</span><span className="text-lg font-black">{idx + 1}</span></div>
-                                                        <div><p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">{asm.rotations?.name}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{new Date(asm.rotations?.start_date).toLocaleDateString('th-TH')} - {new Date(asm.rotations?.end_date).toLocaleDateString('th-TH')}</p></div>
+                            {/* รายการผลัดการฝึกงาน (Grouped) */}
+                            {form.grouped_assignments?.map((rot: any, idx: number) => {
+                                const theme = getRotationTheme(idx);
+                                return (
+                                    <div key={rot.rotation_id || idx} className="p-8 rounded-[2.5rem] border border-slate-100 bg-white shadow-sm space-y-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center text-white shrink-0 ${theme.bg}`}>
+                                                <span className="text-[9px] font-black uppercase">ผลัดที่</span>
+                                                <span className="text-xl font-black">{idx + 1}</span>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-black text-slate-800 uppercase text-base">{rot.rotation_name}</h4>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                    {new Date(rot.start_date).toLocaleDateString('th-TH')} - {new Date(rot.end_date).toLocaleDateString('th-TH')}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* ส่วนเลือกสถานที่ (1 ผลัด = 1 สถานที่) */}
+                                        <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                                            <div className="flex items-center gap-2 mb-3 text-slate-400">
+                                                <Building2 size={14} className="text-blue-500" />
+                                                <span className="text-[9px] font-black uppercase tracking-widest">สถานที่ฝึกปฏิบัติงาน</span>
+                                            </div>
+                                            {isEditing ? (
+                                                <div className="relative">
+                                                    <Input
+                                                        className="h-11 rounded-xl bg-white font-bold text-sm"
+                                                        value={activeEditIdx === idx ? siteSearch : (rot.training_sites?.site_name || "")}
+                                                        onChange={(e) => setSiteSearch(e.target.value)}
+                                                        onFocus={() => { setActiveEditIdx(idx); setSiteSearch(""); }}
+                                                        placeholder="ค้นหาโรงพยาบาล..."
+                                                    />
+                                                    {activeEditIdx === idx && (
+                                                        <div className="absolute z-[100] w-full mt-1 bg-white border rounded-xl shadow-xl p-2 max-h-40 overflow-y-auto">
+                                                            {sites.filter((s: any) => s.site_name.includes(siteSearch)).map((s: any) => (
+                                                                <div key={s.id} onClick={() => {
+                                                                    const newG = [...form.grouped_assignments];
+                                                                    newG[idx].site_id = s.id;
+                                                                    newG[idx].training_sites = s;
+                                                                    setForm({ ...form, grouped_assignments: newG });
+                                                                    setActiveEditIdx(null);
+                                                                }} className="p-2 hover:bg-blue-50 rounded-lg cursor-pointer text-sm font-bold">
+                                                                    {s.site_name}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <p className="font-black text-slate-700 ml-1">{rot.training_sites?.site_name || 'ยังไม่ระบุ'}</p>
+                                            )}
+                                        </div>
+
+                                        {/* ส่วนวิชาย่อยและพี่เลี้ยง (แยกตามวิชา) */}
+                                        <div className="space-y-4">
+                                            <div className="flex items-center gap-2 text-slate-400 mb-1">
+                                                <BookOpen size={14} className="text-blue-500" />
+                                                <span className="text-[9px] font-black uppercase tracking-widest">วิชาย่อยและพี่เลี้ยง</span>
+                                            </div>
+                                            {rot.subjects_in_rotation.map((sub: any, sIdx: number) => (
+                                                <div key={sub.assignment_id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm ml-4">
+                                                    {/* ✅ แสดงชื่อวิชาย่อยที่นี่ */}
+                                                    <div className="text-xs font-black text-blue-600 mb-3 flex items-center gap-2">
+                                                        <div className="w-1 h-3 rounded-full bg-blue-600" />
+                                                        {/* ✅ แสดงชื่อที่ผ่านการประมวลผลมาแล้ว */}
+                                                        {sub.displayName}
                                                     </div>
 
-                                                    <div className="flex-1 space-y-6">
+                                                    <div className="flex flex-wrap gap-2">
                                                         {isEditing ? (
-                                                            <div className="space-y-4 animate-in fade-in duration-300">
-                                                                <div className="relative">
-                                                                    <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest ml-1 mb-2 block">สถานที่ฝึกงาน</label>
-                                                                    <div className="relative">
-                                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                                                                        <input
-                                                                            type="text" placeholder="ค้นหา รพ. หรือ จังหวัด..."
-                                                                            className="w-full h-14 pl-12 pr-10 rounded-2xl bg-white border-2 border-slate-100 font-bold text-sm focus:border-blue-500 transition-all shadow-sm outline-none"
-                                                                            value={activeEditIdx === idx ? siteSearch : (currentSite?.site_name || "")}
-                                                                            onFocus={() => { setActiveEditIdx(idx); setSiteSearch(""); }}
-                                                                            onChange={(e) => setSiteSearch(e.target.value)}
-                                                                        />
-                                                                        {activeEditIdx === idx && siteSearch !== "" && <button onClick={() => setSiteSearch("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300"><X size={14} /></button>}
-                                                                    </div>
-
-                                                                    {/* FLOATING DROPDOWN - ส่วนสำคัญที่แก้เรื่องโดนตัด */}
-                                                                    {activeEditIdx === idx && (
-                                                                        <div
-                                                                            className="absolute left-0 right-0 mt-2 bg-white rounded-[1.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.2)] border border-slate-100 overflow-hidden animate-in slide-in-from-top-2 duration-200"
-                                                                            style={{ zIndex: 9999, maxHeight: '300px' }}
-                                                                        >
-                                                                            <div className="overflow-y-auto max-h-[300px] custom-scrollbar p-2">
-                                                                                {sites.filter((s: any) => s.site_name?.toLowerCase().includes(siteSearch?.toLowerCase()) || s.province?.toLowerCase().includes(siteSearch?.toLowerCase()))
-                                                                                    .map((s: any) => (
-                                                                                        <button key={s.id} onMouseDown={(e) => e.preventDefault()} onClick={() => {
-                                                                                            const nAsm = [...form.student_assignments]; nAsm[idx].site_id = s.id; nAsm[idx].supervisor_ids = []; setForm({ ...form, student_assignments: nAsm }); setActiveEditIdx(null); setSiteSearch("");
-                                                                                        }} className="w-full text-left p-4 hover:bg-blue-50 rounded-xl transition-colors flex justify-between items-center group border-b border-slate-50 last:border-none">
-                                                                                            <div><p className="font-black text-slate-800 text-xs group-hover:text-blue-600">{s.site_name}</p><p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{s.province}</p></div>
-                                                                                            {String(asm.site_id) === String(s.id) && <CheckCircle2 size={16} className="text-blue-500" />}
-                                                                                        </button>
-                                                                                    ))}
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-
-                                                                <div className="space-y-3 pt-2">
-                                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">พี่เลี้ยงที่ดูแล</span>
-                                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar p-1">
-                                                                        {mentors.filter((m: any) => String(m.site_id) === String(asm.site_id)).map((m: any) => (
-                                                                            <button key={m.id} type="button" onClick={() => {
-                                                                                const nAsm = [...form.student_assignments]; const ids = [...nAsm[idx].supervisor_ids]; const i = ids.indexOf(m.id); i > -1 ? ids.splice(i, 1) : ids.push(m.id); nAsm[idx].supervisor_ids = ids; setForm({ ...form, student_assignments: nAsm });
-                                                                            }} className={`px-3 py-2 rounded-xl text-[10px] font-black border-2 transition-all truncate text-center ${asm.supervisor_ids.includes(m.id) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200 hover:text-blue-500'}`}>{m.full_name}</button>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
+                                                            mentors.filter((m: any) => String(m.site_id) === String(rot.site_id) && (m.supervisor_subjects || []).some((ss: any) => String(ss.subject_id) === String(sub.subject_id))).map((m: any) => (
+                                                                <button
+                                                                    key={`${sub.assignment_id}-${m.id}`}
+                                                                    onClick={() => {
+                                                                        const newG = [...form.grouped_assignments];
+                                                                        const cur = newG[idx].subjects_in_rotation[sIdx].supervisor_ids;
+                                                                        newG[idx].subjects_in_rotation[sIdx].supervisor_ids = cur.includes(m.id) ? cur.filter((i: any) => i !== m.id) : [...cur, m.id];
+                                                                        setForm({ ...form, grouped_assignments: newG });
+                                                                    }}
+                                                                    className={`px-3 py-1.5 rounded-lg text-[9px] font-bold border transition-all ${sub.supervisor_ids.includes(m.id) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-50 text-slate-400'}`}
+                                                                >
+                                                                    {m.full_name}
+                                                                </button>
+                                                            ))
                                                         ) : (
-                                                            <div className="flex flex-col gap-4 animate-in fade-in duration-500">
-                                                                <div>
-                                                                    <p className="font-black text-slate-800 text-lg leading-tight uppercase tracking-tight">{currentSite?.site_name || 'ยังไม่ได้มอบหมาย'}</p>
-                                                                    <p className="text-xs font-bold text-blue-500 flex items-center gap-1.5 mt-2 uppercase tracking-widest"><MapPin size={14} /> {currentSite?.province || '-'}</p>
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-50">
-                                                                    {asm.assignment_supervisors?.length > 0 ? asm.assignment_supervisors.map((sv: any, i: number) => (
-                                                                        <div key={i} className="px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-[10px] font-bold border border-slate-100 flex items-center gap-2"><div className={`w-1.5 h-1.5 rounded-full ${theme.bg}`} /> {sv.supervisors?.full_name}</div>
-                                                                    )) : <span className="text-[10px] text-slate-300 italic font-bold tracking-tighter uppercase">ไม่มีข้อมูลพี่เลี้ยง</span>}
-                                                                </div>
-                                                            </div>
+                                                            sub.supervisors_data.length > 0 ? sub.supervisors_data.map((sv: any) => (
+                                                                <span key={`${sub.assignment_id}-sv-${sv.id}`} className="px-2 py-1 bg-blue-50 text-blue-600 rounded-md text-[9px] font-bold border border-blue-100 flex items-center gap-1">
+                                                                    <CheckCircle2 size={10} /> {sv.full_name}
+                                                                </span>
+                                                            )) : <span className="text-[9px] text-slate-300 italic font-bold">ไม่มีพี่เลี้ยง</span>
                                                         )}
                                                     </div>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
 
                         {isEditing && (
-                            <div className="p-8 bg-slate-50 border-t border-slate-100 animate-in slide-in-from-bottom-6 shrink-0">
-                                <Button onClick={handleSave} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 h-20 rounded-[2rem] font-black text-white shadow-2xl transition-all uppercase tracking-[0.2em] text-lg active:scale-95 flex items-center justify-center gap-3">
-                                    {loading ? <Loader2 className="animate-spin" size={24} /> : <Save size={24} />} บันทึกข้อมูล
+                            <div className="p-8 border-t bg-slate-50 shrink-0">
+                                <Button onClick={handleSave} disabled={loading} className="w-full h-16 bg-blue-600 hover:bg-blue-700 rounded-2xl font-black text-white text-lg transition-all active:scale-95 flex items-center justify-center gap-3">
+                                    {loading ? <Loader2 className="animate-spin" /> : <Save />} บันทึกการเปลี่ยนแปลง
                                 </Button>
                             </div>
                         )}
@@ -879,6 +1168,8 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
         </Dialog>
     );
 }
+
+
 
 function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
     const [loading, setLoading] = useState(false);

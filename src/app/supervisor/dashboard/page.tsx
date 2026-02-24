@@ -10,6 +10,14 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import liff from '@line/liff'
+interface AssignmentItem {
+    id: string;
+    is_evaluated: boolean;
+    student_assignments?: {
+        id: string;
+    };
+    
+}
 
 export default function SupervisorDashboard() {
     // 🚩 สลับโหมดที่นี่: true = ดู Mockup / false = ดึงข้อมูลจริงจาก DB
@@ -145,22 +153,22 @@ export default function SupervisorDashboard() {
         try {
             // 🟢 1. เริ่มต้น LIFF และตรวจสอบการ Login (ใช้ของจริง)
             // (ต้องมั่นใจว่าใส่ NEXT_PUBLIC_LIFF_ID ใน .env.local แล้ว)
-            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
 
-            // if (!liff.isLoggedIn()) {
-            //     liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
-            //     return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
-            // }
+            if (!liff.isLoggedIn()) {
+                liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
+                return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
+            }
 
-            // const profile = await liff.getProfile();
+            const profile = await liff.getProfile();
             // console.log("User Profile:", profile); // เช็คค่าได้ตรงนี้
 
             // ❌ ลบส่วนจำลอง (Hardcode) นี้ทิ้งไปได้เลยครับ
-            const profile = {
-                userId: 'U678862bd992a4cda7aaf972743b585ac',
-                // userId: 'test-somruk',
-                displayName: '🐼 FARN 🌙'
-            };
+            // const profile = {
+            //     // userId: 'U678862bd992a4cda7aaf972743b585ac',
+            //     userId: 'test-somruk',
+            //     displayName: '🐼 FARN 🌙'
+            // };
 
 
             // 2. ดึงข้อมูลพี่เลี้ยง และข้อมูลหน่วยงาน (ใช้ profile.userId จาก LIFF)
@@ -234,7 +242,7 @@ export default function SupervisorDashboard() {
                     const upcomingTasks = [];
 
                     for (const task of pendingTasksData) {
-                        const endDate = new Date(task.student_assignments.rotations.end_date);
+                        const endDate = new Date(task.student_assignments?.[0]?.rotations?.[0]?.end_date);
                         endDate.setHours(0, 0, 0, 0); // เคลียร์เวลาเช่นกัน
 
                         if (endDate < today) {
@@ -255,7 +263,7 @@ export default function SupervisorDashboard() {
                         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // คำนวณว่าเลยมา กี่วัน
 
                         setDaysLeft(diffDays);
-                        setUrgentRotationName(`งานค้าง ${urgentTask.student_assignments.rotations.name}`); // เช่น "งานค้าง ผลัด 1"
+                        setUrgentRotationName(`งานค้าง ${urgentTask.student_assignments?.[0]?.rotations?.[0]?.name}`); // เช่น "งานค้าง ผลัด 1"
                         setAlertStatus('overdue'); // *ต้องเพิ่ม state นี้ (ดูวิธีเพิ่มด้านล่าง)
 
                     } else if (upcomingTasks.length > 0) {
@@ -267,7 +275,7 @@ export default function SupervisorDashboard() {
                         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // อีกกี่วันจะถึง
 
                         setDaysLeft(diffDays);
-                        setUrgentRotationName(nextTask.student_assignments.rotations.name); // เช่น "ผลัด 2"
+                        setUrgentRotationName(nextTask.student_assignments?.[0]?.rotations?.[0]?.name); // เช่น "ผลัด 2"
                         setAlertStatus('normal');
                     }
                 } else {

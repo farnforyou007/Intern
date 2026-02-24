@@ -89,85 +89,124 @@
 // }
 
 
-// ver2
+// ver3 — Sidebar Layout
 "use client"
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { ShieldAlert, GraduationCap, ArrowLeft, UserPlus } from 'lucide-react'
+import { ShieldAlert, ArrowLeft, UserPlus, LayoutDashboard, Users, BookOpen, Settings, Menu, X, LogOut, GraduationCap } from 'lucide-react'
+import Link from 'next/link'
+import Swal from 'sweetalert2'
+import liff from '@line/liff'
 
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter()
     const pathname = usePathname()
     const [isAuthorized, setIsAuthorized] = useState(false)
     const [status, setStatus] = useState<'loading' | 'unregistered' | 'pending' | 'unauthorized' | 'authorized'>('loading')
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
+    const menuItems = [
+        { name: 'แดชบอร์ด', desc: 'ภาพรวม KPI และสถิติ', icon: <LayoutDashboard size={20} />, href: '/teacher/dashboard' },
+        { name: 'รายชื่อนักศึกษา', desc: 'ข้อมูลติดต่อ นศ.', icon: <Users size={20} />, href: '/teacher/students' },
+        { name: 'ผลการประเมิน', desc: 'คะแนนและส่งออก Excel', icon: <BookOpen size={20} />, href: '/teacher/subjects' },
+        { name: 'ตั้งค่าระบบ', desc: 'โปรไฟล์และแจ้งเตือน', icon: <Settings size={20} />, href: '/teacher/settings' },
+    ]
+
+    const handleLogout = async () => {
+        const result = await Swal.fire({
+            title: 'ออกจากระบบ?',
+            text: "คุณต้องการออกจากระบบอาจารย์ใช่หรือไม่?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#4f46e5',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'ยืนยัน',
+            cancelButtonText: 'ยกเลิก',
+            customClass: { popup: 'rounded-[2rem] font-sans' }
+        })
+        if (result.isConfirmed) {
+            localStorage.clear()
+            sessionStorage.clear()
+            window.location.replace('/auth/check')
+        }
+    }
+
+    // useEffect(() => {
+
+    //     const checkTeacherAccess = async () => {
+    //         try {
+    //             setStatus('loading')
+    //             const lineUserId = 'test-c'
+
+    //             const { data: user } = await supabase
+    //                 .from('supervisors')
+    //                 .select('id, is_verified, role, supervisor_subjects(id)')
+    //                 .eq('line_user_id', lineUserId)
+    //                 .single()
+
+    //             if (!user) {
+    //                 setStatus('unregistered')
+    //                 setIsAuthorized(false)
+    //             } else if (!user.is_verified) {
+    //                 setStatus('pending')
+    //                 setIsAuthorized(false)
+    //                 if (pathname !== '/teacher/pending') {
+    //                     router.replace('/teacher/pending')
+    //                 }
+    //             } else {
+    //                 const hasSubjects = user.supervisor_subjects && user.supervisor_subjects.length > 0
+    //                 if (user.role === 'teacher' && hasSubjects) {
+    //                     setStatus('authorized')
+    //                     setIsAuthorized(true)
+    //                 } else {
+    //                     setStatus('unauthorized')
+    //                     setIsAuthorized(false)
+    //                 }
+    //             }
+    //         } catch (err) {
+    //             console.error("Teacher access check failed", err)
+    //             setStatus('unregistered')
+    //         }
+    //     }
+    //     checkTeacherAccess()
+    // }, [pathname])
+
+    // Close sidebar on route change
+    
     useEffect(() => {
         const checkTeacherAccess = async () => {
             try {
-                // 1. เริ่มต้นด้วยการ Loading
                 setStatus('loading')
 
-                // 🛠️ ช่วง DEV: ใช้ Mock ID ของพี่ (สลับใช้ liff.getProfile() เมื่อต่อจริง)
-                // const lineUserId = 'U678862bd992a4cda7aaf972743b585ac' 
-                const lineUserId = 'test-c'
+                // 🟢 1. เริ่มต้นใช้งาน LIFF (เปิดใช้งานส่วนนี้)
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                
+                // 🟢 2. ตรวจสอบการ Login
+                if (!liff.isLoggedIn()) {
+                    liff.login({ redirectUri: window.location.href })
+                    return
+                }
 
+                // 🟢 3. ดึง Profile จริงจาก LINE
+                const profile = await liff.getProfile()
+                const lineUserId = profile.userId // ใช้ ID จริงจาก LINE
 
-                // 2. ดึงข้อมูล User และความสัมพันธ์กับวิชา
+                // ❌ 4. คอมเมนต์ หรือลบค่า Mock ID ของเก่าออก
+                // const lineUserId = 'test-c'
+
+                // 🟢 5. ดึงข้อมูลจาก Supabase โดยใช้ ID จริง
                 const { data: user } = await supabase
                     .from('supervisors')
                     .select('id, is_verified, role, supervisor_subjects(id)')
                     .eq('line_user_id', lineUserId)
                     .single()
 
-                // if (error || !user) {
-                //     // 🚩 ถ้า Query ผิดพลาด หรือไม่เจอ ID 'test-c' จะตกมาที่นี่
-                //     setStatus('unregistered')
-                //     setIsAuthorized(false)
-                //     return
-                // }
-
-                //     if (!user) {
-                //         // 🚩 ไม่พบข้อมูลในระบบเลย
-                //         setStatus('unregistered')
-                //         setIsAuthorized(false)
-                //     } else if (!user.is_verified) {
-                //         // 🚩 พบข้อมูลแต่แอดมินยังไม่อนุมัติ (is_verified: false)
-                //         setStatus('pending')
-                //         setIsAuthorized(false)
-                //         if (pathname !== '/teacher/pending') {
-                //             router.replace('/teacher/pending')
-                //         }
-                //     } else {
-                //         // ✅ อนุมัติแล้ว แต่ต้องเช็คต่อว่าเป็นอาจารย์ที่มีวิชาดูแลไหม
-                //         // const isTeacher = user.subject_teachers && user.subject_teachers.length > 0
-                //         const hasSubject = user.supervisor_subject && user.supervisor_subject.length > 0
-
-                //         // if (!isTeacher) {
-                //         //     setStatus('unauthorized')
-                //         //     setIsAuthorized(false)
-                //         // } else {
-                //         //     // ✅ ผ่านทุกด่าน
-                //         //     setStatus('authorized')
-                //         //     setIsAuthorized(true)
-                //         // }
-                //         if (!hasSubject) {
-                //             setStatus('unauthorized')
-                //             setIsAuthorized(false)
-                //         } else {
-                //             setStatus('authorized')
-                //             setIsAuthorized(true)
-                //         }
-                //     }
-                // } catch (err) {
-                //     console.error("Teacher access check failed", err)
-                //     setStatus('unregistered')
-                // }
                 if (!user) {
                     setStatus('unregistered')
                     setIsAuthorized(false)
@@ -178,15 +217,13 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                         router.replace('/teacher/pending')
                     }
                 } else {
-                    // ✅ อนุมัติแล้ว เช็คว่ามีการผูกวิชาในตารางกลางหรือยัง
                     const hasSubjects = user.supervisor_subjects && user.supervisor_subjects.length > 0
-
-                    // ตรวจสอบเบื้องต้นว่าเป็นอาจารย์ไหม (เพื่อความชัวร์)
+                    
+                    // ตรวจสอบทั้ง Role และการผูกวิชา
                     if (user.role === 'teacher' && hasSubjects) {
                         setStatus('authorized')
                         setIsAuthorized(true)
                     } else {
-                        // ถ้าเป็นอาจารย์แต่ไม่มีวิชา หรือเป็น Role อื่นที่หลุดเข้ามา
                         setStatus('unauthorized')
                         setIsAuthorized(false)
                     }
@@ -198,8 +235,10 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         }
         checkTeacherAccess()
     }, [pathname])
+    
+    useEffect(() => { setIsSidebarOpen(false) }, [pathname])
 
-    // --- 1. หน้า Loading (Style เดียวกับพี่เลี้ยง แต่โทน Indigo) ---
+    // --- Loading ---
     if (status === 'loading') {
         return (
             <div className="h-screen flex flex-col items-center justify-center bg-white overflow-hidden relative font-sans">
@@ -207,39 +246,22 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                     <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-indigo-600 rounded-full blur-[100px]"></div>
                     <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-blue-500 rounded-full blur-[100px]"></div>
                 </div>
-
                 <div className="relative flex flex-col items-center">
                     <div className="relative w-20 h-20 mb-8">
-                        {/* วงนอก (Indigo) */}
                         <div className="absolute inset-0 rounded-full border-[3px] border-slate-100 border-t-indigo-600 animate-spin"></div>
-                        {/* วงใน (Blue) */}
                         <div className="absolute inset-2 rounded-full border-[2px] border-transparent border-t-blue-400 animate-[spin_0.8s_linear_infinite]"></div>
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="w-2 h-2 bg-indigo-600 rounded-full animate-ping"></div>
                         </div>
                     </div>
-
-                    <div className="flex flex-col items-center gap-2 text-center">
-                        <h2 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em] ml-[0.3em]">
-                            ตรวจสอบสิทธิ์อาจารย์
-                        </h2>
-                        <div className="flex items-center gap-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                กรุณารอซักครู่...
-                            </span>
-                            <span className="flex gap-0.5">
-                                <span className="w-0.5 h-0.5 bg-slate-400 rounded-full animate-[bounce_1s_infinite_100ms]"></span>
-                                <span className="w-0.5 h-0.5 bg-slate-400 rounded-full animate-[bounce_1s_infinite_200ms]"></span>
-                                <span className="w-0.5 h-0.5 bg-slate-400 rounded-full animate-[bounce_1s_infinite_300ms]"></span>
-                            </span>
-                        </div>
-                    </div>
+                    <h2 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em]">ตรวจสอบสิทธิ์อาจารย์</h2>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">กรุณารอซักครู่...</span>
                 </div>
             </div>
         )
     }
 
-    // --- 2. หน้าไม่พบข้อมูล (Unregistered) ---
+    // --- Unregistered ---
     if (status === 'unregistered') {
         return (
             <div className="h-screen flex flex-col items-center justify-center p-6 text-center bg-white animate-in fade-in duration-500">
@@ -250,18 +272,14 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 <p className="text-slate-500 font-medium mb-10 max-w-xs leading-relaxed text-sm">
                     ขออภัย คุณยังไม่ได้ลงทะเบียนในระบบ หรือยังไม่มีข้อมูลบุคลากรในฐานข้อมูลของเรา
                 </p>
-                <button
-                    onClick={() => router.push('/register')}
-                    className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black text-sm shadow-xl shadow-indigo-100 flex items-center justify-center gap-3 active:scale-95 transition-all"
-                >
-                    <UserPlus size={20} />
-                    ลงทะเบียนอาจารย์
+                <button onClick={() => router.push('/register')} className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black text-sm shadow-xl shadow-indigo-100 flex items-center justify-center gap-3 active:scale-95 transition-all">
+                    <UserPlus size={20} /> ลงทะเบียนอาจารย์
                 </button>
             </div>
         )
     }
 
-    // --- 3. หน้าพบข้อมูลแต่ไม่มีสิทธิ์วิชา (Unauthorized) ---
+    // --- Unauthorized ---
     if (status === 'unauthorized') {
         return (
             <div className="h-screen flex flex-col items-center justify-center p-8 text-center bg-[#F0F7FF] animate-in fade-in duration-500">
@@ -272,16 +290,102 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 <p className="text-slate-500 font-medium mb-10 max-w-xs leading-relaxed text-sm">
                     คุณได้รับการอนุมัติแล้ว แต่ยังไม่มีรายวิชาที่รับผิดชอบในระบบ กรุณาติดต่อแอดมินเพื่อผูกข้อมูลวิชา
                 </p>
-                <button
-                    onClick={() => router.replace('/auth/check')}
-                    className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black text-sm shadow-xl shadow-indigo-200 flex items-center justify-center gap-3 active:scale-95 transition-all"
-                >
-                    <ArrowLeft size={20} />
-                    กลับไปตรวจสอบสิทธิ์
+                <button onClick={() => router.replace('/auth/check')} className="w-full max-w-xs py-5 bg-indigo-600 text-white rounded-3xl font-black text-sm shadow-xl shadow-indigo-200 flex items-center justify-center gap-3 active:scale-95 transition-all">
+                    <ArrowLeft size={20} /> กลับไปตรวจสอบสิทธิ์
                 </button>
             </div>
         )
     }
 
-    return <>{children}</>
+    // --- ✅ Authorized: Sidebar Layout ---
+    return (
+        <div className="flex min-h-screen font-sans bg-[#F8FAFC]">
+            {/* Mobile Overlay */}
+            {isSidebarOpen && (
+                <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
+            )}
+
+            {/* Sidebar */}
+            <aside className={`
+                fixed inset-y-0 left-0 z-50 w-64 bg-[#1e1b4b] text-slate-300 flex flex-col transform transition-transform duration-300 ease-in-out
+                lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+            `}>
+                {/* Sidebar Header */}
+                <div className="p-6 text-white flex items-center justify-between border-b border-indigo-800/50">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/50">
+                            <GraduationCap size={18} />
+                        </div>
+                        <div>
+                            <p className="font-black text-sm leading-none">Internship</p>
+                            <p className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest mt-0.5">Teacher Portal</p>
+                        </div>
+                    </div>
+                    <button className="lg:hidden text-slate-400 hover:text-white transition-colors" onClick={() => setIsSidebarOpen(false)}>
+                        <X size={22} />
+                    </button>
+                </div>
+
+                {/* Navigation */}
+                <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+                    {menuItems.map((item) => {
+                        const isActive = pathname === item.href || (item.href !== '/teacher/dashboard' && pathname.startsWith(item.href))
+                        return (
+                            <Link
+                                key={item.name}
+                                href={item.href}
+                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all group ${isActive
+                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/30'
+                                    : 'hover:bg-white/5 text-slate-400 hover:text-white'
+                                    }`}
+                            >
+                                <div className={`shrink-0 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-indigo-400'}`}>
+                                    {item.icon}
+                                </div>
+                                <div className="min-w-0">
+                                    <p className={`font-medium leading-none ${isActive ? 'text-white' : ''}`}>{item.name}</p>
+                                    <p className={`text-[10px] font-medium mt-1 leading-none ${isActive ? 'text-indigo-200' : 'text-slate-500'}`}>{item.desc}</p>
+                                </div>
+                            </Link>
+                        )
+                    })}
+                </nav>
+
+                {/* Logout */}
+                <div className="p-3 border-t border-indigo-800/50">
+                    <button
+                        onClick={handleLogout}
+                        className="flex items-center gap-3 w-full px-4 py-3 text-red-400 hover:bg-red-400/10 rounded-xl transition-all font-bold text-sm"
+                    >
+                        <LogOut size={18} />
+                        <span>ออกจากระบบ</span>
+                    </button>
+                </div>
+            </aside>
+
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col min-w-0">
+                {/* Top Header */}
+                <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-6 lg:px-10 sticky top-0 z-30 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <button className="lg:hidden p-2 text-slate-600 hover:bg-slate-50 rounded-xl transition-all" onClick={() => setIsSidebarOpen(true)}>
+                            <Menu size={24} />
+                        </button>
+                        <div className="font-bold text-slate-700 text-lg hidden sm:block">Internship System</div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="text-right hidden sm:block">
+                            <p className="text-sm font-bold text-slate-900 leading-none">Teacher</p>
+                            <p className="text-[10px] text-indigo-600 font-bold mt-1 uppercase tracking-widest">Management</p>
+                        </div>
+                        <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
+                            <GraduationCap size={16} />
+                        </div>
+                    </div>
+                </header>
+
+                <main className="p-4 lg:p-10 flex-1">{children}</main>
+            </div>
+        </div>
+    )
 }

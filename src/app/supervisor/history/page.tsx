@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Swal from 'sweetalert2'
-
+import liff from '@line/liff'
 export default function EvaluationHistory() {
     const router = useRouter()
     const [loading, setLoading] = useState(true)
@@ -24,7 +24,7 @@ export default function EvaluationHistory() {
         const init = async () => {
             // 1. จำลอง User (ของจริงใช้ LIFF)
             // const userId = 'U678862bd992a4cda7aaf972743b585ac'
-            const userId = 'test-somruk'
+            // const userId = 'test-somruk'
 
             // 2. ดึงข้อมูลพี่เลี้ยง
             const { data: sv } = await supabase.from('supervisors').select('id').eq('line_user_id', userId).single()

@@ -77,17 +77,17 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                 setStatus('loading')
 
                 // 2. ถ้าใช้ LINE LIFF ให้เอาคอมเมนต์ออก (ช่วง DEV อาจจะใช้ Mock ID ไปก่อน)
-                // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
-                // if (!liff.isLoggedIn()) {
-                //     liff.login({ redirectUri: window.location.href })
-                //     return
-                // }
-                // const profile = await liff.getProfile()
-                // const lineUserId = profile.userId
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                if (!liff.isLoggedIn()) {
+                    liff.login({ redirectUri: window.location.href })
+                    return
+                }
+                const profile = await liff.getProfile()
+                const lineUserId = profile.userId
 
                 // 🛠️ ช่วง DEV: ใช้ Mock ID ของพี่ก่อน (ตัวอย่าง)
                 // const lineUserId = 'U678862bd992a4cda7aaf972743b585ac'
-                const lineUserId = 'test-somruk'
+                // const lineUserId = 'test-somruk'
 
                 const { data: user } = await supabase
                     .from('supervisors')

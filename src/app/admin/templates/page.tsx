@@ -13,6 +13,12 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from 
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+interface ItemForm {
+    question_text: string;
+    description: string;
+    allow_na: boolean;
+    factor: number;
+}
 export default function TemplatesPage() {
     const [templates, setTemplates] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
@@ -288,7 +294,11 @@ export default function TemplatesPage() {
                                             {editingItem ? <><Save className="mr-2" /> บันทึกการแก้ไข</> : <><Plus className="mr-2" /> เพิ่มลงเทมเพลต</>}
                                         </Button>
                                         {editingItem && (
-                                            <Button variant="ghost" className="h-12 font-bold text-slate-400" onClick={() => { setEditingItem(null); setItemForm({ question_text: '', description: '', allow_na: true }) }}>
+                                            <Button variant="ghost" className="h-12 font-bold text-slate-400"
+                                                onClick={() => {
+                                                    setEditingItem(null);
+                                                    setItemForm({ question_text: '', description: '', allow_na: true, factor: 1.0 })
+                                                }}>
                                                 ยกเลิกการแก้ไข
                                             </Button>
                                         )}
