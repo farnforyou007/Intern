@@ -11,7 +11,10 @@ import {
     Users,
     SendHorizonal,
     SquareActivity,
-    SquareUserRound
+    SquareUserRound,
+    Clock,
+    CheckCircle,
+
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Swal from 'sweetalert2'
@@ -25,7 +28,8 @@ const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
     const firstTaskData = getTaskData(tasks[0]);
     const isGeneralSubject = tasks.length === 1 && !firstTaskData?.sub_subject_id;
     const completedCount = tasks.filter((t: any) => isMine ? t.is_evaluated : false).length;
-
+    const partialCount = tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length;
+    // const isFullPartial = !tasks.is_evaluated && (tasks.answer_count === tasks.total_questions);
     const getIcon = (isMine: boolean, isBook: boolean = false) => {
         if (!isMine) return <UserPlus size={isGeneralSubject ? 20 : 16} />;
         if (isBook) return <BookOpen size={16} />;
@@ -59,7 +63,7 @@ const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
                         <p className="text-sm font-black text-slate-800">{subjectName}</p>
                         <p className="text-[10px] text-slate-500 font-bold">
                             {isMine
-                                ? <span className="text-emerald-600">เสร็จแล้ว {completedCount}/{tasks.length} รายการ</span>
+                                ? <span className="text-emerald-600">เสร็จ {completedCount}{partialCount > 0 ? <span className="text-amber-500"> · ทำอยู่ {partialCount}</span> : ''}/{tasks.length}</span>
                                 : <span>{tasks.length} รายการย่อย</span>
                             }
                         </p>
@@ -75,7 +79,7 @@ const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
                         const isBook = !tData.sub_subjects?.name;
                         const subName = tData.sub_subjects?.name
                             ? `${tData.sub_subjects.name}`
-                            : 'บันทึกเล่ม / รายงาน (Portfolio)';
+                            : 'บันทึกเล่ม';
                         const icon = getIcon(isMine, isBook);
 
                         return (
@@ -100,7 +104,10 @@ const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
 const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => {
     const isClaimed = task.isClaimedByMe;
     const evaluated = isMine ? task.is_evaluated : false;
+    const isPartial = isMine && !evaluated && task.has_eval_logs;
+    const progress = task.eval_progress; // { done, total }
     const isCard = styleType === 'card';
+    const isFullPartial = !task.is_evaluated && (task.answer_count === task.total_questions);
 
     let containerClass = "relative w-full flex justify-between items-center transition-all active:scale-[0.98] overflow-hidden";
     let paddingClass = isCard ? "p-4 rounded-3xl mb-3" : "p-3 rounded-2xl pl-4";
@@ -111,6 +118,10 @@ const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => 
     if (isMine && evaluated) {
         bgClass = "bg-emerald-50/50 border-emerald-100 border-2";
         leftBorderClass = "border-l-[6px] border-l-emerald-500";
+    } else if (isMine && isPartial) {
+        bgClass = "bg-amber-50/50 border-amber-100 border-2";
+        leftBorderClass = "border-l-[6px] border-l-amber-400";
+        iconBgClass = "bg-amber-50 text-amber-600";
     } else if (!isMine) {
         bgClass = "bg-white border-dashed border-slate-300 border-2 hover:border-amber-400 hover:bg-amber-50/30";
         iconBgClass = "bg-slate-100 text-slate-400";
@@ -128,18 +139,30 @@ const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => 
             disabled={!isMine && isClaimed}
             className={`${containerClass} ${paddingClass} ${bgClass} ${leftBorderClass}`}
         >
-            <div className="text-left flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl transition-colors ${iconBgClass}`}>
+            <div className="text-left flex items-center gap-3 flex-1 min-w-0">
+                <div className={`p-2.5 rounded-xl transition-colors shrink-0 ${iconBgClass}`}>
                     {icon}
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                     <p className={`font-bold ${isCard ? 'text-sm text-slate-800' : 'text-xs text-slate-700'}`}>
                         {label}
                     </p>
                     {isMine ? (
-                        <p className="text-[9px] text-slate-400 font-medium">
-                            {evaluated ? 'บันทึกเรียบร้อย' : 'คลิกเพื่อประเมิน'}
-                        </p>
+                        <>
+                            <p className={`text-[9px] font-medium ${evaluated ? 'text-emerald-600' : isPartial ? 'text-amber-600' : 'text-slate-400'}`}>
+                                {evaluated ? 'บันทึกเรียบร้อย' : isPartial ? `ประเมินแล้ว ${progress?.done || 0}/${progress?.total || '?'} หมวด` : 'คลิกเพื่อประเมิน'}
+                            </p>
+                            {isPartial && progress && (
+                                <div className="mt-1.5 w-full max-w-[140px]">
+                                    <div className="h-1.5 bg-amber-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                                            style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     ) : (
                         !isClaimed && (
                             <p className="text-[9px] text-amber-600 font-bold flex items-center gap-1">
@@ -149,14 +172,41 @@ const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => 
                     )}
                 </div>
             </div>
-            {isMine ? (
+            {/* {isMine ? (
                 evaluated ? (
-                    <div className="text-[9px] font-black text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg flex items-center gap-1">
+                    <div className="text-[9px] font-black text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
                         <ClipboardCheck size={10} /> เรียบร้อย
                     </div>
-                ) : <ChevronRight size={isCard ? 20 : 16} className="text-slate-300" />
+                ) : isPartial ? (
+                    <div className="text-[9px] font-black text-amber-600 bg-amber-100 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                        <Clock size={10} /> บางส่วน
+                    </div>
+                ) : <ChevronRight size={isCard ? 20 : 16} className="text-slate-300 shrink-0" />
             ) : (
-                !isClaimed && <div className="bg-amber-100 text-amber-700 p-1.5 rounded-lg"><ChevronRight size={16} /></div>
+                !isClaimed && <div className="bg-amber-100 text-amber-700 p-1.5 rounded-lg shrink-0"><ChevronRight size={16} /></div>
+            )} */}
+
+            {isMine ? (
+                evaluated ? (
+                    // 1. กรณีบันทึกเรียบร้อยแล้ว (is_evaluated = true)
+                    <div className="text-[9px] font-black text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                        <ClipboardCheck size={10} /> เรียบร้อย
+                    </div>
+                ) : isFullPartial ? (
+                    // 2. กรณีเลือกครบทุกข้อแล้ว แต่ยังไม่กด Submit (ยังไม่กดบันทึก)
+                    <div className="text-[9px] font-black text-rose-600 bg-rose-100 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0 animate-pulse">
+                        <Clock size={10} /> ยังไม่กดบันทึก
+                    </div>
+                ) : isPartial ? (
+                    // 3. กรณีทำไปแค่บางส่วน (ยังเลือกไม่ครบทุกข้อ)
+                    <div className="text-[9px] font-black text-amber-600 bg-amber-100 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                        <Clock size={10} /> บางส่วน
+                    </div>
+                ) : (
+                    <ChevronRight size={isCard ? 20 : 16} className="text-slate-300 shrink-0" />
+                )
+            ) : (
+                !isClaimed && <div className="bg-amber-100 text-amber-700 p-1.5 rounded-lg shrink-0"><ChevronRight size={16} /></div>
             )}
         </button>
     )
@@ -239,7 +289,49 @@ export default function SupervisorStudentList() {
                 if (!assign) return false;
                 return checkPermission(assign, permissions || []);
             });
-            setMyStudents(filteredMine)
+
+            // 3.5 ดึง evaluation_logs + จำนวน evaluation_groups เพื่อคำนวณ progress
+            const assignmentIds = filteredMine.map((item: any) => item.student_assignments?.id).filter(Boolean);
+            const subjectIds = [...new Set(filteredMine.map((item: any) => item.student_assignments?.subject_id).filter(Boolean))];
+
+            // ดึง logs ของ supervisor นี้ (นับแยกตาม assignment_id)
+            let logsMap = new Map<number, number>();
+            if (assignmentIds.length > 0) {
+                const { data: logs } = await supabase
+                    .from('evaluation_logs')
+                    .select('assignment_id')
+                    .eq('supervisor_id', supervisor.id)
+                    .in('assignment_id', assignmentIds)
+                for (const l of (logs || [])) {
+                    logsMap.set(l.assignment_id, (logsMap.get(l.assignment_id) || 0) + 1);
+                }
+            }
+
+            // ดึงจำนวน evaluation_groups ต่อ subject
+            let groupsCountMap = new Map<string, number>();
+            if (subjectIds.length > 0) {
+                const { data: groups } = await supabase
+                    .from('evaluation_groups')
+                    .select('id, subject_id')
+                    .in('subject_id', subjectIds)
+                for (const g of (groups || [])) {
+                    groupsCountMap.set(g.subject_id, (groupsCountMap.get(g.subject_id) || 0) + 1);
+                }
+            }
+
+            // แปะ progress ลงใน filteredMine
+            const mineWithProgress = filteredMine.map((item: any) => {
+                const assignId = item.student_assignments?.id;
+                const subjId = item.student_assignments?.subject_id;
+                const logsCount = logsMap.get(assignId) || 0;
+                const totalGroups = groupsCountMap.get(subjId) || 1;
+                return {
+                    ...item,
+                    has_eval_logs: logsCount > 0,
+                    eval_progress: { done: logsCount, total: totalGroups }
+                };
+            });
+            setMyStudents(mineWithProgress)
 
             // 4. ดึงงานทั้งหมด (All Students)
             const { data: all } = await supabase.from('student_assignments').select(`
@@ -270,8 +362,8 @@ export default function SupervisorStudentList() {
                 const userId = profile.userId */
 
                 // ⚠️ Dev Mode:
-                // const userId = 'U678862bd992a4cda7aaf972743b585ac'
-                const userId = 'test-somruk'
+                const userId = 'U678862bd992a4cda7aaf972743b585ac'
+                // const userId = 'test-somruk'
 
                 if (userId) {
                     fetchData(userId)
@@ -406,6 +498,7 @@ export default function SupervisorStudentList() {
                         const isExpanded = expandedId === groupKey;
                         const totalTasks = tasks.length;
                         const totalCompleted = tasks.filter((t: any) => isMine ? t.is_evaluated : false).length;
+                        const totalPartial = tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length;
 
                         const tasksBySubject: { [key: string]: any[] } = {};
                         tasks.forEach((t: any) => {
@@ -441,7 +534,11 @@ export default function SupervisorStudentList() {
                                                     <ClipboardCheck size={14} className="text-emerald-600" />
                                                     {isMine ? 'รายการประเมิน' : 'รายวิชาที่สามารถรับเป็นพี่เลี้ยง'}
                                                 </p>
-                                                {isMine && <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md text-[10px] font-black">เสร็จแล้ว {totalCompleted}/{totalTasks}</span>}
+                                                {isMine && (
+                                                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1">
+                                                        <CheckCircle size={10} className="text-emerald-500" />{totalCompleted}{totalPartial > 0 && <span className="text-amber-600 flex items-center gap-0.5 ml-1"><Clock size={9} />{totalPartial}</span>}/{totalTasks}
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="space-y-1">
                                                 {Object.keys(tasksBySubject).map(subjId => {

@@ -402,7 +402,7 @@ export default function RotationSchedule() {
 
     const fetchData = async () => {
         setLoading(true)
-        // const userId = 'U678862bd992a4cda7aaf972743b585ac' 
+        // const userId = 'U678862bd992a4cda7aaf972743b585ac'
         const userId = 'test-somruk'
 
         const { data: sv } = await supabase.from('supervisors').select('id, site_id').eq('line_user_id', userId).single()
@@ -436,6 +436,24 @@ export default function RotationSchedule() {
                     const subName = item.sub_subjects?.name || item.subjects?.name
                     if (subName) groups[r.id].subjects.add(subName)
                     groups[r.id].studentIds.add(item.student_id)
+                })
+
+                // ดึง rotation ทั้งหมดที่มีในระบบ (ไม่ filter site_id เพราะตาราง rotations ไม่มี)
+                const rotationsResult = await supabase
+                    .from('rotations')
+                    .select('id, name, start_date, end_date')
+                    .order('start_date');
+                const allRotations: any[] = rotationsResult.data || [];
+
+                // เพิ่ม rotation ที่ไม่มีใน groups (เช่น ผลัดที่ยังไม่มี student_assignments)
+                allRotations.forEach((rot: any) => {
+                    if (!groups[rot.id]) {
+                        groups[rot.id] = {
+                            rotation: rot,
+                            subjects: new Set<string>(),
+                            studentIds: new Set<string>()
+                        }
+                    }
                 })
 
                 const result = Object.values(groups).map((g: any) => ({
@@ -528,10 +546,10 @@ export default function RotationSchedule() {
 
                                     {/* 🎯 สไตล์ Countdown แบบกล่องตัวเลขใหญ่ (ไสตล์ก่อนหน้า) */}
                                     <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-2xl border-2 shrink-0 shadow-sm ${daysLeft < 0
-                                            ? 'border-slate-100 bg-slate-50 text-slate-300'
-                                            : isEndingSoon
-                                                ? 'border-amber-100 bg-amber-50 text-amber-600'
-                                                : 'border-emerald-50 bg-emerald-50 text-emerald-600'
+                                        ? 'border-slate-100 bg-slate-50 text-slate-300'
+                                        : isEndingSoon
+                                            ? 'border-amber-100 bg-amber-50 text-amber-600'
+                                            : 'border-emerald-50 bg-emerald-50 text-emerald-600'
                                         }`}>
                                         <span className="text-lg font-black leading-none">
                                             {daysLeft < 0 ? '-' : daysLeft}

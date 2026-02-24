@@ -289,7 +289,7 @@ export default function EvaluationPage() {
     if (loading) return <SkeletonEval />
 
     return (
-        <div className="min-h-screen bg-slate-50 pb-40 font-sans">
+        <div className="min-h-screen bg-slate-50 pb-80 font-sans">
             {/* Header */}
             <div className="bg-white sticky top-0 z-50 border-b border-slate-100 shadow-sm">
                 <div className="p-6 pb-2 flex items-center gap-4">
@@ -406,11 +406,42 @@ export default function EvaluationPage() {
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/90 backdrop-blur-xl border-t border-slate-100">
-                <div className="flex justify-between items-center mb-4 px-2">
+                <div className="flex justify-between items-center mb-2 px-2">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ความคืบหน้าหมวดนี้:</span>
                     <span className="text-sm font-black text-emerald-600">
                         {currentGroup?.evaluation_items?.filter((i: any) => scores[i.id] !== undefined).length} / {currentGroup?.evaluation_items?.length} ข้อ
                     </span>
+                </div>
+                <div className="mb-4 px-2 space-y-1">
+                    {groups.map((g: any, idx: number) => {
+                        let gScore = 0, gMax = 0;
+                        g.evaluation_items?.forEach((item: any) => {
+                            const s = scores[item.id];
+                            if (s !== undefined && s !== 'N/A') gScore += Number(s);
+                            gMax += (item.max_score || 5);
+                        });
+                        const isActive = idx === activeTab;
+                        return (
+                            <div key={g.id} className={`flex justify-between items-center ${isActive ? 'text-indigo-600' : 'text-slate-400'}`}>
+                                <span className={`text-[9px] font-bold truncate mr-2 ${isActive ? '' : 'opacity-70'}`}>{g.group_name}</span>
+                                <span className={`text-[10px] font-black tabular-nums ${isActive ? '' : 'opacity-70'}`}>{gScore}/{gMax}</span>
+                            </div>
+                        );
+                    })}
+                    <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                        <span className="text-[10px] font-black text-slate-700 uppercase">รวมทั้งหมด</span>
+                        <span className="text-sm font-black text-indigo-600 tabular-nums">
+                            {(() => {
+                                let t = 0, m = 0;
+                                groups.forEach((g: any) => g.evaluation_items?.forEach((item: any) => {
+                                    const s = scores[item.id];
+                                    if (s !== undefined && s !== 'N/A') t += Number(s);
+                                    m += (item.max_score || 5);
+                                }));
+                                return `${t} / ${m}`;
+                            })()}
+                        </span>
+                    </div>
                 </div>
 
                 <div className="flex gap-3">

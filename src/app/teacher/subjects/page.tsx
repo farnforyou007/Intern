@@ -4,7 +4,10 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
-import { ChevronLeft, User, Users, Search, GraduationCap, FileText, X, Download, MapPin, Phone, ListChecks, BookOpen, ChevronRight, FileSpreadsheet } from 'lucide-react'
+import {
+    ChevronLeft, User, Users, Search, GraduationCap, FileText, X,
+    Download, MapPin, Phone, ListChecks, BookOpen, ChevronRight, FileSpreadsheet, Clock
+} from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import html2canvas from 'html2canvas'
 import XLSX from 'xlsx-js-style'
@@ -41,11 +44,26 @@ export default function EvaluationSummary() {
         router.push(`/teacher/subjects?${params.toString()}`);
     };
 
+
+
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true)
             const lineId = 'test-c'
             const { data: user } = await supabase.from('supervisors').select('id').eq('line_user_id', lineId).single()
+            const PRIORITY_MAP: { [key: string]: number } = {
+                "บุคลิก": 1,
+                "ประสบการณ์": 2,
+                "ฝึก": 2,
+                "เล่ม": 3,
+                "รายงาน": 3
+            };
+            const getPriority = (title: string) => {
+                for (const key in PRIORITY_MAP) {
+                    if (title.includes(key)) return PRIORITY_MAP[key];
+                }
+                return 99;
+            };
 
             if (user) {
                 const { data: subData } = await supabase.from('supervisor_subjects').select('subject_id, subjects(name, id)').eq('supervisor_id', user.id)
@@ -58,7 +76,7 @@ export default function EvaluationSummary() {
                     subjects (name),
                     training_sites (site_name, province), 
                     evaluation_logs (
-                        id, total_score, comment, supervisor_id,
+                        id, total_score, comment, supervisor_id,created_at,
                         supervisors (id, full_name),
                         evaluation_groups (id, group_name, weight),
                         evaluation_answers (score, item_id)
@@ -94,8 +112,9 @@ export default function EvaluationSummary() {
                             rawScore: log.total_score || 0,
                             weight: log.evaluation_groups?.weight || 1,
                             comment: log.comment || '-',
-                            answers: log.evaluation_answers || []
-                        }))
+                            answers: log.evaluation_answers || [],
+                            evaluatedAt: log.created_at
+                        })).sort((a, b) => getPriority(a.title) - getPriority(b.title))
                     }))
 
                     const mentorCount = supervisorEvaluations.length
@@ -122,11 +141,12 @@ export default function EvaluationSummary() {
                                 rawScore: Math.round(avgRawScore * 100) / 100,
                                 weight: evs[0].weight,
                                 comment: evs.map((e: any) => e.comment).join(' / '),
+                                // comment: evs[0].comment, // ใช้ comment ของคนแรก (หรือจะปรับเป็นรวมทุกคนก็ได้)
                                 answers: evs[0].answers // ใช้ answers ของคนแรกเพื่อนับจำนวนข้อ
                             }
-                        })
-                    }
 
+                        }).sort((a, b) => getPriority(a.title) - getPriority(b.title));
+                    }
                     return {
                         student: item.students,
                         place: item.training_sites,
@@ -624,9 +644,14 @@ export default function EvaluationSummary() {
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <h3 className="font-black text-slate-800 text-base leading-tight truncate">{item.student?.first_name} {item.student?.last_name}</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 mt-0.5 tracking-tight uppercase">รหัส: {item.student?.student_code}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 mt-0.5 tracking-tight uppercase">รหัส : {item.student?.student_code}</p>
                                     {isMultiMentor && (
                                         <p className="text-[9px] font-black text-violet-500 mt-1 flex items-center gap-1"><Users size={10} /> {item.mentorCount} พี่เลี้ยงประเมิน</p>
+                                    )}
+                                    {item.evaluations?.[0]?.evaluatedAt && (
+                                        <p className="text-[9px] font-bold text-indigo-400 mt-1 flex items-center gap-1">
+                                            <Clock size={10} /> ประเมินเมื่อ: {new Date(item.evaluations[0].evaluatedAt).toLocaleDateString('th-TH')}
+                                        </p>
                                     )}
                                 </div>
                                 <div className="text-right sm:hidden pr-2">
@@ -692,7 +717,10 @@ export default function EvaluationSummary() {
                                             </button>
                                         ))}
                                     </div>
+
+
                                 </div>
+
                             );
                         })()}
 
@@ -701,27 +729,28 @@ export default function EvaluationSummary() {
                                 <div className="text-center py-20 opacity-30 font-black uppercase text-xs animate-pulse">กำลังโหลดรายละเอียด...</div>
                             ) : (
                                 <div id="pdf-content">
-                                    {/* Header Info (เหมือนในรูป) */}
+
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 mb-10 p-6 sm:p-8 bg-slate-50 rounded-[2rem] text-sm">
                                         <div className="space-y-1.5">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ข้อมูลนักศึกษา</p>
                                             <h3 className="font-black text-slate-800 text-xl">{selectedStudent.student.first_name} {selectedStudent.student.last_name}</h3>
-                                            <p className="font-bold text-indigo-600">รหัส: {selectedStudent.student.student_code}</p>
+                                            <p className="font-bold text-slate-500">รหัสนักศึกษา : {selectedStudent.student.student_code}</p>
                                             <p className="text-xs font-bold text-slate-500 flex items-center gap-2"><Phone size={12} /> {selectedStudent.student.phone || '-'}</p>
                                             <p className="text-xs font-bold text-violet-600 flex items-center gap-2 mt-1"><Users size={12} /> ผู้ประเมิน: {selectedStudent.supervisorEvaluations?.map((sv: any) => sv.supervisorName).join(', ') || '-'}</p>
+
                                         </div>
                                         <div className="sm:text-right border-t sm:border-t-0 sm:border-l border-slate-200 pt-4 sm:pt-0 sm:pl-8 space-y-1.5">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">สถานที่ฝึกปฏิบัติงาน</p>
                                             <h3 className="font-black text-slate-800 text-base leading-tight">{selectedStudent.place?.site_name || '-'}</h3>
                                             <p className="text-sm font-bold text-slate-500">จังหวัด: {selectedStudent.place?.province || '-'}</p>
-                                            <p className="text-[10px] font-black text-indigo-500 bg-indigo-50 inline-block px-2 py-1 rounded-md uppercase">{selectedStudent.subjectName}</p>
+                                            <p className="text-[11px] font-bold text-indigo-500 bg-indigo-50 inline-block px-2 py-1 rounded-md uppercase">{selectedStudent.subjectName}</p>
                                         </div>
                                     </div>
 
                                     {modalMode === 'summary' ? (
                                         /* ตารางสรุป (Header เขียว) */
                                         <>
-                                            <div className="overflow-hidden border border-slate-100 rounded-3xl shadow-sm">
+                                            <div className="overflow-x-auto border border-slate-100 rounded-3xl shadow-sm">
                                                 <table className="w-full border-collapse">
                                                     <thead className="bg-[#105030] text-white">
                                                         <tr>
@@ -809,6 +838,7 @@ export default function EvaluationSummary() {
                                             ? selectedStudent.supervisorEvaluations[selectedSupervisorIdx]?.evaluations || []
                                             : selectedStudent.evaluations;
                                         const activeEv = activeEvs[activeDetailTab];
+                                        const dynamicMaxScore = (activeEv?.answers?.length || 0) * 5;
                                         return (
                                             <div className="space-y-6">
                                                 {/* 🆕 Supervisor selector pills (เฉพาะ 2+ พี่เลี้ยง) */}
@@ -824,10 +854,18 @@ export default function EvaluationSummary() {
                                                 )}
                                                 <div className="flex items-center gap-3 border-l-4 border-indigo-600 pl-3">
                                                     <h4 className="text-sm sm:text-base font-black text-slate-800 uppercase leading-none">รายละเอียด: {activeEv?.title}</h4>
+                                                    {activeEv?.evaluatedAt && (
+                                                        <div className="flex items-center gap-1.5 text-indigo-500 font-bold text-[10px] bg-indigo-50 w-fit px-2 py-1 rounded-lg">
+                                                            <Clock size={12} />
+                                                            ประเมินเมื่อ: {new Date(activeEv.evaluatedAt).toLocaleDateString('th-TH', {
+                                                                day: '2-digit', month: 'long', year: 'numeric'
+                                                            })}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div className="overflow-hidden border border-slate-100 rounded-3xl shadow-sm">
+                                                <div className="overflow-hidden border border-slate-100 rounded-3xl shadow-sm ">
                                                     <table className="w-full text-xs sm:text-sm">
-                                                        <thead className="bg-[#105030] text-white font-black">
+                                                        <thead className="bg-[#186e43] text-white font-black">
                                                             <tr>
                                                                 <th className="p-4 text-center w-12">#</th>
                                                                 <th className="p-4 text-left">เกณฑ์การประเมิน</th>
@@ -872,7 +910,19 @@ export default function EvaluationSummary() {
                                                     </table>
 
                                                 </div>
-                                                <div className="mt-8">
+                                                <div className="mt-4 space-y-4 ">
+                                                    <div className="bg-[#186e43] p-5 rounded-[2rem] text-white shadow-lg shadow-indigo-100">
+                                                        <div className="flex justify-between items-center">
+                                                            <div>
+                                                                <p className="text-[10px] font-black opacity-80 uppercase tracking-widest">คะแนนดิบรวมหมวดนี้</p>
+                                                                <h5 className="text-xl font-black">สรุปผลการประเมิน</h5>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="text-2xl font-black">{activeEv?.rawScore}</span>
+                                                                <span className="text-lg opacity-60 font-bold ml-1">/ {dynamicMaxScore}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                     <div className="p-6 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
                                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
                                                             <ListChecks size={14} /> ข้อเสนอแนะเพิ่มเติมจากผู้ประเมิน

@@ -157,8 +157,8 @@ export default function SupervisorDashboard() {
 
             // ❌ ลบส่วนจำลอง (Hardcode) นี้ทิ้งไปได้เลยครับ
             const profile = {
-                // userId: 'U678862bd992a4cda7aaf972743b585ac',
-                userId: 'test-somruk',
+                userId: 'U678862bd992a4cda7aaf972743b585ac',
+                // userId: 'test-somruk',
                 displayName: '🐼 FARN 🌙'
             };
 
@@ -482,14 +482,18 @@ export default function SupervisorDashboard() {
                                 : 'การแจ้งเตือน'}
                         </h3>
                         <p className={`text-[11px] font-bold italic ${alertStatus === 'overdue' ? 'text-red-400' : 'text-slate-400'}`}>
-                            {stats.pending > 0
-                                ? `เหลือ นศ. ${pendingStudentsCount} คน (${stats.pending} รายการ) ที่ต้องประเมิน`
-                                : "ประเมินครบถ้วนแล้ว ยอดเยี่ยม!"}
+                            {stats.pending > 0 && stats.partial > 0
+                                ? `ยังไม่ประเมิน ${stats.pending} · กำลังทำ ${stats.partial} รายการ`
+                                : stats.pending > 0
+                                    ? `เหลือ นศ. ${pendingStudentsCount} คน (${stats.pending} รายการ) ที่ต้องประเมิน`
+                                    : stats.partial > 0
+                                        ? `เหลืออีก ${stats.partial} รายการที่ประเมินยังไม่ครบ`
+                                        : "ประเมินครบถ้วนแล้ว ยอดเยี่ยม! 🎉"}
                         </p>
                     </div>
 
                     {/* ปุ่ม */}
-                    {stats.pending > 0 && (
+                    {(stats.pending > 0 || stats.partial > 0) && (
                         <button
                             onClick={() => router.push('/supervisor/students')}
                             className={`text-white text-[10px] font-black px-5 py-3 rounded-2xl shadow-lg active:scale-95 transition-all ${alertStatus === 'overdue' ? 'bg-red-500 hover:bg-red-600' : 'bg-[#064e3b] hover:bg-[#043e2f]'
