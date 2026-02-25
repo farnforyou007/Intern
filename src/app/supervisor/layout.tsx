@@ -1,4 +1,4 @@
-// layout supervisor
+// layout.tsx - Layout คุมการเข้าถึงของพี่เลี้ยง (Supervisor) ทั้งหมด
 // ver4
 "use client"
 import { useEffect, useState } from 'react'
