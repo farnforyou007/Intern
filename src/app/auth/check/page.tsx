@@ -46,7 +46,7 @@ export default function AuthCheckPage() {
                     .from('supervisors')
                     .select(`
                         id, role, is_verified,
-                        supervisor_subject(id)
+                        supervisor_subjects(id)
                     `)
                     .eq('line_user_id', lineUserId)
                     .single();
@@ -68,7 +68,7 @@ export default function AuthCheckPage() {
                 }
 
                 // ✅ 6. อนุมัติแล้ว -> ตรวจสอบเงื่อนไขวิชา
-                const hasSubject = user.supervisor_subject && user.supervisor_subject.length > 0;
+                const hasSubject = user.supervisor_subjects && user.supervisor_subjects.length > 0;
                 
                 // แยก Logic ตาม Role
                 if (user.role === 'teacher') {
