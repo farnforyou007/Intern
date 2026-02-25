@@ -155,22 +155,22 @@ export default function SupervisorDashboard() {
         try {
             // 🟢 1. เริ่มต้น LIFF และตรวจสอบการ Login (ใช้ของจริง)
             // (ต้องมั่นใจว่าใส่ NEXT_PUBLIC_LIFF_ID ใน .env.local แล้ว)
-            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
 
-            if (!liff.isLoggedIn()) {
-                liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
-                return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
-            }
+            // if (!liff.isLoggedIn()) {
+            //     liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
+            //     return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
+            // }
 
-            const profile = await liff.getProfile();
+            // const profile = await liff.getProfile();
             // console.log("User Profile:", profile); // เช็คค่าได้ตรงนี้
 
             // ❌ ลบส่วนจำลอง (Hardcode) นี้ทิ้งไปได้เลยครับ
-            // const profile = {
-            //     // userId: 'U678862bd992a4cda7aaf972743b585ac',
-            //     userId: 'test-somruk',
-            //     displayName: '🐼 FARN 🌙'
-            // };
+            const profile = {
+                userId: 'U678862bd992a4cda7aaf972743b585ac',
+                // userId: 'test-somruk',
+                displayName: '🐼 FARN 🌙'
+            };
 
 
             // 2. ดึงข้อมูลพี่เลี้ยง และข้อมูลหน่วยงาน (ใช้ profile.userId จาก LIFF)
@@ -244,13 +244,27 @@ export default function SupervisorDashboard() {
                     const upcomingTasks = [];
 
                     for (const task of pendingTasksData) {
-                        const endDate = new Date(task.student_assignments?.[0]?.rotations?.[0]?.end_date);
-                        endDate.setHours(0, 0, 0, 0); // เคลียร์เวลาเช่นกัน
+                        // const endDate = new Date(task.student_assignments?.[0]?.rotations?.[0]?.end_date);
+                        // endDate.setHours(0, 0, 0, 0); // เคลียร์เวลาเช่นกัน
 
-                        if (endDate < today) {
-                            overdueTasks.push({ ...task, endDate });
-                        } else {
-                            upcomingTasks.push({ ...task, endDate });
+                        // if (endDate < today) {
+                        //     overdueTasks.push({ ...task, endDate });
+                        // } else {
+                        //     upcomingTasks.push({ ...task, endDate });
+                        // }
+
+                        //25/2/69
+                        const rotationData = task.student_assignments?.rotations;
+
+                        if (rotationData?.end_date) {
+                            const endDate = new Date(rotationData.end_date);
+                            endDate.setHours(0, 0, 0, 0);
+
+                            if (endDate < today) {
+                                overdueTasks.push({ ...task, endDate, rotationName: rotationData.name });
+                            } else {
+                                upcomingTasks.push({ ...task, endDate, rotationName: rotationData.name });
+                            }
                         }
                     }
 
@@ -258,26 +272,48 @@ export default function SupervisorDashboard() {
                     if (overdueTasks.length > 0) {
                         // กรณี A: มีงานค้างที่เลยกำหนดแล้ว -> ให้เตือนงานค้างก่อน!
                         // เรียงเอาวันที่เก่าที่สุดขึ้นก่อน (ยิ่งเก่ายิ่งด่วน)
+                        // overdueTasks.sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
+                        // const urgentTask = overdueTasks[0];
+
+                        // const diffTime = today.getTime() - urgentTask.endDate.getTime();
+                        // const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // คำนวณว่าเลยมา กี่วัน
+
+                        // setDaysLeft(diffDays);
+                        // setUrgentRotationName(`งานค้าง ${urgentTask.student_assignments?.[0]?.rotations?.[0]?.name}`); // เช่น "งานค้าง ผลัด 1"
+                        // setAlertStatus('overdue'); // *ต้องเพิ่ม state นี้ (ดูวิธีเพิ่มด้านล่าง)
+
+                        //25/2/69 - ปรับให้แสดงชื่อผลัดที่ค้างแทน
+                        // กรณีมีงานค้าง
                         overdueTasks.sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
                         const urgentTask = overdueTasks[0];
-
                         const diffTime = today.getTime() - urgentTask.endDate.getTime();
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // คำนวณว่าเลยมา กี่วัน
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
                         setDaysLeft(diffDays);
-                        setUrgentRotationName(`งานค้าง ${urgentTask.student_assignments?.[0]?.rotations?.[0]?.name}`); // เช่น "งานค้าง ผลัด 1"
-                        setAlertStatus('overdue'); // *ต้องเพิ่ม state นี้ (ดูวิธีเพิ่มด้านล่าง)
+                        setUrgentRotationName(`งานค้าง ${urgentTask.rotationName || ''}`);
+                        setAlertStatus('overdue');
 
                     } else if (upcomingTasks.length > 0) {
                         // กรณี B: ไม่มีงานค้าง -> นับถอยหลังผลัดปัจจุบัน/อนาคต
+                        // upcomingTasks.sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
+                        // const nextTask = upcomingTasks[0];
+
+                        // const diffTime = nextTask.endDate.getTime() - today.getTime();
+                        // const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // อีกกี่วันจะถึง
+
+                        // setDaysLeft(diffDays);
+                        // setUrgentRotationName(nextTask.student_assignments?.[0]?.rotations?.[0]?.name); // เช่น "ผลัด 2"
+                        // setAlertStatus('normal');
+
+                        //25/2/69 - ปรับให้แสดงชื่อผลัดที่ใกล้จะถึงแทน
+                        // กรณีรอนับถอยหลัง
                         upcomingTasks.sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
                         const nextTask = upcomingTasks[0];
-
                         const diffTime = nextTask.endDate.getTime() - today.getTime();
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // อีกกี่วันจะถึง
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
                         setDaysLeft(diffDays);
-                        setUrgentRotationName(nextTask.student_assignments?.[0]?.rotations?.[0]?.name); // เช่น "ผลัด 2"
+                        setUrgentRotationName(nextTask.rotationName || '');
                         setAlertStatus('normal');
                     }
                 } else {
@@ -542,7 +578,7 @@ export default function SupervisorDashboard() {
                         </h3>
                         <p className={`text-[11px] font-bold italic ${alertStatus === 'overdue' ? 'text-red-400' : 'text-slate-400'}`}>
                             {stats.pending > 0 && stats.partial > 0
-                                ? `ยังไม่ประเมิน ${stats.pending} · กำลังทำ ${stats.partial} รายการ`
+                                ? `ยังไม่ประเมิน ${stats.pending} · กำลังประเมิน ${stats.partial} รายการ`
                                 : stats.pending > 0
                                     ? `เหลือ นศ. ${pendingStudentsCount} คน (${stats.pending} รายการ) ที่ต้องประเมิน`
                                     : stats.partial > 0
