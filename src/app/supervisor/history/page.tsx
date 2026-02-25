@@ -44,7 +44,7 @@ export default function EvaluationHistory() {
 
             if (!lineUserId) return;
             // 2. ดึงข้อมูลพี่เลี้ยง
-            const { data: sv } = await supabase.from('supervisors').select('id').eq('line_user_id', userId).single()
+            const { data: sv } = await supabase.from('supervisors').select('id').eq('line_user_id', lineUserId).single()
 
             if (sv) {
                 fetchHistory(sv.id)
