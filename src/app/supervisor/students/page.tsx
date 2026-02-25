@@ -19,6 +19,7 @@ import {
 import { useRouter } from 'next/navigation'
 import Swal from 'sweetalert2'
 import liff from '@line/liff'
+import { getLineUserId } from '@/utils/auth';
 
 // --- 1. Component ย่อย: SmartSubjectGroup ---
 const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
@@ -383,17 +384,21 @@ export default function SupervisorStudentList() {
                 // const userId = profile.userId
 
                 // ⚠️ Dev Mode:
-                const userId = 'U678862bd992a4cda7aaf972743b585ac'
+                // const userId = 'U678862bd992a4cda7aaf972743b585ac'
                 // const userId = 'test-somruk'
 
-                if (userId) {
-                    fetchData(userId)
+                const urlParams = new URLSearchParams(window.location.search);
+                const lineUserId = await getLineUserId(urlParams);
+
+                if (!lineUserId) return;
+                if (lineUserId) {
+                    fetchData(lineUserId)
 
                     // 🚩 Real-time: ฟัง 3 ตารางหลัก ถ้ามีอะไรเปลี่ยนให้โหลดใหม่ทันที
                     channel = supabase.channel('supervisor_realtime')
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, () => fetchData(userId))
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'student_assignments' }, () => fetchData(userId))
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisor_subjects' }, () => fetchData(userId))
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, () => fetchData(lineUserId))
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'student_assignments' }, () => fetchData(lineUserId))
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisor_subjects' }, () => fetchData(lineUserId))
                         .subscribe()
                 }
             } catch (error) { console.error("Init Error:", error) }
