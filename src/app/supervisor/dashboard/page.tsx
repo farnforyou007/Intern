@@ -155,22 +155,22 @@ export default function SupervisorDashboard() {
         try {
             // 🟢 1. เริ่มต้น LIFF และตรวจสอบการ Login (ใช้ของจริง)
             // (ต้องมั่นใจว่าใส่ NEXT_PUBLIC_LIFF_ID ใน .env.local แล้ว)
-            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
 
-            // if (!liff.isLoggedIn()) {
-            //     liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
-            //     return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
-            // }
+            if (!liff.isLoggedIn()) {
+                liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
+                return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
+            }
 
-            // const profile = await liff.getProfile();
+            const profile = await liff.getProfile();
             // console.log("User Profile:", profile); // เช็คค่าได้ตรงนี้
 
             // ❌ ลบส่วนจำลอง (Hardcode) นี้ทิ้งไปได้เลยครับ
-            const profile = {
-                userId: 'U678862bd992a4cda7aaf972743b585ac',
-                // userId: 'test-somruk',
-                displayName: '🐼 FARN 🌙'
-            };
+            // const profile = {
+            //     userId: 'U678862bd992a4cda7aaf972743b585ac',
+            //     // userId: 'test-somruk',
+            //     displayName: '🐼 FARN 🌙'
+            // };
 
 
             // 2. ดึงข้อมูลพี่เลี้ยง และข้อมูลหน่วยงาน (ใช้ profile.userId จาก LIFF)
@@ -199,6 +199,7 @@ export default function SupervisorDashboard() {
             const { data: assignments, error: assignError } = await supabase
                 .from('assignment_supervisors')
                 .select(`
+                    evaluation_status,
                     is_evaluated,
                     student_assignments:assignment_id (
                         id,
@@ -254,7 +255,8 @@ export default function SupervisorDashboard() {
                         // }
 
                         //25/2/69
-                        const rotationData = task.student_assignments?.rotations;
+                        // const rotationData = task.student_assignments?.rotations?;
+                        const rotationData = (task.student_assignments as any)?.rotations;
 
                         if (rotationData?.end_date) {
                             const endDate = new Date(rotationData.end_date);
@@ -327,29 +329,33 @@ export default function SupervisorDashboard() {
                     .filter(Boolean);
 
                 const totalMyStudentsCount = new Set(uniqueStudentIds).size;
-                const evaluatedCount = assignments.filter((a: any) => a.is_evaluated).length;
-
+                const evaluatedCount = assignments.filter((a: any) => a.evaluation_status === 2).length;
+                const partialCount = assignments.filter((a: any) => a.evaluation_status === 1).length;
+                const pendingTasksCount = assignments.filter((a: any) => a.evaluation_status === 0).length;
+                
+                // const evaluatedCount = assignments.filter((a: any) => a.is_evaluated).length;
                 // 🟡 ดึง evaluation_logs แยก เพื่อหาว่า assignment ไหน "ประเมินบางส่วน"
-                const notEvaluatedAssignments = assignments.filter((a: any) => !a.is_evaluated);
-                const notEvalAssignmentIds = notEvaluatedAssignments
-                    .map((a: any) => a.student_assignments?.id)
-                    .filter(Boolean);
+                // const notEvaluatedAssignments = assignments.filter((a: any) => !a.is_evaluated);
+                // const notEvalAssignmentIds = notEvaluatedAssignments
+                //     .map((a: any) => a.student_assignments?.id)
+                //     .filter(Boolean);
 
-                let partialCount = 0;
-                if (notEvalAssignmentIds.length > 0) {
-                    const { data: logs } = await supabase
-                        .from('evaluation_logs')
-                        .select('assignment_id')
-                        .eq('supervisor_id', svData.id)
-                        .in('assignment_id', notEvalAssignmentIds);
-                    const logsSet = new Set((logs || []).map((l: any) => l.assignment_id));
-                    partialCount = notEvaluatedAssignments.filter((a: any) =>
-                        logsSet.has(a.student_assignments?.id)
-                    ).length;
-                }
+                // let partialCount = 0;
+                // if (notEvalAssignmentIds.length > 0) {
+                //     const { data: logs } = await supabase
+                //         .from('evaluation_logs')
+                //         .select('assignment_id')
+                //         .eq('supervisor_id', svData.id)
+                //         .in('assignment_id', notEvalAssignmentIds);
+                //     const logsSet = new Set((logs || []).map((l: any) => l.assignment_id));
+                //     partialCount = notEvaluatedAssignments.filter((a: any) =>
+                //         logsSet.has(a.student_assignments?.id)
+                //     ).length;
+                // }
 
-                const pendingTasksCount = assignments.length - evaluatedCount - partialCount;
-
+                // const pendingTasksCount = assignments.length - evaluatedCount - partialCount;
+                // ✅ ใช้ค่าจาก evaluation_status โดยตรง (ต้องมั่นใจว่า select evaluation_status มาแล้ว)
+                
                 const pendingPeopleCount = new Set(
                     pendingTasksData
                         .map((a: any) => a.student_assignments?.student_id)

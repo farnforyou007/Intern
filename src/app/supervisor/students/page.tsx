@@ -27,8 +27,10 @@ const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
     const getTaskData = (task: any) => isMine ? task.student_assignments : task;
     const firstTaskData = getTaskData(tasks[0]);
     const isGeneralSubject = tasks.length === 1 && !firstTaskData?.sub_subject_id;
-    const completedCount = tasks.filter((t: any) => isMine ? t.is_evaluated : false).length;
-    const partialCount = tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length;
+    // const completedCount = tasks.filter((t: any) => isMine ? t.is_evaluated : false).length;
+    // const partialCount = tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length;
+    const completedCount = tasks.filter((t: any) => isMine ? t.evaluation_status === 2 : false).length;
+    const partialCount = tasks.filter((t: any) => isMine ? t.evaluation_status === 1 : false).length;
     // const isFullPartial = !tasks.is_evaluated && (tasks.answer_count === tasks.total_questions);
     const getIcon = (isMine: boolean, isBook: boolean = false) => {
         if (!isMine) return <UserPlus size={isGeneralSubject ? 20 : 16} />;
@@ -375,13 +377,13 @@ export default function SupervisorStudentList() {
         const init = async () => {
             try {
                 // ✅ ใช้งานจริง: เปิดระบบ LIFF (ลบคอมเมนต์ออกถ้าขึ้น Production)
-                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
-                if (!liff.isLoggedIn()) { liff.login(); return }
-                const profile = await liff.getProfile()
-                const userId = profile.userId
+                // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                // if (!liff.isLoggedIn()) { liff.login(); return }
+                // const profile = await liff.getProfile()
+                // const userId = profile.userId
 
                 // ⚠️ Dev Mode:
-                // const userId = 'U678862bd992a4cda7aaf972743b585ac'
+                const userId = 'U678862bd992a4cda7aaf972743b585ac'
                 // const userId = 'test-somruk'
 
                 if (userId) {

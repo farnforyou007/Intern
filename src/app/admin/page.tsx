@@ -11,7 +11,10 @@ import Link from 'next/link'
 import AdminLayout from '@/components/AdminLayout'
 import { Skeleton } from "@/components/ui/skeleton"
 import Swal from 'sweetalert2'
-
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid,
+    Tooltip, ResponsiveContainer, Cell, PieChart, Pie
+} from 'recharts';
 // --- Helper: แปลงเวลา ---
 function timeAgo(dateString: string) {
     const date = new Date(dateString);
@@ -31,6 +34,33 @@ function timeAgo(dateString: string) {
     return "เมื่อกี้";
 }
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-white p-4 rounded-2xl shadow-xl border-none font-sans">
+                <p className="text-sm font-extrabold text-slate-800 mb-2">{label}</p>
+                <div className="space-y-1">
+                    {payload.map((entry: any, index: number) => (
+                        <div key={index} className="flex items-center justify-between gap-8">
+                            <span className="text-[12px] font-bold text-slate-500">
+                                {entry.name}:
+                            </span>
+                            <span
+                                className="text-[12px] font-black"
+                                // 🎨 เช็กเงื่อนไขตรงนี้เลย ถ้าเป็น "ค้างประเมิน" ให้เป็นสีแดง
+                                style={{ color: entry.name === "ค้างประเมิน" ? "#ef4444" : "#10b981" }}
+                            >
+                                {entry.value} รายการ
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+    return null;
+};
+
 export default function AdminDashboard() {
     const [loading, setLoading] = useState(true)
     const [stats, setStats] = useState({
@@ -41,15 +71,30 @@ export default function AdminDashboard() {
         subjects: 0
     })
 
+    const [evalStats, setEvalStats] = useState({
+        total: 0,
+        completed: 0,
+        pending: 0,
+        inProgress: 0,
+        percent: 0
+    })
+
     // เก็บข้อมูลแยกตามประเภท
     const [rawActivities, setRawActivities] = useState({
         supervisors: [],
         sites: [],
         students: []
     })
-
+    // const [chartData, setChartData] = useState<any[]>([]);
+    const [chartData, setChartData] = useState<{ main: any[], sub: any[] }>({
+        main: [],
+        sub: []
+    })
+    const [summaryData, setSummaryData] = useState<any[]>([]);
+    const [allSubjects, setAllSubjects] = useState<any[]>([]);
     const [filterType, setFilterType] = useState('all') // 'all' | 'supervisor' | 'site' | 'student'
-
+    const [viewType, setViewType] = useState<'main' | 'sub'>('main');
+    const [subjectRatioData, setSubjectRatioData] = useState<any[]>([]);
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -95,6 +140,28 @@ export default function AdminDashboard() {
                 subjects: subjectCount || 0
             })
 
+            // 🚩 เพิ่มการดึงข้อมูลการประเมินจากตาราง assignment_supervisors
+            const { data: evalData, count: totalCount } = await supabase
+                .from('assignment_supervisors')
+                .select('evaluation_status', { count: 'exact' });
+
+            // const completed = evalData?.filter(item => item.is_evaluated).length || 0;
+            // const pending = (totalCount || 0) - completed;
+            const completed = evalData?.filter(item => item.evaluation_status === 2).length || 0;
+            const inProgress = evalData?.filter(item => item.evaluation_status === 1).length || 0; // ✅ นับ status 1
+            const pending = evalData?.filter(item => item.evaluation_status === 0).length || 0;
+
+            // const percent = totalCount ? Math.round((completed / totalCount) * 100) : 0;
+
+            setEvalStats({
+                total: totalCount || 0,
+                completed,
+                pending,
+                inProgress,
+                percent: totalCount ? Math.round((completed / totalCount) * 100) : 0
+            });
+
+
             // 2. ดึง Recent Activities (อย่างละ 5)
             const [newSupervisors, newSites, newStudents] = await Promise.all([
                 supabase.from('supervisors').select('id, full_name, created_at, is_verified').order('created_at', { ascending: false }).limit(5),
@@ -122,7 +189,168 @@ export default function AdminDashboard() {
                     rawTime: item.created_at, time: timeAgo(item.created_at),
                     icon: <UserPlus size={14} />, color: "bg-purple-100 text-purple-600"
                 })) as never[]
+
             });
+
+            // 3.กราฟ 📊 ดึงข้อมูลเพื่อทำกราฟประเมินแยกตามรายวิชา
+            // กราฟ 3 ver2 แยกตามรายววิชา วิชาย่อยเอามารวม
+            // 1. ดึงข้อมูล Master Data ของวิชาหลักและวิชาย่อย
+            const [subjectsRes, subSubjectsRes] = await Promise.all([
+                supabase.from('subjects').select('id, name'),
+                supabase.from('sub_subjects').select('id, name, parent_subject_id')
+            ]);
+
+            const subjectsList = subjectsRes.data || [];
+            const subSubjectsList = subSubjectsRes.data || [];
+
+            // 2. ดึงข้อมูลการประเมินพร้อมความสัมพันธ์
+            const { data: assignments } = await supabase
+                .from('assignment_supervisors')
+                .select(`
+                is_evaluated,
+                student_assignments:assignment_id (
+                    subject_id,
+                    sub_subject_id
+                )
+            `);
+            // console.log("Assignments with Relation:", assignments);
+
+            // const { data: evalData2 } = await supabase
+            //     .from('assignment_supervisors')
+            //     .select('is_evaluated');
+
+            // console.log("Raw Eval Data:", evalData2);
+
+            // if (assignments) {
+            //     // --- ประมวลผลสำหรับ "วิชาหลัก" (Main Subjects) ---
+            //     const mainMap: any = {};
+            //     subjectsList.forEach(s => {
+            //         mainMap[s.id] = { name: s.name, completed: 0, pending: 0, total: 0 };
+            //     });
+
+            //     // --- ประมวลผลสำหรับ "วิชาย่อย" (Sub Subjects) ---
+            //     const subMap: any = {};
+            //     subSubjectsList.forEach(ss => {
+            //         subMap[ss.id] = { name: ss.name, completed: 0, pending: 0, total: 0 };
+            //     });
+
+            //     assignments.forEach((item: any) => {
+            //         const sa = item.student_assignments;
+
+            //         // การนับเข้าวิชาหลัก (ใช้ subject_id ตรงๆ หรือหาจาก parent ของ sub_subject)
+            //         let effectiveMainId = sa?.subject_id;
+            //         if (!effectiveMainId && sa?.sub_subject_id) {
+            //             effectiveMainId = subSubjectsList.find(ss => ss.id === sa.sub_subject_id)?.parent_subject_id;
+            //         }
+
+            //         if (effectiveMainId && mainMap[effectiveMainId]) {
+            //             mainMap[effectiveMainId].total += 1;
+            //             item.is_evaluated ? mainMap[effectiveMainId].completed += 1 : mainMap[effectiveMainId].pending += 1;
+            //         }
+
+            //         // การนับเข้าวิชาย่อย
+            //         if (sa?.sub_subject_id && subMap[sa.sub_subject_id]) {
+            //             subMap[sa.sub_subject_id].total += 1;
+            //             item.is_evaluated ? subMap[sa.sub_subject_id].completed += 1 : subMap[sa.sub_subject_id].pending += 1;
+            //         }
+            //     });
+
+            //     // บันทึกข้อมูลลง State (เก็บทั้งสองแบบเพื่อความเร็วในการสลับ View)
+            //     setChartData({
+            //         main: Object.values(mainMap).sort((a: any, b: any) => b.total - a.total),
+            //         sub: Object.values(subMap).filter((s: any) => s.total > 0).sort((a: any, b: any) => b.total - a.total)
+            //     });
+
+            //     // สรุปสถิติวงกลม
+            //     const totalComp = assignments.filter(a => a.is_evaluated).length;
+            //     setSummaryData([
+            //         { name: 'ประเมินแล้ว', value: totalComp, color: '#10b981' },
+            //         { name: 'ค้างประเมิน', value: assignments.length - totalComp, color: '#f59e0b' }
+            //     ]);
+
+            //     const ratioMap: any = {};
+            //     assignments.forEach((item: any) => {
+            //         const subjectName = item.student_assignments?.subjects?.name || 'อื่นๆ';
+            //         ratioMap[subjectName] = (ratioMap[subjectName] || 0) + 1;
+            //     });
+
+            //     // กำหนดสีประจำวิชา (Emerald, Blue, Purple, Amber, Rose)
+            //     const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#f43f5e'];
+            //     const formattedRatio = Object.entries(ratioMap).map(([name, value], index) => ({
+            //         name,
+            //         value,
+            //         color: colors[index % colors.length]
+            //     }));
+
+            //     setSubjectRatioData(formattedRatio);
+            // }
+
+            if (assignments) {
+                const mainMap: any = {};
+                subjectsList.forEach(s => {
+                    mainMap[s.id] = { name: s.name, completed: 0, pending: 0, total: 0 };
+                });
+
+                const subMap: any = {};
+                subSubjectsList.forEach(ss => {
+                    subMap[ss.id] = { name: ss.name, completed: 0, pending: 0, total: 0 };
+                });
+
+                // 🚩 แก้ไขส่วนนี้เพื่อทำ Ratio Map
+                const ratioMap: any = {};
+
+                assignments.forEach((item: any) => {
+                    const sa = item.student_assignments;
+
+                    // หา ID วิชาหลัก (Aggregation Logic)
+                    let effectiveMainId = sa?.subject_id;
+                    if (!effectiveMainId && sa?.sub_subject_id) {
+                        effectiveMainId = subSubjectsList.find(ss => ss.id === sa.sub_subject_id)?.parent_subject_id;
+                    }
+
+                    // เก็บชื่อวิชาหลักสำหรับกราฟวงกลม
+                    const subjectName = subjectsList.find(s => s.id === effectiveMainId)?.name || 'อื่นๆ';
+                    ratioMap[subjectName] = (ratioMap[subjectName] || 0) + 1;
+
+                    if (effectiveMainId && mainMap[effectiveMainId]) {
+                        mainMap[effectiveMainId].total += 1;
+                        item.is_evaluated ? mainMap[effectiveMainId].completed += 1 : mainMap[effectiveMainId].pending += 1;
+                    }
+
+                    if (sa?.sub_subject_id && subMap[sa.sub_subject_id]) {
+                        subMap[sa.sub_subject_id].total += 1;
+                        item.is_evaluated ? subMap[sa.sub_subject_id].completed += 1 : subMap[sa.sub_subject_id].pending += 1;
+                    }
+                });
+
+                setChartData({
+                    main: Object.values(mainMap).sort((a: any, b: any) => b.total - a.total),
+                    sub: Object.values(subMap).filter((s: any) => s.total > 0).sort((a: any, b: any) => b.total - a.total)
+                });
+
+                // 🚩 เตรียมข้อมูล Ratio Pie Chart
+                const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#f43f5e', '#ec4899'];
+                const totalInChart = Object.values(ratioMap).reduce((a: any, b: any) => a + b, 0) as number;
+                const formattedRatio = Object.entries(ratioMap).map(([name, value], index) => ({
+                    name,
+                    value,
+                    totalInChart,
+                    color: colors[index % colors.length]
+                }));
+                setSubjectRatioData(formattedRatio);
+
+                const totalComp = assignments.filter(a => a.is_evaluated).length;
+                // setSummaryData([
+                //     { name: 'ประเมินแล้ว', value: totalComp, color: '#10b981' },
+                //     { name: 'ค้างประเมิน', value: assignments.length - totalComp, color: '#f59e0b' }
+                // ]);
+                setSummaryData([
+    { name: 'ประเมินแล้ว', value: completed, color: '#10b981' }, // เขียว
+    { name: 'กำลังประเมิน', value: inProgress, color: '#3b82f6' }, // น้ำเงิน (เพิ่มจุดนี้)
+    { name: 'ค้างประเมิน', value: pending, color: '#f59e0b' }    // ส้ม
+]);
+            }
+
 
         } catch (error) {
             console.error("Error:", error)
@@ -208,34 +436,180 @@ export default function AdminDashboard() {
                     <StatCard label="รายวิชา" value={stats.subjects} icon={<BookOpen size={24} />} color="bg-amber-500" subLabel="วิชาที่เปิดฝึก" loading={loading} />
                 </div>
 
+                {/* Evaluation KPI Section (เพิ่มใหม่) */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <div className="lg:col-span-2 bg-[#064e3b] rounded-[2.5rem] p-8 text-white shadow-xl shadow-emerald-100 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
+                        {/* ตกแต่งพื้นหลัง */}
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl"></div>
+
+                        {/* Progress Circle (จำลองด้วย SVG) */}
+                        <div className="relative w-32 h-32 shrink-0">
+                            <svg className="w-full h-full" viewBox="0 0 36 36">
+                                <path className="text-white/20" strokeDasharray="100, 100" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                <path className="text-emerald-400" strokeDasharray={`${evalStats.percent}, 100`} strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <span className="text-2xl font-black">{evalStats.percent}%</span>
+                                <span className="text-[8px] uppercase font-bold text-emerald-200">ประเมินแล้ว</span>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 space-y-4">
+                            <div>
+                                <h3 className="text-xl font-black">ความคืบหน้าการประเมิน</h3>
+                                <p className="text-emerald-100/70 text-sm">ภาพรวมการส่งแบบประเมินจากพี่เลี้ยงทุกคนในระบบ</p>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="bg-white/10 p-4 rounded-2xl">
+                                    <p className="text-[10px] font-bold uppercase text-emerald-200">ทั้งหมด</p>
+                                    <p className="text-xl font-black">{evalStats.total}</p>
+                                </div>
+                                <div className="bg-white/10 p-4 rounded-2xl border-b-4 border-emerald-400">
+                                    <p className="text-[10px] font-bold uppercase text-emerald-200">เสร็จแล้ว</p>
+                                    <p className="text-xl font-black">{evalStats.completed}</p>
+                                </div>
+                                <div className="bg-white/10 p-4 rounded-2xl border-b-4 border-orange-400">
+                                    <p className="text-[10px] font-bold uppercase text-emerald-200">ค้างประเมิน</p>
+                                    <p className="text-xl font-black">{evalStats.pending}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* การแจ้งเตือนด่วน */}
+                    <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 flex flex-col justify-center items-center text-center space-y-4 shadow-sm">
+                        <div className="p-4 bg-orange-50 text-orange-500 rounded-2xl">
+                            <BellRing size={32} />
+                        </div>
+                        <div>
+                            <h4 className="font-black text-slate-900">เร่งการประเมิน</h4>
+                            <p className="text-xs text-slate-400 mt-1">มีรายการค้างประเมินสะสม {evalStats.pending} รายการ</p>
+                        </div>
+                        <button
+                            onClick={handleNotify}
+                            className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition-all active:scale-95"
+                        >
+                            ส่งแจ้งเตือน LINE ทันที
+                        </button>
+                    </div>
+                </div>
+
+
+
                 {/* Main Content */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
                     {/* Left Column (Menu & Chart) */}
                     <div className="lg:col-span-2 space-y-8">
-                        {/* Quick Menu */}
-                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
-                            <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
-                                <ArrowUpRight size={24} className="text-slate-400" /> เมนูด่วน
-                            </h3>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                <QuickMenuCard href="/admin/students" icon={<UserPlus size={24} />} label="จัดการนักศึกษา" color="text-blue-600 bg-blue-50 hover:bg-blue-100" />
-                                <QuickMenuCard href="/admin/sites" icon={<Hospital size={24} />} label="จัดการแหล่งฝึก" color="text-emerald-600 bg-emerald-50 hover:bg-emerald-100" />
-                                <QuickMenuCard href="/admin/rotations" icon={<Clock size={24} />} label="จัดการผลัด" color="text-orange-600 bg-orange-50 hover:bg-orange-100" />
-                                <QuickMenuCard href="/admin/templates" icon={<FileText size={24} />} label="แบบประเมิน" color="text-pink-600 bg-pink-50 hover:bg-pink-100" />
-                                <QuickMenuCard href="/admin/supervisors" icon={<CheckCircle2 size={24} />} label="อนุมัติผู้ใช้" color="text-purple-600 bg-purple-50 hover:bg-purple-100" />
-                                {/* ปุ่มส่งแจ้งเตือน (เผื่อไว้) */}
-                                <button onClick={handleNotify} className="flex flex-col items-center justify-center gap-3 p-6 rounded-[1.8rem] border border-transparent transition-all cursor-pointer group bg-slate-50 hover:bg-slate-100 text-slate-600">
-                                    <div className="p-3 rounded-xl bg-white shadow-sm group-hover:scale-110 transition-transform duration-300 text-slate-600">
-                                        <BellRing size={24} />
-                                    </div>
-                                    <span className="font-bold text-sm text-slate-600">แจ้งเตือน</span>
-                                </button>
+                        <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
+                            {/* <div className="flex items-center justify-between mb-8">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900">ความคืบหน้าแยกตามรายวิชา</h3>
+                                    <p className="text-slate-400 text-xs mt-1">เปรียบเทียบจำนวนการประเมินที่เสร็จสิ้นในแต่ละวิชา</p>
+                                </div>
+                            </div>
+
+                            <div className="h-[300px] w-full">
+                                //  <ResponsiveContainer width="100%" height="100%">
+                                //     <BarChart data={chartData} 
+                                //     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                //         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                //         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} dy={10} />
+                                //         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#94a3b8' }} />
+                                //         <Tooltip
+                                //             cursor={{ fill: '#f8fafc' }}
+                                //             contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                //         />
+                                //         <Bar dataKey="completed" name="ประเมินแล้ว" fill="#10b981" radius={[4, 4, 0, 0]} barSize={30} />
+                                //         <Bar dataKey="pending" name="ค้างประเมิน" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={30} />
+                                //     </BarChart>
+                                // </ResponsiveContainer> 
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart
+                                        data={chartData}
+                                        layout="vertical"
+                                        margin={{ top: 10, right: 30, left: 40, bottom: 10 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={false} stroke="#f1f5f9" />
+                                        <XAxis type="number" axisLine={false} tickLine={false} hide />
+                                        <YAxis
+                                            dataKey="name"
+                                            type="category"
+                                            axisLine={false}
+                                            tickLine={false}
+                                            width={100}
+                                            tick={{ fontSize: 11, fontWeight: 700, fill: '#475569' }}
+                                        />
+                                        <Tooltip
+                                            cursor={{ fill: '#f8fafc' }}
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                        />
+                                        <Bar dataKey="completed" stackId="a" name="ประเมินแล้ว" fill="#10b981" radius={[0, 0, 0, 0]} barSize={20} />
+                                        <Bar dataKey="pending" stackId="a" name="ค้างประเมิน" fill="#e2e8f0" radius={[0, 4, 4, 0]} barSize={20} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div> */}
+
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900">
+                                        {viewType === 'main' ? 'ภาพรวมวิชาหลัก' : 'รายละเอียดวิชาย่อย'}
+                                    </h3>
+                                    <p className="text-slate-400 text-xs mt-1">
+                                        {viewType === 'main' ? 'รวมวิชาย่อยเข้าสู่หมวดหมู่หลัก' : 'แสดงแยกตามรายวิชาที่มีการฝึกงาน'}
+                                    </p>
+                                </div>
+
+                                {/* View Switcher: สลับโหมด วิชาหลัก / วิชาย่อย */}
+                                <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+                                    <button
+                                        onClick={() => setViewType('main')}
+                                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${viewType === 'main' ? 'bg-[#064e3b] text-white shadow-lg shadow-emerald-100' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        วิชาหลัก
+                                    </button>
+                                    <button
+                                        onClick={() => setViewType('sub')}
+                                        className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${viewType === 'sub' ? 'bg-[#064e3b] text-white shadow-lg shadow-emerald-100' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        วิชาย่อย
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* กราฟแท่ง (ใช้ข้อมูลตามโหมดที่เลือก) */}
+                            <div className="h-[400px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart
+                                        data={viewType === 'main' ? chartData.main : chartData.sub}
+                                        layout="vertical"
+                                        margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={false} stroke="#f1f5f9" />
+                                        <XAxis type="number" hide />
+                                        <YAxis
+                                            dataKey="name"
+                                            type="category"
+                                            axisLine={false}
+                                            tickLine={false}
+                                            width={140}
+                                            tick={{ fontSize: 11, fontWeight: 800, fill: '#334155' }}
+                                        />
+
+                                        <Tooltip
+                                            content={<CustomTooltip />}
+                                            cursor={{ fill: '#f8fafc' }}
+                                        />
+
+                                        <Bar dataKey="completed" stackId="a" name="ประเมินแล้ว" fill="#10b981" radius={[0, 0, 0, 0]} barSize={24} />
+                                        <Bar dataKey="pending" stackId="a" name="ค้างประเมิน" fill="#e2e8f0" radius={[0, 6, 6, 0]} barSize={24} />
+                                    </BarChart>
+                                </ResponsiveContainer>
                             </div>
                         </div>
 
                         {/* Chart Area */}
-                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 min-h-[350px] flex flex-col items-center justify-center text-center space-y-4 relative overflow-hidden">
+                        {/* <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 min-h-[350px] flex flex-col items-center justify-center text-center space-y-4 relative overflow-hidden">
                             <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-50 to-transparent pointer-events-none" />
                             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-2 animate-bounce">
                                 <TrendingUp size={40} />
@@ -246,8 +620,65 @@ export default function AdminDashboard() {
                                     ระบบกำลังเก็บรวบรวมข้อมูลเพื่อแสดงกราฟความคืบหน้าการฝึกงานของนักศึกษา
                                 </p>
                             </div>
+
+                        </div> */}
+
+                        {/* 2. Sub-Grid: สองกราฟวงกลมคู่กัน */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+                            {/* กราฟวงกลม 1: สัดส่วนสถานะ */}
+                            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex flex-col">
+                                <h3 className="text-lg font-black text-slate-900 mb-1">สัดส่วนสถานะ</h3>
+                                <p className="text-slate-400 text-[10px] mb-6 font-bold uppercase tracking-widest">Evaluation Progress</p>
+                                <div className="h-[200px] relative">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={summaryData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                                {summaryData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
+                                            </Pie>
+                                            <Tooltip />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="mt-4 space-y-2">
+                                    {summaryData.map(item => (
+                                        <div key={item.name} className="flex items-center justify-between text-xs p-2 bg-slate-50 rounded-xl">
+                                            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />{item.name}</div>
+                                            <span className="font-black">{item.value} รายการ</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* กราฟวงกลม 2: สัดส่วนภาระงาน ( Ratio ) */}
+                            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex flex-col">
+                                <h3 className="text-lg font-black text-slate-900 mb-1">สัดส่วนภาระงาน</h3>
+                                <p className="text-slate-400 text-[10px] mb-6 font-bold uppercase tracking-widest">Students by Subject</p>
+                                <div className="h-[200px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={subjectRatioData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                                {subjectRatioData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
+                                            </Pie>
+                                            <Tooltip />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="mt-4 space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar pr-2">
+                                    {subjectRatioData.map(item => (
+                                        <div key={item.name} className="flex items-center justify-between text-xs p-2 bg-slate-50 rounded-xl">
+                                            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />{item.name}</div>
+                                            <span className="font-black">
+                                                {/* {Math.round((item.value / stats.students) * 100 || 0)}% */}
+                                                {Math.round((item.value / item.totalInChart) * 100 || 0)}%
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
+
 
                     {/* Right Column: Recent Activity */}
                     <div className="space-y-8">
@@ -319,7 +750,7 @@ export default function AdminDashboard() {
 
                 </div>
             </div>
-        </AdminLayout>
+        </AdminLayout >
     )
 }
 

@@ -215,6 +215,13 @@ export default function EvaluationPage() {
                 .select().single()
 
             if (logErr) throw logErr
+            // ✅ เพิ่มการอัปเดตสถานะเป็น 1 (กำลังประเมิน) เมื่อมีการบันทึกคะแนน
+            if (assignment.evaluation_status !== 2) {
+                await supabase
+                    .from('assignment_supervisors')
+                    .update({ evaluation_status: 1 })
+                    .eq('id', id);
+            }
 
             // 2. Upsert Answers (เฉพาะหมวดปัจจุบัน)
             const currentScores = scoresRef.current
@@ -267,7 +274,7 @@ export default function EvaluationPage() {
                 }
             }
 
-            await supabase.from('assignment_supervisors').update({ is_evaluated: true }).eq('id', id)
+            await supabase.from('assignment_supervisors').update({ is_evaluated: true ,evaluation_status: 2}).eq('id', id)
             Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: 'ส่งผลการประเมินเรียบร้อยแล้ว', timer: 2000, showConfirmButton: false })
             router.back()
         } else {

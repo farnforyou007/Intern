@@ -11,6 +11,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell
 } from 'recharts'
+import liff from '@line/liff'
 
 const COLORS_EVAL = ['#6366f1', '#06b6d4', '#f59e0b', '#ec4899']
 
@@ -54,8 +55,18 @@ export default function TeacherDashboard() {
 
     const fetchDashboardData = async () => {
         setLoading(true)
-        const lineId = 'test-c'
+        // const lineId = 'test-c'
         try {
+            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+
+            if (!liff.isLoggedIn()) {
+                liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
+                return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
+            }
+
+            const profile = await liff.getProfile();
+             const lineId = profile.userId; // ใช้ ID จริงจาก LINE
+            // console.log("User Profile:", profile); // เช็คค่าได้ตรงนี้
             const { data: user } = await supabase
                 .from('supervisors')
                 .select('id, full_name, avatar_url, role, supervisor_subjects(id)')
@@ -89,7 +100,7 @@ export default function TeacherDashboard() {
                             students (first_name, last_name, student_code),
                             subjects (name),
                             training_sites (site_name, province),
-                            assignment_supervisors(is_evaluated),
+                            assignment_supervisors(is_evaluated, evaluation_status),
                             evaluation_logs(id)
                         `)
                         .in('subject_id', subjectIds)
@@ -249,20 +260,28 @@ export default function TeacherDashboard() {
     const teacherStats = useMemo(() => {
         const filtered = selectedSubject === 'all' ? allAssignments : allAssignments.filter(a => a.subject_id === selectedSubject)
 
-        let evaluated = 0; // ประเมินเสร็จสมบูรณ์ (กดบันทึกสรุปแล้ว)
-        let partial = 0;   // เริ่มทำแล้ว มี Log แล้ว แต่ยังไม่กดบันทึกสรุป
-        let waiting = 0;   // ยังไม่ได้เริ่มทำเลย (ไม่มี Log เลย)
+        let evaluated = 0; // ประเมินเสร็จสมบูรณ์ (กดบันทึกสรุปแล้ว) Status 2
+        let partial = 0;   // เริ่มทำแล้ว มี Log แล้ว แต่ยังไม่กดบันทึกสรุป Status 1
+        let waiting = 0;   // ยังไม่ได้เริ่มทำเลย (ไม่มี Log เลย) Status 0
 
         filtered.forEach((a: any) => {
             const svs = a.assignment_supervisors || []
-            const isDone = svs.length > 0 && svs.every((sv: any) => sv.is_evaluated)
-
+            // const isDone = svs.length > 0 && svs.every((sv: any) => sv.is_evaluated)
+            const isDone = svs.length > 0 && svs.every((sv: any) => sv.evaluation_status === 2)
+            const isPartial = svs.length > 0 && svs.some((sv: any) => sv.evaluation_status === 1) && !isDone
             // เช็คผ่าน analyticsData หรือ evaluation_logs ที่เรา Join มา
-            const hasSomeLogs = a.evaluation_logs && a.evaluation_logs.length > 0
+            // const hasSomeLogs = a.evaluation_logs && a.evaluation_logs.length > 0
 
+            // if (isDone) {
+            //     evaluated++
+            // } else if (hasSomeLogs) {
+            //     partial++
+            // } else {
+            //     waiting++
+            // }
             if (isDone) {
                 evaluated++
-            } else if (hasSomeLogs) {
+            } else if (isPartial) {
                 partial++
             } else {
                 waiting++
