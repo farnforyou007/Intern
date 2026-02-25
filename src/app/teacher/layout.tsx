@@ -94,11 +94,11 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { ShieldAlert, ArrowLeft, UserPlus, LayoutDashboard, Users, BookOpen, Settings, Menu, X, LogOut, GraduationCap ,ArrowRight} from 'lucide-react'
+import { ShieldAlert, ArrowLeft, UserPlus, LayoutDashboard, Users, BookOpen, Settings, Menu, X, LogOut, GraduationCap, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import Swal from 'sweetalert2'
 import liff from '@line/liff'
-
+import { getLineUserId } from '@/utils/auth';
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter()
     const pathname = usePathname()
@@ -132,6 +132,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         })
         if (result.isConfirmed) {
             localStorage.clear()
+            localStorage.removeItem('debug_mode');
             sessionStorage.clear()
             window.location.replace('/auth/check')
         }
@@ -187,21 +188,26 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                     setStatus('authorized')
                     return // จบทันที ไม่ต้องรอโหลด LINE/DB ใหม่
                 }
-                
+
                 setStatus('loading')
 
                 // 🟢 1. เริ่มต้นใช้งาน LIFF (เปิดใช้งานส่วนนี้)
-                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
 
-                // 🟢 2. ตรวจสอบการ Login
-                if (!liff.isLoggedIn()) {
-                    liff.login({ redirectUri: window.location.href })
-                    return
-                }
+                // // 🟢 2. ตรวจสอบการ Login
+                // if (!liff.isLoggedIn()) {
+                //     liff.login({ redirectUri: window.location.href })
+                //     return
+                // }
 
-                // 🟢 3. ดึง Profile จริงจาก LINE
-                const profile = await liff.getProfile()
-                const lineUserId = profile.userId // ใช้ ID จริงจาก LINE
+                // // 🟢 3. ดึง Profile จริงจาก LINE
+                // const profile = await liff.getProfile()
+                // const lineUserId = profile.userId // ใช้ ID จริงจาก LINE
+
+                const urlParams = new URLSearchParams(window.location.search);
+                const lineUserId = await getLineUserId(urlParams);
+
+                if (!lineUserId) return;
 
                 // ❌ 4. คอมเมนต์ หรือลบค่า Mock ID ของเก่าออก
                 // const lineUserId = 'test-c'

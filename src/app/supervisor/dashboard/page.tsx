@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'next/navigation'
 import liff from '@line/liff'
 import Swal from 'sweetalert2'
-
+import { getLineUserId } from '@/utils/auth';
 interface AssignmentItem {
     id: string;
     is_evaluated: boolean;
@@ -56,113 +56,19 @@ export default function SupervisorDashboard() {
         }
     }, [isMockup])
 
-    // const fetchRealData = async () => {
-    //     setLoading(true);
-    //     try {
-    //         // 1. กำหนด Profile (สำหรับใช้งานจริงให้สลับไปใช้ LIFF Profile)
-    //         const profile = {
-    //             userId: 'U678862bd992a4cda7aaf972743b585ac',
-    //             displayName: '🐼 FARN 🌙'
-    //         };
-
-    //         // 2. ดึงข้อมูลพี่เลี้ยง และข้อมูลหน่วยงาน
-    //         const { data: svData, error: svError } = await supabase
-    //             .from('supervisors')
-    //             .select('*, training_sites(site_name)')
-    //             .eq('line_user_id', profile.userId)
-    //             .single();
-
-    //         if (svError || !svData) throw svError;
-
-    //         // จัดการเรื่องรูปภาพโปรไฟล์ (คงเดิม)
-    //         const imgPath = svData.avatar_url || svData.image;
-    //         const publicUrl = imgPath?.startsWith('http')
-    //             ? imgPath
-    //             : `https://vvxsfibqlpkpzqyjwmuw.supabase.co/storage/v1/object/public/avatars/${imgPath}`;
-    //         setSupervisor({ ...svData, avatar_url: publicUrl });
-
-    //         // 3. ดึงข้อมูลงานที่ได้รับมอบหมายทั้งหมด (Assignments)
-    //         // 🚩 สำคัญ: ต้องดึง students (id) มาด้วยเพื่อให้นับจำนวนคนไม่ซ้ำได้
-    //         const { data: assignments, error: assignError } = await supabase
-    //             .from('assignment_supervisors')
-    //             .select(`
-    //             is_evaluated,
-    //             student_assignments:assignment_id (
-    //                 student_id,
-    //                 students:student_id ( id ), 
-    //                 sub_subjects ( name ),
-    //                 rotations ( end_date )
-    //             )
-    //         `)
-    //             .eq('supervisor_id', svData.id);
-
-    //         if (assignError) throw assignError;
-
-    //         if (assignments) {
-    //             // --- ส่วนที่ 1: คำนวณวันที่เหลือ (Notification Bar) ---
-    //             const pendingTasksData = assignments.filter((a: any) => !a.is_evaluated);
-
-    //             const pendingDates = pendingTasksData
-    //                 .filter((a: any) => a.student_assignments?.rotations?.end_date)
-    //                 .map((a: any) => new Date(a.student_assignments.rotations.end_date));
-
-    //             if (pendingDates.length > 0) {
-    //                 const nearestEnd = new Date(Math.min(...pendingDates.map(d => d.getTime())));
-    //                 const today = new Date();
-    //                 const diffTime = nearestEnd.getTime() - today.getTime();
-    //                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    //                 setDaysLeft(diffDays);
-    //             } else {
-    //                 setDaysLeft(null);
-    //             }
-
-    //             // --- ส่วนที่ 2: คำนวณจำนวน "คน" (KPI ช่องแรก) ---
-    //             // ใช้ Set เพื่อยุบรายวิชาหลายตัวให้เหลือแค่ "หัวคน" ที่ไม่ซ้ำกัน
-    //             const uniqueStudentIds = assignments
-    //                 .map((a: any) => a.student_assignments?.students?.id)
-    //                 .filter(Boolean); // ป้องกันค่า null/undefined
-
-    //             const totalMyStudentsCount = new Set(uniqueStudentIds).size;
-
-    //             // --- ส่วนที่ 3: คำนวณจำนวน "ใบงาน" (KPI ช่อง 2 และ 3) ---
-    //             const evaluatedCount = assignments.filter((a: any) => a.is_evaluated).length;
-    //             const pendingTasksCount = assignments.length - evaluatedCount;
-
-    //             // --- ส่วนที่ 4: คำนวณจำนวน "คน" ที่ยังมีงานค้าง (Notification Bar) ---
-    //             const pendingPeopleCount = new Set(
-    //                 pendingTasksData
-    //                     .map((a: any) => a.student_assignments?.student_id)
-    //                     .filter(Boolean)
-    //             ).size;
-
-    //             // --- อัปเดต State ทั้งหมด ---
-    //             setPendingStudentsCount(pendingPeopleCount);
-    //             setStats({
-    //                 total: totalMyStudentsCount,   // 🚩 จะขึ้นเลข 3 คน (ตามหัวคนจริง)
-    //                 evaluated: evaluatedCount,     // จำนวนใบที่ตรวจแล้ว
-    //                 pending: pendingTasksCount     // จำนวนใบที่ยังค้าง (เช่น 6 หรือ 10 ใบ)
-    //             });
-    //         }
-    //     } catch (error) {
-    //         console.error("Dashboard Fetch Error:", error);
-    //     } finally {
-    //         setLoading(false);
-    //     }
-    // };
-
     const fetchRealData = async () => {
         setLoading(true);
         try {
             // 🟢 1. เริ่มต้น LIFF และตรวจสอบการ Login (ใช้ของจริง)
             // (ต้องมั่นใจว่าใส่ NEXT_PUBLIC_LIFF_ID ใน .env.local แล้ว)
-            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
 
-            if (!liff.isLoggedIn()) {
-                liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
-                return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
-            }
+            // if (!liff.isLoggedIn()) {
+            //     liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
+            //     return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
+            // }
 
-            const profile = await liff.getProfile();
+            // const profile = await liff.getProfile();
             // console.log("User Profile:", profile); // เช็คค่าได้ตรงนี้
 
             // ❌ ลบส่วนจำลอง (Hardcode) นี้ทิ้งไปได้เลยครับ
@@ -172,6 +78,12 @@ export default function SupervisorDashboard() {
             //     displayName: '🐼 FARN 🌙'
             // };
 
+            // version test and deploy
+            // ✅ ใช้ฟังก์ชันกลางดึง ID (ส่ง URL Search Params เข้าไป)
+            const urlParams = new URLSearchParams(window.location.search);
+            const lineUserId = await getLineUserId(urlParams);
+
+            if (!lineUserId) return;
 
             // 2. ดึงข้อมูลพี่เลี้ยง และข้อมูลหน่วยงาน (ใช้ profile.userId จาก LIFF)
             const { data: svData, error: svError } = await supabase
@@ -332,7 +244,7 @@ export default function SupervisorDashboard() {
                 const evaluatedCount = assignments.filter((a: any) => a.evaluation_status === 2).length;
                 const partialCount = assignments.filter((a: any) => a.evaluation_status === 1).length;
                 const pendingTasksCount = assignments.filter((a: any) => a.evaluation_status === 0).length;
-                
+
                 // const evaluatedCount = assignments.filter((a: any) => a.is_evaluated).length;
                 // 🟡 ดึง evaluation_logs แยก เพื่อหาว่า assignment ไหน "ประเมินบางส่วน"
                 // const notEvaluatedAssignments = assignments.filter((a: any) => !a.is_evaluated);
@@ -355,7 +267,7 @@ export default function SupervisorDashboard() {
 
                 // const pendingTasksCount = assignments.length - evaluatedCount - partialCount;
                 // ✅ ใช้ค่าจาก evaluation_status โดยตรง (ต้องมั่นใจว่า select evaluation_status มาแล้ว)
-                
+
                 const pendingPeopleCount = new Set(
                     pendingTasksData
                         .map((a: any) => a.student_assignments?.student_id)
@@ -419,6 +331,7 @@ export default function SupervisorDashboard() {
             try {
                 // 1. ล้างข้อมูลใน Storage ของเบราว์เซอร์
                 localStorage.clear();
+                localStorage.removeItem('debug_mode');
                 sessionStorage.clear();
 
                 // 2. ล้าง Cache Storage (ถ้ามี)

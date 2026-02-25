@@ -373,12 +373,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             // เมื่อกดตกลง หรือ Swal ปิดลง ค่อยล้างข้อมูลและเด้งออก
             await supabase.auth.signOut();
             localStorage.clear();
+            localStorage.removeItem('debug_mode');
             sessionStorage.clear();
             window.location.href = '/';
         } else {
             // กรณีตั้งใจกด Logout เอง: ล้างข้อมูลแล้วเด้งออกทันที
             await supabase.auth.signOut();
             localStorage.clear();
+            localStorage.removeItem('debug_mode');
             sessionStorage.clear();
             window.location.href = '/';
         }
@@ -439,6 +441,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         if (result.isConfirmed) {
             performLogout(false)
+            localStorage.removeItem('debug_mode');
         }
     }
 

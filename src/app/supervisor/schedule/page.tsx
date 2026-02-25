@@ -384,6 +384,7 @@ import {
     Clock, AlertCircle, Users, BookOpen
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { getLineUserId } from '@/utils/auth';
 
 export default function RotationSchedule() {
     const router = useRouter()
@@ -396,16 +397,18 @@ export default function RotationSchedule() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    useEffect(() => {
-        fetchData()
-    }, [])
+    
 
     const fetchData = async () => {
         setLoading(true)
         // const userId = 'U678862bd992a4cda7aaf972743b585ac'
-        const userId = 'test-somruk'
+        // const userId = 'test-somruk'
+        const urlParams = new URLSearchParams(window.location.search);
+        const lineUserId = await getLineUserId(urlParams);
 
-        const { data: sv } = await supabase.from('supervisors').select('id, site_id').eq('line_user_id', userId).single()
+        if (!lineUserId) return;
+
+        const { data: sv } = await supabase.from('supervisors').select('id, site_id').eq('line_user_id', lineUserId).single()
 
         if (sv) {
             const { data, error } = await supabase
@@ -467,6 +470,10 @@ export default function RotationSchedule() {
         }
         setLoading(false)
     }
+
+    useEffect(() => {
+        fetchData()
+    }, [])
 
     const getDaysRemaining = (endDateStr: string) => {
         const today = new Date()

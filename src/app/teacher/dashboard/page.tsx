@@ -12,7 +12,7 @@ import {
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Cell
 } from 'recharts'
 import liff from '@line/liff'
-
+import { getLineUserId } from '@/utils/auth';
 const COLORS_EVAL = ['#6366f1', '#06b6d4', '#f59e0b', '#ec4899']
 
 export default function TeacherDashboard() {
@@ -57,20 +57,26 @@ export default function TeacherDashboard() {
         setLoading(true)
         // const lineId = 'test-c'
         try {
-            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
 
-            if (!liff.isLoggedIn()) {
-                liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
-                return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
-            }
+            // if (!liff.isLoggedIn()) {
+            //     liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
+            //     return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
+            // }
 
-            const profile = await liff.getProfile();
-             const lineId = profile.userId; // ใช้ ID จริงจาก LINE
+            // const profile = await liff.getProfile();
+            //  const lineId = profile.userId; // ใช้ ID จริงจาก LINE
+
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const lineUserId = await getLineUserId(urlParams);
+
+            if (!lineUserId) return;
             // console.log("User Profile:", profile); // เช็คค่าได้ตรงนี้
             const { data: user } = await supabase
                 .from('supervisors')
                 .select('id, full_name, avatar_url, role, supervisor_subjects(id)')
-                .eq('line_user_id', lineId)
+                .eq('line_user_id', lineUserId)
                 .single()
 
             if (user) {

@@ -15,6 +15,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import liff from '@line/liff'
 import Swal from 'sweetalert2'
+import { getLineUserId } from '@/utils/auth'
 
 export default function EvaluationSummary() {
     const router = useRouter()
@@ -57,19 +58,23 @@ export default function EvaluationSummary() {
         const fetchData = async () => {
             setLoading(true)
             // const lineId = 'test-c'
-            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
 
-            // 🟢 2. ตรวจสอบการ Login
-            if (!liff.isLoggedIn()) {
-                liff.login({ redirectUri: window.location.href })
-                return
-            }
+            // // 🟢 2. ตรวจสอบการ Login
+            // if (!liff.isLoggedIn()) {
+            //     liff.login({ redirectUri: window.location.href })
+            //     return
+            // }
 
-            // 🟢 3. ดึง Profile จริง
-            const profile = await liff.getProfile()
-            const lineId = profile.userId // ใช้ ID จาก LINE จริงๆ
+            // // 🟢 3. ดึง Profile จริง
+            // const profile = await liff.getProfile()
+            // const lineId = profile.userId // ใช้ ID จาก LINE จริงๆ
+            const urlParams = new URLSearchParams(window.location.search);
+            const lineUserId = await getLineUserId(urlParams);
 
-            if (!lineId) {
+            if (!lineUserId) return;
+
+            if (!lineUserId) {
                 Swal.fire({
                     title: 'ไม่พบสิทธิ์การเข้าถึง',
                     text: 'กรุณาลงทะเบียนหรือติดต่อแอดมิน',
@@ -78,7 +83,7 @@ export default function EvaluationSummary() {
                 return;
             }
 
-            const { data: user } = await supabase.from('supervisors').select('id').eq('line_user_id', lineId).single()
+            const { data: user } = await supabase.from('supervisors').select('id').eq('line_user_id', lineUserId).single()
             const PRIORITY_MAP: { [key: string]: number } = {
                 "บุคลิก": 1,
                 "ประสบการณ์": 2,

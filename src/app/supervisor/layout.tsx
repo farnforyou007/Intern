@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import liff from '@line/liff'
 import { createBrowserClient } from '@supabase/ssr'
 import { ShieldAlert, UserPlus } from 'lucide-react'
+import { getLineUserId } from '@/utils/auth';
 
 export default function SupervisorLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter()
@@ -17,114 +18,6 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-
-    // useEffect(() => {
-    //     const checkAccess = async () => {
-    //         // หน้าลงทะเบียนให้ผ่านตลอด
-    //         // if (pathname === '/supervisor/register') {
-    //         //     setStatus('authorized')
-    //         //     setIsAuthorized(true)
-    //         //     return
-    //         // }
-
-    //         setStatus('authorized')
-    //         setIsAuthorized(true)
-    //         return // จบฟังก์ชันตรงนี้เลย ไม่ต้องรันโค้ดข้างล่าง
-
-    //         try {
-    //             // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
-
-    //             // if (!liff.isLoggedIn()) {
-    //             //     liff.login({ redirectUri: window.location.href })
-    //             //     return
-    //             // }
-
-    //             const profile = await liff.getProfile()
-    //             const { data: user } = await supabase
-    //                 .from('supervisors')
-    //                 .select('is_verified')
-    //                 .eq('line_user_id', profile.userId)
-    //                 .single()
-
-    //             if (!user) {
-    //                 // 🚩 ไม่พบข้อมูล: ตั้งสถานะให้ค้างหน้าแจ้งเตือนไว้ ไม่สั่ง redirect
-    //                 setStatus('unregistered')
-    //                 setIsAuthorized(false)
-    //             } else if (!user.is_verified) {
-    //                 // 🚩 พบข้อมูลแต่ยังไม่อนุมัติ: ค้างหน้าแจ้งเตือนไว้ หรือส่งไปหน้า Pending
-    //                 setStatus('pending')
-    //                 setIsAuthorized(false)
-    //                 if (pathname !== '/supervisor/pending') {
-    //                     router.replace('/supervisor/pending')
-    //                 }
-    //             } else {
-    //                 // ✅ อนุมัติแล้ว
-    //                 setStatus('authorized')
-    //                 setIsAuthorized(true)
-    //             }
-    //         } catch (err) {
-    //             console.error("Access check failed", err)
-    //             setStatus('unregistered')
-    //         }
-    //     }
-    //     checkAccess()
-    // }, [pathname])
-
-    // useEffect(() => {
-    //     const checkAccess = async () => {
-    //         try {
-    //             // 1. เริ่มต้นด้วยการ Loading
-    //             const cachedAuth = sessionStorage.getItem('supervisor_auth_status')
-    //             if (cachedAuth === 'authorized' && status !== 'authorized') {
-    //                 setStatus('authorized')
-    //                 return // จบทันที ไม่ต้องรอโหลด LINE/DB ใหม่
-    //             }
-    //             setStatus('loading')
-
-    //             // 2. ถ้าใช้ LINE LIFF ให้เอาคอมเมนต์ออก (ช่วง DEV อาจจะใช้ Mock ID ไปก่อน)
-    //             await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
-    //             if (!liff.isLoggedIn()) {
-    //                 liff.login({ redirectUri: window.location.href })
-    //                 return
-    //             }
-    //             const profile = await liff.getProfile()
-    //             const lineUserId = profile.userId
-
-    //             // 🛠️ ช่วง DEV: ใช้ Mock ID ของพี่ก่อน (ตัวอย่าง)
-    //             // const lineUserId = 'U678862bd992a4cda7aaf972743b585ac'
-    //             // const lineUserId = 'test-somruk'
-
-    //             const { data: user } = await supabase
-    //                 .from('supervisors')
-    //                 .select('is_verified')
-    //                 .eq('line_user_id', lineUserId)
-    //                 .single()
-
-    //             if (!user) {
-    //                 setStatus('unregistered')
-    //                 setIsAuthorized(false)
-    //             } else if (!user.is_verified) {
-    //                 // ✅ ถ้าเจอ user แต่ verified เป็น false จะติดตรงนี้
-    //                 setStatus('pending')
-    //                 setIsAuthorized(false)
-    //                 // ถ้าพยายามเข้าหน้าอื่นที่ไม่ใช่ pending ให้ดีดไปหน้า pending
-    //                 if (pathname !== '/supervisor/pending') {
-    //                     router.replace('/supervisor/pending')
-    //                 }
-    //             } else {
-    //                 // ✅ อนุมัติแล้ว ถึงจะให้ผ่าน
-    //                 sessionStorage.setItem('supervisor_auth_status', 'authorized')
-    //                 setStatus('authorized')
-    //                 setIsAuthorized(true)
-    //             }
-    //         } catch (err) {
-    //             console.error("Access check failed", err)
-    //             setStatus('unregistered')
-    //         }
-    //     }
-    //     checkAccess()
-    // }, [pathname])
-
 
     useEffect(() => {
         const checkAccess = async () => {
@@ -139,7 +32,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
 
             // 🟡 2. ถ้าไม่มี Cache ค่อยสั่งเริ่ม Loading
             setStatus('loading');
-            const lineUserId = 'U678862bd992a4cda7aaf972743b585ac'
+            // const lineUserId = 'U678862bd992a4cda7aaf972743b585ac'
             //             // const lineUserId = 'test-somruk'
             try {
                 // ติดต่อ LINE (ส่วนที่ช้า)
@@ -152,6 +45,12 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                 // const profile = await liff.getProfile();
                 // const lineUserId = profile.userId;
                 // ติดต่อ Database (ส่วนที่ช้า)
+
+                const urlParams = new URLSearchParams(window.location.search);
+                const lineUserId = await getLineUserId(urlParams);
+
+                if (!lineUserId) return;
+
                 const { data: user } = await supabase
                     .from('supervisors')
                     .select('is_verified')
