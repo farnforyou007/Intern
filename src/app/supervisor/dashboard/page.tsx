@@ -89,7 +89,9 @@ export default function SupervisorDashboard() {
             const { data: svData, error: svError } = await supabase
                 .from('supervisors')
                 .select('*, training_sites(site_name)')
-                .eq('line_user_id', profile.userId) // 👈 ใช้ ID จริงที่ดึงมา
+                // .eq('line_user_id', profile.userId) // 👈 ใช้ ID จริงที่ดึงมา
+                .eq('line_user_id', lineUserId) // 👈 ใช้ ID จริงที่ดึงมา
+
                 .single();
 
             if (svError || !svData) {
