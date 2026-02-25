@@ -44,7 +44,7 @@ export default function LoginPage() {
         
         // แนะนำใช้ window.location.href สำหรับ Vercel เพื่อความแน่นอนในการบันทึก Cookie
         setTimeout(() => {
-            window.location.href = '/admin/supervisors'
+            window.location.href = '/admin'
         }, 500)
     }
 
