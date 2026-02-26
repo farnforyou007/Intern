@@ -56,6 +56,7 @@ export default function StudentRegisterPage() {
         first_name: '', last_name: '',
         nickname: '', phone: '',
         email: '', 
+        // class_year: '4',
         assignments: []
     })
 

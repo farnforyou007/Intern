@@ -577,6 +577,8 @@ import {
 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import liff from '@line/liff'
+import { flexRegisterSuccess } from '@/lib/lineFlex';
+
 export default function SmartRegister() {
     const [fullName, setFullName] = useState('')
     const [phone, setPhone] = useState('')
@@ -731,6 +733,27 @@ export default function SmartRegister() {
 
             if (subjectInserts.length > 0) {
                 await supabase.from('supervisor_subjects').insert(subjectInserts);
+            }
+
+            try {
+                await fetch('/api/line/push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lineUserId: supervisor.line_user_id, // ข้อมูลจาก Database
+                        flexMessage: {
+                            type: "flex",
+                            altText: "ลงทะเบียนสำเร็จ",
+                            contents: flexRegisterSuccess({
+                                name: supervisor.full_name, // ข้อมูลจาก Database
+                                site: userType === 'supervisor' ? selectedSite.site_name : 'มหาวิทยาลัย'
+                            })
+                        }
+                    })
+                });
+            } catch (lineErr) {
+                console.error("Line Notification Error:", lineErr);
+                // ไม่ throw error เพื่อไม่ให้ขัดจังหวะการลงทะเบียนหลัก
             }
 
             Swal.fire({
