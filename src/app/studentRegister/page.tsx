@@ -55,7 +55,7 @@ export default function StudentRegisterPage() {
         student_code: '', prefix: '',
         first_name: '', last_name: '',
         nickname: '', phone: '',
-        email: '', class_year: '4',
+        email: '', 
         assignments: []
     })
 
