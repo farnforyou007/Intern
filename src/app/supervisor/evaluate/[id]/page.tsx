@@ -274,7 +274,7 @@ export default function EvaluationPage() {
                 }
             }
 
-            await supabase.from('assignment_supervisors').update({ is_evaluated: true ,evaluation_status: 2}).eq('id', id)
+            await supabase.from('assignment_supervisors').update({ is_evaluated: true, evaluation_status: 2 }).eq('id', id)
             Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: 'ส่งผลการประเมินเรียบร้อยแล้ว', timer: 2000, showConfirmButton: false })
             router.back()
         } else {
@@ -358,6 +358,57 @@ export default function EvaluationPage() {
                         <Info size={20} /> รายการนี้บันทึกผลแล้ว (แก้ไขได้ในประวัติ)
                     </div>
                 )}
+
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                    {/* Header เรียบๆ */}
+                    <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+                        <h3 className="font-bold text-slate-700">เกณฑ์การให้คะแนน</h3>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left border-collapse min-w-[600px]">
+                            <thead>
+                                <tr className="bg-white text-slate-400 border-b border-slate-200">
+                                    <th className="px-5 py-3 font-semibold w-20 text-center">คะแนน</th>
+                                    <th className="px-5 py-3 font-semibold w-48 text-center">เกณฑ์</th>
+                                    <th className="px-5 py-3 font-semibold">รายละเอียด</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                <tr className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-5 py-4 text-center font-bold text-slate-800">5</td>
+                                    <td className="px-5 py-4 text-center text-slate-600">(≥ 80%) ยอดเยี่ยม</td>
+                                    <td className="px-5 py-4 text-slate-500">นักศึกษาเข้าใจทฤษฎีและปฏิบัติได้อย่างสมบูรณ์ ประกอบด้วยทุกประเด็นที่ต้องการหรือกำหนด</td>
+                                </tr>
+                                <tr className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-5 py-4 text-center font-bold text-slate-800">4</td>
+                                    <td className="px-5 py-4 text-center text-slate-600">(79–60%) ดีมาก</td>
+                                    <td className="px-5 py-4 text-slate-500">นักศึกษาเข้าใจทฤษฎีและปฏิบัติได้ค่อนข้างมาก ประกอบด้วยทุกประเด็นที่ต้องการหรือกำหนด</td>
+                                </tr>
+                                <tr className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-5 py-4 text-center font-bold text-slate-800">3</td>
+                                    <td className="px-5 py-4 text-center text-slate-600">(59–40%) ดี</td>
+                                    <td className="px-5 py-4 text-slate-500">นักศึกษาเข้าใจทฤษฎีและปฏิบัติได้บางส่วน ประกอบด้วยทุกประเด็นที่ต้องการหรือกำหนด</td>
+                                </tr>
+                                <tr className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-5 py-4 text-center font-bold text-slate-800">2</td>
+                                    <td className="px-5 py-4 text-center text-slate-600">(39–20%) พอใช้</td>
+                                    <td className="px-5 py-4 text-slate-500">นักศึกษาเข้าใจทฤษฎีและปฏิบัติได้เพียงเล็กน้อย ประเด็นส่วนใหญ่ที่ต้องการหรือกำหนดไม่ปรากฏ</td>
+                                </tr>
+                                <tr className="hover:bg-slate-50/50 transition-colors text-red-400">
+                                    <td className="px-5 py-4 text-center font-bold">1</td>
+                                    <td className="px-5 py-4 text-center font-medium">(≤19%) ปรับปรุง</td>
+                                    <td className="px-5 py-4 italic opacity-80">นักศึกษาไม่เข้าใจทฤษฎีและปฏิบัติในประเด็นส่วนใหญ่ที่ต้องการหรือกำหนด</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* ตัวบอกใบ้การเลื่อนเล็กๆ สำหรับมือถือ */}
+                    <div className="md:hidden py-2 bg-slate-50 border-t border-slate-100 text-center">
+                        <span className="text-[10px] text-slate-400 tracking-tight italic">เลื่อนซ้ายขวาเพื่อดูตารางทั้งหมด</span>
+                    </div>
+                </div>
                 {currentGroup?.evaluation_items?.map((item: any, idx: number) => (
                     <div key={item.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 space-y-4">
                         <div className="flex justify-between items-start gap-4">

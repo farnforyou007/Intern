@@ -223,23 +223,23 @@ export default function TemplatesPage() {
 
             {/* Modal ชื่อเทมเพลต */}
             <Dialog open={isItemModalOpen} onOpenChange={setIsItemModalOpen}>
-                <DialogContent className="max-w-[95vw] w-[95vw] xl:max-w-7xl rounded-[2.5rem] p-0 border-none h-[85vh] flex flex-col shadow-2xl overflow-hidden bg-white focus:outline-none">
+                <DialogContent className="max-w-[95vw] w-[95vw] xl:max-w-7xl rounded-[2rem] md:rounded-[2.5rem] p-0 border-none h-[95dvh] md:h-[85vh] flex flex-col shadow-2xl overflow-hidden bg-white focus:outline-none">
                     <div id="item-modal-content" className="flex flex-col h-full">
                         {/* Header Modal */}
-                        <div className="px-10 py-6 border-b flex justify-between items-center bg-white shrink-0">
+                        <div className="px-6 md:px-10 py-4 md:py-6 border-b flex justify-between items-center bg-white shrink-0">
                             <div className="flex items-center gap-4">
                                 <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-200"><ListTodo size={24} /></div>
                                 <div>
-                                    <DialogTitle className="text-2xl font-black text-slate-800 tracking-tight">จัดการข้อคำถามเทมเพลต</DialogTitle>
+                                    <DialogTitle className="text-lg md:text-2xl font-black text-slate-800 tracking-tight">จัดการข้อคำถามเทมเพลต</DialogTitle>
                                     <p className="text-blue-600 font-bold uppercase text-xs tracking-widest mt-1">Template: {selectedTemplate?.template_name}</p>
                                 </div>
                             </div>
                             <Button variant="ghost" onClick={() => setIsItemModalOpen(false)} className="rounded-full w-12 h-12 hover:bg-slate-100 text-slate-400"><X size={24} /></Button>
                         </div>
 
-                        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                        <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
                             {/* ฝั่งซ้าย: ฟอร์มเพิ่ม/แก้ไข (โค้ดเดิม) */}
-                            <div className={`w-full lg:w-[38%] p-10 overflow-y-auto border-r border-slate-50 ${editingItem ? 'bg-orange-50/30' : 'bg-slate-50/30'}`}>
+                            <div className={`w-full lg:w-[38%] p-6 md:p-10 overflow-visible lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-slate-50 lg:shrink-0 ${editingItem ? 'bg-orange-50/30' : 'bg-slate-50/30'}`}>
                                 <h4 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-2">
                                     {editingItem ? <><Edit2 className="text-orange-500" /> แก้ไขข้อคำถาม</> : <><Plus className="text-blue-600" /> เพิ่มข้อคำถามใหม่</>}
                                 </h4>
@@ -259,7 +259,7 @@ export default function TemplatesPage() {
                                         <textarea
                                             value={itemForm.description || ''}
                                             onChange={e => setItemForm({ ...itemForm, description: e.target.value })}
-                                            className="w-full p-5 rounded-2xl bg-white border-none ring-1 ring-slate-100 shadow-sm h-40 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600"
+                                            className="w-full p-5 rounded-2xl bg-white border-none ring-1 ring-slate-100 shadow-sm h-24 md:h-40 outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-600"
                                             placeholder="ระบุคำอธิบายเพิ่มเติม..."
                                             onKeyDown={(e) => {
                                                 // ถ้ากด Enter อย่างเดียว (โดยไม่กด Shift) ให้ทำการบันทึก
@@ -307,7 +307,7 @@ export default function TemplatesPage() {
                             </div>
 
                             {/* ฝั่งขวา: รายการข้อคำถาม (รองรับ Drag & Drop) */}
-                            <div className="flex-1 p-10 overflow-y-auto bg-white space-y-4 custom-scrollbar">
+                            <div className="flex-1 min-h-[300px] p-6 md:p-10 overflow-y-auto bg-white space-y-4 custom-scrollbar">
                                 <h4 className="font-black text-slate-300 uppercase text-[10px] tracking-widest mb-6 border-b pb-4 flex justify-between items-center">
                                     <span>รายการข้อคำถามทั้งหมด ({items.length} ข้อ)</span>
                                     <span className="text-blue-400 normal-case italic">ลากสลับตำแหน่งข้อคำถามได้ที่ไอคอนด้านซ้าย</span>
@@ -484,7 +484,7 @@ function SortableItem({ item, idx, setEditingItem, setItemForm, handleDeleteItem
                 </div>
             </div>
 
-            <div className={`flex gap-1 transition-all shrink-0 ${isEditing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+            <div className={`flex gap-1 transition-all shrink-0 ${isEditing ? 'opacity-100' : 'opacity-100 md:opacity-0 md:group-hover:opacity-100'}`}>
                 {/* <Button variant="ghost" size="icon" onClick={() => {
                     setEditingItem(item);
                     setItemForm({

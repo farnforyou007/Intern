@@ -43,7 +43,9 @@ export default function StudentRegisterPage() {
     const [isAuthenticating, setIsAuthenticating] = useState(true)
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
     const [avatarFile, setAvatarFile] = useState<File | null>(null)
-
+    // const [trainingYear, setTrainingYear] = useState('');
+    const [trainingYear, setTrainingYear] = useState<string>('');
+    const [rotations, setRotations] = useState<any[]>([]);
     const [form, setForm] = useState<any>({
         student_code: '', prefix: '',
         first_name: '', last_name: '',
@@ -51,6 +53,54 @@ export default function StudentRegisterPage() {
         email: '', class_year: '4',
         assignments: []
     })
+
+
+    useEffect(() => {
+        const initData = async () => {
+            setLoading(true);
+            try {
+                const { data: config } = await supabase
+                    .from('system_configs')
+                    .select('key_value')
+                    .eq('key_name', 'current_training_year')
+                    .single();
+
+                if (config) {
+                    const year = config.key_value;
+                    setTrainingYear(year);
+
+                    // 🚩 แก้ไข Query: ดึง rotations พร้อม subjects ที่เกี่ยวข้อง
+                    const { data: rots } = await supabase
+                        .from('rotations')
+                        .select(`
+                        id, 
+                        name, 
+                        rotation_subjects (subject_id)
+                    `)
+                        .eq('academic_year', year)
+                        .order('name', { ascending: true });
+
+                    if (rots && rots.length > 0) {
+                        const initialAssignments = rots.map((r: any) => ({
+                            rotation_id: String(r.id),
+                            rotation_name: r.name,
+                            // 🚩 เก็บรายการ ID วิชาไว้เพื่อให้ Filter พี่เลี้ยงทำงานได้
+                            subject_ids: r.rotation_subjects?.map((rs: any) => rs.subject_id) || [],
+                            site_id: '',
+                            supervisor_ids: []
+                        }));
+
+                        setForm(prev => ({ ...prev, assignments: initialAssignments }));
+                    }
+                }
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        initData();
+    }, []);
 
     const handleAuth = useCallback(async () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -196,8 +246,9 @@ export default function StudentRegisterPage() {
                 subject_id
             )
         `)
+                .eq('academic_year', trainingYear)
                 .order('round_number', { ascending: true })
-                .limit(3)
+            // .limit(3)
 
             if (r) {
                 setForm((prev: any) => ({
@@ -416,7 +467,8 @@ export default function StudentRegisterPage() {
                 nickname: form.nickname,
                 phone: form.phone,
                 email: form.email,
-                avatar_url: publicUrl
+                avatar_url: publicUrl,
+                training_year: trainingYear
             }]).select().single();
 
             if (stError) throw stError;
@@ -615,12 +667,57 @@ export default function StudentRegisterPage() {
     }
     return (
         <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900 font-sans antialiased">
-            <div className="bg-white border-b border-slate-100 py-10 text-center mb-10 shadow-sm">
+            {/* <div className="bg-white border-b border-slate-100 py-8 text-center mb-10 shadow-sm">
                 <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
                     <GraduationCap className="text-white" size={36} />
                 </div>
                 <h1 className="text-3xl font-black uppercase tracking-tight text-slate-800">Student Registry</h1>
                 <p className="text-slate-400 text-[11px] font-bold uppercase tracking-[0.2em] mt-1">ระบบลงทะเบียนฝึกปฏิบัติงาน</p>
+
+            </div>
+
+            {trainingYear && (
+                <div className="bg-blue-50 border border-blue-100 p-2 rounded-[2rem] mb-4 flex items-center justify-between px-8">
+                    <div className="flex items-center gap-4">
+                        <div className="bg-blue-600 p-2 rounded-xl text-white">
+                            <CalendarDays size={20} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">รอบปีการศึกษาที่เปิดรับ</p>
+                            <p className="text-lg font-black text-blue-700">ปีการศึกษา {trainingYear}</p>
+                        </div>
+                    </div>
+                    <div className="hidden sm:block">
+                        <span className="bg-blue-100 text-blue-600 text-[10px] font-black px-3 py-1 rounded-full">ACTIVE NOW</span>
+                    </div>
+                </div>
+            )} */}
+
+            <div className="bg-white border-b border-slate-100 py-10 text-center mb-10 shadow-sm relative overflow-hidden">
+                {/* ส่วนตกแต่ง Background เบาๆ */}
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-50/50 rounded-full blur-3xl -z-10"></div>
+
+                <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200 transition-transform hover:scale-105 duration-300">
+                    <GraduationCap className="text-white" size={36} />
+                </div>
+
+                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-800">Student Registry</h1>
+
+                <div className="flex flex-col items-center gap-1 mt-1">
+                    <p className="text-slate-400 text-[11px] font-bold uppercase tracking-[0.2em]">
+                        ระบบลงทะเบียนฝึกปฏิบัติงาน
+                    </p>
+
+                    {/* แสดงปีการศึกษาแบบเรียบง่ายใต้ชื่อระบบ */}
+                    {trainingYear && (
+                        <div className="flex items-center gap-1.5 mt-1 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                ปีการศึกษาที่ฝึกงาน : <span className="text-blue-600">{trainingYear}</span>
+                            </p>
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="max-w-md mx-auto px-5 space-y-4">
@@ -762,7 +859,7 @@ export default function StudentRegisterPage() {
                             {/* ปรับปรุงส่วนเลือกพี่เลี้ยงแบบเพิ่มทีละคน */}
                             <div className="bg-blue-50/50 p-5 rounded-3xl border border-blue-100 space-y-3">
                                 <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1 block italic">รายชื่อพี่เลี้ยงที่เลือก (SUPERVISORS)</label>
-                                
+
 
                                 {/* แสดงรายชื่อที่เลือกแล้ว */}
                                 <div className="space-y-2">
@@ -799,7 +896,8 @@ export default function StudentRegisterPage() {
 
                                                 // 2. เช็กวิชา (ถ้าใน m.supervisor_subjects มี subject_id ตรงกับผลัด)
                                                 const teachesThisSubject = m.supervisor_subjects?.some((sub: any) =>
-                                                    Number(sub.subject_id) === Number(item.subject_id)
+                                                    // Number(sub.subject_id) === Number(item.subject_id)
+                                                    item.subject_ids?.includes(sub.subject_id)
                                                 );
 
                                                 // 3. ยังไม่ถูกเลือก

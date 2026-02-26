@@ -191,26 +191,26 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-[95vw] lg:max-w-[1200] 2xl:max-w-[900] w-full p-0 overflow-hidden rounded-[2.5rem] border-none shadow-2xl bg-white focus:outline-none">
+            <DialogContent className="max-w-[95vw] lg:max-w-[1100px] w-full p-0 overflow-hidden rounded-[2rem] md:rounded-[2.5rem] border-none shadow-2xl bg-white focus:outline-none">
                 <DialogHeader className="sr-only"><DialogTitle>Details</DialogTitle></DialogHeader>
-                <div className="flex flex-col md:flex-row h-full min-h-[750px] max-h-[92vh]">
-                    <div className="md:w-[32%] lg:w-[30%] bg-slate-950 relative flex flex-col border-r border-slate-800">
-                        <div className="relative h-[450px] md:h-[55%] w-full overflow-hidden">
+                <div className="flex flex-col md:flex-row h-full min-h-0 md:min-h-[700px] max-h-[95dvh] md:max-h-[92vh] overflow-y-auto md:overflow-hidden">
+                    <div className="w-full md:w-[32%] lg:w-[30%] bg-slate-950 relative flex flex-col border-b md:border-b-0 md:border-r border-slate-800 shrink-0">
+                        <div className="relative h-[200px] md:h-[55%] w-full overflow-hidden">
                             {data.avatar_url ? <img src={data.avatar_url} className="w-full h-full object-cover opacity-90 transition-transform duration-700 hover:scale-105" /> : <div className="w-full h-full flex items-center justify-center bg-slate-900 text-slate-700"><User size={160} strokeWidth={0.5} /></div>}
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent" />
                         </div>
-                        <div className="p-10 flex-1 flex flex-col justify-start -mt-20 relative z-10">
+                        <div className="p-6 md:p-10 flex-1 flex flex-col justify-start -mt-16 md:-mt-20 relative z-10">
                             <span className={`inline-block w-fit px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] mb-4 shadow-xl border ${isTeacher ? 'bg-purple-600 text-white border-purple-400' : 'bg-blue-600 text-white border-blue-400'}`}>{isTeacher ? 'Faculty Staff' : 'Instructor'}</span>
                             <h2 className="text-2xl font-black text-white leading-[1.1] tracking-tight mb-4">{data.full_name}</h2>
                             <div className="flex items-center gap-3 text-blue-400 font-bold"><MessageCircle size={18} className="opacity-80" /><span className="text-sm tracking-wide">{data.line_display_name || 'No LINE display'}</span></div>
                         </div>
                     </div>
-                    <div className="flex-1 bg-white flex flex-col overflow-hidden">
-                        <div className="px-12 py-8 border-b border-slate-50 flex justify-between items-center bg-white/80 backdrop-blur-sm">
+                    <div className="flex-1 bg-white flex flex-col overflow-hidden min-h-0">
+                        <div className="px-6 md:px-12 py-4 md:py-8 border-b border-slate-50 flex justify-between items-center bg-white/80 backdrop-blur-sm shrink-0">
                             <div className="space-y-1"><h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400">Professional Information</h3><div className="h-1 w-10 bg-blue-500 rounded-full" /></div>
                             <Button variant="ghost" onClick={() => setIsEditing(!isEditing)} className={`rounded-2xl px-6 h-12 transition-all text-xs font-black tracking-[0.1em] ${isEditing ? "text-red-500 bg-red-50" : "text-blue-600 bg-blue-50 hover:bg-blue-100"}`}>{isEditing ? <X size={18} className="mr-2" /> : <Edit2 size={18} className="mr-2" />}{isEditing ? "ยกเลิก" : "แก้ไขข้อมูล"}</Button>
                         </div>
-                        <div className="flex-1 p-12 overflow-y-auto custom-scrollbar space-y-12">
+                        <div className="flex-1 p-6 md:p-12 overflow-y-auto custom-scrollbar space-y-8 md:space-y-12">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                                 <div className="space-y-3"><label className="text-[12px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Phone size={14} className="text-blue-500" /> เบอร์โทรศัพท์</label>{isEditing ? <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="h-14 rounded-2xl bg-slate-50 border-none text-base font-bold shadow-inner" /> : <p className="text-xl font-black text-slate-800 tracking-tight">{data.phone || '-'}</p>}</div>
                                 <div className="space-y-3"><label className="text-[12px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14} className="text-orange-500" /> จังหวัด</label><p className="text-xl font-black text-slate-800 tracking-tight">{isTeacher ? 'สงขลา' : (data.training_sites?.province || data.province || '-')}</p></div>
@@ -232,7 +232,7 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                                 )}
                             </div>
                         </div>
-                        <div className="px-12 py-8 bg-slate-50 border-t border-slate-100">
+                        <div className="px-6 md:px-12 py-4 md:py-8 bg-slate-50 border-t border-slate-100 shrink-0">
                             {isEditing ? <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700 h-16 rounded-[1.5rem] font-black text-white shadow-2xl shadow-blue-200 transition-all uppercase tracking-[0.2em] text-sm"><Save size={20} className="mr-3" /> บันทึกข้อมูล</Button> : !data.is_verified ? <div className="flex flex-row gap-4 w-full"><Button onClick={() => { onApprove(data.id, data.full_name); onClose(); }} className="flex-[3] bg-slate-900 hover:bg-blue-600 h-16 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] text-white shadow-xl transition-all">ยืนยันการอนุมัติ</Button><Button onClick={() => { onDelete(data.id, data.full_name); onClose(); }} variant="outline" className="flex-1 h-16 rounded-[1.5rem] text-red-500 border-red-200 bg-white font-black hover:bg-red-50 text-xs uppercase tracking-widest shadow-sm">ไม่อนุมัติ</Button></div> : <Button onClick={() => { onDelete(data.id, data.full_name); onClose(); }} variant="ghost" className="w-full h-16 rounded-[1.5rem] font-bold text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all text-[11px] uppercase tracking-[0.4em]">Delete Personnel Profile</Button>}
                         </div>
                     </div>
@@ -246,7 +246,7 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
 function SupervisorCard({ data, onClick }: any) {
     const isTeacher = data.role === 'teacher';
     return (
-        <div onClick={onClick} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer p-7 relative flex flex-col h-full">
+        <div onClick={onClick} className="bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer p-5 md:p-7 relative flex flex-col h-full">
             <div className="absolute top-7 right-7">
                 <span className={`text-[9px] font-black px-3 py-1 rounded-full border shadow-sm uppercase ${isTeacher ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
                     {isTeacher ? 'อาจารย์' : 'พี่เลี้ยง'}
@@ -296,7 +296,7 @@ function PersonnelTable({ list, totalItems, itemsPerPage, currentPage, onPageCha
                                 <td className="px-6 py-5"><div className="text-sm font-bold text-slate-700 leading-tight">{item.training_sites?.site_name || 'คณะการแพทย์แผนไทย'}</div><div className="text-[10px] font-bold text-slate-400 truncate max-w-[180px] mt-0.5">{item.training_sites?.province || item.province || 'สงขลา'}</div></td>
                                 <td className="px-6 py-5"><div className="flex items-center gap-2 text-slate-600"><Phone size={12} className="text-blue-400" /><span className="text-xs font-bold font-mono">{item.phone || '-'}</span></div></td>
                                 <td className="px-8 py-5 text-right">
-                                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                         <TooltipProvider delayDuration={200}>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
@@ -465,14 +465,14 @@ export default function AdminManagement() {
     }   
     return (
         <AdminLayout>
-            <div className="max-w-7xl mx-auto p-6 lg:p-8 space-y-8">
+            <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 overflow-x-hidden">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-8">
                     <div className="space-y-1">
                         <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100"><Users size={12} /> Personnel Management</div>
-                        <h1 className="text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">จัดการบุคลากร</h1>
+                        <h1 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">จัดการบุคลากร</h1>
                         <p className="text-slate-400 text-sm font-medium">จัดการสิทธิ์และแก้ไขข้อมูลอาจารย์และพี่เลี้ยง</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <div className="relative group">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
                             <Input placeholder="ค้นหาชื่อ, จังหวัด, เบอร์โทร..." className="w-full md:w-64 h-11 pl-11 pr-4 rounded-xl bg-white border-slate-200 shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -491,10 +491,10 @@ export default function AdminManagement() {
                 </div>
 
                 <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="bg-slate-100/50 p-1 rounded-2xl h-auto mb-8 border border-slate-100 inline-flex shadow-sm">
-                        <TabsTrigger value="pending" className="rounded-xl px-6 py-2.5 data-[state=active]:bg-white font-bold text-sm gap-2 transition-all">รออนุมัติ <span className="bg-orange-500 text-white px-2 py-0.5 rounded-md text-[10px]">{pendingList.length}</span></TabsTrigger>
-                        <TabsTrigger value="teachers" className="rounded-xl px-6 py-2.5 data-[state=active]:bg-white font-bold text-sm transition-all">อาจารย์คณะ</TabsTrigger>
-                        <TabsTrigger value="supervisors" className="rounded-xl px-6 py-2.5 data-[state=active]:bg-white font-bold text-sm transition-all">พี่เลี้ยงแหล่งฝึก</TabsTrigger>
+                    <TabsList className="bg-slate-100/50 p-1 rounded-2xl h-auto mb-6 md:mb-8 border border-slate-100 flex w-full md:w-auto md:inline-flex shadow-sm overflow-x-auto">
+                        <TabsTrigger value="pending" className="rounded-xl px-3 md:px-6 py-2 md:py-2.5 data-[state=active]:bg-white font-bold text-xs md:text-sm gap-1 md:gap-2 transition-all whitespace-nowrap flex-1 md:flex-none">รออนุมัติ <span className="bg-orange-500 text-white px-2 py-0.5 rounded-md text-[10px]">{pendingList.length}</span></TabsTrigger>
+                        <TabsTrigger value="teachers" className="rounded-xl px-3 md:px-6 py-2 md:py-2.5 data-[state=active]:bg-white font-bold text-xs md:text-sm transition-all whitespace-nowrap flex-1 md:flex-none">อาจารย์คณะ</TabsTrigger>
+                        <TabsTrigger value="supervisors" className="rounded-xl px-3 md:px-6 py-2 md:py-2.5 data-[state=active]:bg-white font-bold text-xs md:text-sm transition-all whitespace-nowrap flex-1 md:flex-none">พี่เลี้ยงแหล่งฝึก</TabsTrigger>
                     </TabsList>
 
                     {/* Tab: รออนุมัติ (Card View - No Pagination) */}

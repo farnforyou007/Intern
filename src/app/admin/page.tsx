@@ -36,6 +36,11 @@ function timeAgo(dateString: string) {
 
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+        const colorMap: any = {
+            'ประเมินแล้ว': '#10b981',
+            'ประเมินแล้วบางส่วน': '#f59e0b',
+            'ยังไม่ประเมิน': '#ef4444'
+        };
         return (
             <div className="bg-white p-4 rounded-2xl shadow-xl border-none font-sans">
                 <p className="text-sm font-extrabold text-slate-800 mb-2">{label}</p>
@@ -47,8 +52,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                             </span>
                             <span
                                 className="text-[12px] font-black"
-                                // 🎨 เช็กเงื่อนไขตรงนี้เลย ถ้าเป็น "ค้างประเมิน" ให้เป็นสีแดง
-                                style={{ color: entry.name === "ค้างประเมิน" ? "#ef4444" : "#10b981" }}
+                                style={{ color: colorMap[entry.name] || '#64748b' }}
                             >
                                 {entry.value} รายการ
                             </span>
@@ -208,6 +212,7 @@ export default function AdminDashboard() {
                 .from('assignment_supervisors')
                 .select(`
                 is_evaluated,
+                evaluation_status,
                 student_assignments:assignment_id (
                     subject_id,
                     sub_subject_id
@@ -288,12 +293,12 @@ export default function AdminDashboard() {
             if (assignments) {
                 const mainMap: any = {};
                 subjectsList.forEach(s => {
-                    mainMap[s.id] = { name: s.name, completed: 0, pending: 0, total: 0 };
+                    mainMap[s.id] = { name: s.name, completed: 0, inProgress: 0, pending: 0, total: 0 };
                 });
 
                 const subMap: any = {};
                 subSubjectsList.forEach(ss => {
-                    subMap[ss.id] = { name: ss.name, completed: 0, pending: 0, total: 0 };
+                    subMap[ss.id] = { name: ss.name, completed: 0, inProgress: 0, pending: 0, total: 0 };
                 });
 
                 // 🚩 แก้ไขส่วนนี้เพื่อทำ Ratio Map
@@ -314,12 +319,24 @@ export default function AdminDashboard() {
 
                     if (effectiveMainId && mainMap[effectiveMainId]) {
                         mainMap[effectiveMainId].total += 1;
-                        item.is_evaluated ? mainMap[effectiveMainId].completed += 1 : mainMap[effectiveMainId].pending += 1;
+                        if (item.evaluation_status === 2) {
+                            mainMap[effectiveMainId].completed += 1;
+                        } else if (item.evaluation_status === 1) {
+                            mainMap[effectiveMainId].inProgress += 1;
+                        } else {
+                            mainMap[effectiveMainId].pending += 1;
+                        }
                     }
 
                     if (sa?.sub_subject_id && subMap[sa.sub_subject_id]) {
                         subMap[sa.sub_subject_id].total += 1;
-                        item.is_evaluated ? subMap[sa.sub_subject_id].completed += 1 : subMap[sa.sub_subject_id].pending += 1;
+                        if (item.evaluation_status === 2) {
+                            subMap[sa.sub_subject_id].completed += 1;
+                        } else if (item.evaluation_status === 1) {
+                            subMap[sa.sub_subject_id].inProgress += 1;
+                        } else {
+                            subMap[sa.sub_subject_id].pending += 1;
+                        }
                     }
                 });
 
@@ -345,10 +362,10 @@ export default function AdminDashboard() {
                 //     { name: 'ค้างประเมิน', value: assignments.length - totalComp, color: '#f59e0b' }
                 // ]);
                 setSummaryData([
-    { name: 'ประเมินแล้ว', value: completed, color: '#10b981' }, // เขียว
-    { name: 'กำลังประเมิน', value: inProgress, color: '#3b82f6' }, // น้ำเงิน (เพิ่มจุดนี้)
-    { name: 'ค้างประเมิน', value: pending, color: '#f59e0b' }    // ส้ม
-]);
+                    { name: 'ประเมินแล้ว', value: completed, color: '#10b981' }, // เขียว
+                    { name: 'ประเมินแล้วบางส่วน', value: inProgress, color: '#f59e0b' }, // น้ำเงิน
+                    { name: 'ยังไม่ประเมิน', value: pending, color: '#ef4444' }    // ส้ม
+                ]);
             }
 
 
@@ -459,7 +476,7 @@ export default function AdminDashboard() {
                                 <h3 className="text-xl font-black">ความคืบหน้าการประเมิน</h3>
                                 <p className="text-emerald-100/70 text-sm">ภาพรวมการส่งแบบประเมินจากพี่เลี้ยงทุกคนในระบบ</p>
                             </div>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 <div className="bg-white/10 p-4 rounded-2xl">
                                     <p className="text-[10px] font-bold uppercase text-emerald-200">ทั้งหมด</p>
                                     <p className="text-xl font-black">{evalStats.total}</p>
@@ -468,8 +485,12 @@ export default function AdminDashboard() {
                                     <p className="text-[10px] font-bold uppercase text-emerald-200">เสร็จแล้ว</p>
                                     <p className="text-xl font-black">{evalStats.completed}</p>
                                 </div>
-                                <div className="bg-white/10 p-4 rounded-2xl border-b-4 border-orange-400">
-                                    <p className="text-[10px] font-bold uppercase text-emerald-200">ค้างประเมิน</p>
+                                <div className="bg-white/10 p-4 rounded-2xl border-b-4 border-orange-300">
+                                    <p className="text-[10px] font-bold uppercase text-emerald-200">ประเมินบางส่วน</p>
+                                    <p className="text-xl font-black">{evalStats.inProgress}</p>
+                                </div>
+                                <div className="bg-white/10 p-4 rounded-2xl border-b-4 border-red-400">
+                                    <p className="text-[10px] font-bold uppercase text-emerald-200">ยังไม่ประเมิน</p>
                                     <p className="text-xl font-black">{evalStats.pending}</p>
                                 </div>
                             </div>
@@ -602,7 +623,8 @@ export default function AdminDashboard() {
                                         />
 
                                         <Bar dataKey="completed" stackId="a" name="ประเมินแล้ว" fill="#10b981" radius={[0, 0, 0, 0]} barSize={24} />
-                                        <Bar dataKey="pending" stackId="a" name="ค้างประเมิน" fill="#e2e8f0" radius={[0, 6, 6, 0]} barSize={24} />
+                                        <Bar dataKey="inProgress" stackId="a" name="ประเมินแล้วบางส่วน" fill="#f59e0b" radius={[0, 0, 0, 0]} barSize={24} />
+                                        <Bar dataKey="pending" stackId="a" name="ยังไม่ประเมิน" fill="#e2e8f0" radius={[0, 6, 6, 0]} barSize={24} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
