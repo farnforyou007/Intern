@@ -185,7 +185,7 @@ export default function EvaluationPage() {
             setAutoSaveStatus('saved')
             // ซ่อนสถานะ Saved หลัง 2 วินาที
             setTimeout(() => setAutoSaveStatus('idle'), 2000)
-        }, 3000)
+        }, 1000)
     }
 
     const handleScoreChange = (itemId: number, val: number | 'N/A') => {
@@ -247,7 +247,7 @@ export default function EvaluationPage() {
         setSaving(true)
         // บันทึกครั้งสุดท้ายก่อนเปลี่ยนหน้า เพื่อความชัวร์
         await saveDataToSupabase()
-
+        setAutoSaveStatus('saved');
         if (isFinal) {
             // 🚩 เช็คว่าตอบครบทุกข้อทุกหมวดหรือยัง
             const totalItems = groups.reduce((sum: number, g: any) => sum + (g.evaluation_items?.length || 0), 0)
@@ -321,9 +321,30 @@ export default function EvaluationPage() {
                                     {student?.nickname || 'นศ.'}
                                 </span>
                                 {/* 🟢 สถานะ Auto Save */}
-                                <div className="flex items-center gap-5 text-[10px] font-bold">
+                                {/* <div className="flex items-center gap-5 text-[10px] font-bold">
                                     {autoSaveStatus === 'saving' && <span className="text-amber-500 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> กำลังบันทึก...</span>}
                                     {autoSaveStatus === 'saved' && <span className="text-emerald-600 flex items-center gap-1"><Cloud size={10} /> บันทึกแล้ว</span>}
+                                </div> */}
+                                {/* 🟢 สถานะ Auto Save แบบใหม่ */}
+                                <div className="flex items-center gap-5 text-[10px] font-bold">
+                                    {autoSaveStatus === 'saving' && (
+                                        <span className="text-[10px] font-black text-amber-500 flex items-center gap-1.5 animate-pulse">
+                                            <Loader2 size={12} className="animate-spin" />
+                                            กำลังบันทึก...
+                                        </span>
+                                    )}
+                                    {autoSaveStatus === 'saved' && (
+                                        <span className="text-[10px] font-black text-emerald-600 flex items-center gap-1.5 animate-in zoom-in duration-300">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                                            บันทึกเรียบร้อย
+                                        </span>
+                                    )}
+                                    {autoSaveStatus === 'idle' && (
+                                        <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1.5">
+                                            <Cloud size={12} />
+
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                             <p className="text-[13px] font-bold text-slate-400 uppercase tracking-wide truncate opacity-80">
@@ -503,19 +524,24 @@ export default function EvaluationPage() {
                 </div>
 
                 <div className="flex gap-3">
+
                     {activeTab < groups.length - 1 ? (
                         /* --- ปุ่มถัดไป --- */
-                        <button
-                            onClick={() => handleNextOrFinish(false)}
-                            disabled={saving}
-                            className="flex-1 h-14 bg-emerald-600 text-white rounded-[1.5rem] font-black shadow-lg shadow-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2"
-                        >
-                            {saving ? (
-                                <Loader2 className="animate-spin" size={20} />
-                            ) : (
-                                'ถัดไป (Next)'
-                            )}
-                        </button>
+                        <>
+                            <button
+                                onClick={() => handleNextOrFinish(false)}
+                                disabled={saving}
+                                className="flex-1 h-14 bg-emerald-600 text-white rounded-[1.5rem] font-black shadow-lg shadow-emerald-100 active:scale-95 transition-all flex items-center justify-center gap-2"
+                            >
+                                {saving ? (
+                                    <Loader2 className="animate-spin" size={20} />
+                                ) : (
+                                    'ถัดไป (Next)'
+                                )}
+                            </button>
+                            
+                        </>
+
                     ) : (
                         /* --- ปุ่มสุดท้าย --- */
                         <button

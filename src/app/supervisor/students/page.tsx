@@ -8,13 +8,8 @@ import {
     ArrowLeft, GraduationCap, ClipboardCheck, User,
     PhoneCall, BookOpen, FolderOpen, FileSignature, PlusCircle,
     UserPlus, ClipboardPenLine, Mail, Send,
-    Users,
-    SendHorizonal,
-    SquareActivity,
-    SquareUserRound,
-    Clock,
-    CheckCircle,
-
+    Users, SendHorizonal, SquareActivity, SquareUserRound,
+    Clock, CheckCircle, AlertCircle, CalendarDays,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Swal from 'sweetalert2'
@@ -257,6 +252,7 @@ export default function SupervisorStudentList() {
     const [myStudents, setMyStudents] = useState<any[]>([])
     const [allSiteStudents, setAllSiteStudents] = useState<any[]>([])
     const [supervisorInfo, setSupervisorInfo] = useState<any>(null)
+    const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
 
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -282,10 +278,29 @@ export default function SupervisorStudentList() {
     const fetchData = async (lineUserId: string) => {
         // setLoading(true) // 🚩 เอาออกเพื่อให้ UI ไม่กระพริบตอน Realtime Update
         try {
+            // 🔒 0. ดึงปีการศึกษาปัจจุบันจาก system_configs
+            const { data: configData } = await supabase
+                .from('system_configs')
+                .select('key_value')
+                .eq('key_name', 'current_training_year')
+                .single();
+            const currentYear = configData?.key_value || '';
+            setConfigYear(currentYear);
+
             // 1. ดึงข้อมูล Supervisor
             const { data: supervisor } = await supabase.from('supervisors').select('*').eq('line_user_id', lineUserId).single()
             if (!supervisor) return
             setSupervisorInfo(supervisor)
+
+            // 🔒 1.5 ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
+            let yearStudentIds: Set<string> = new Set();
+            if (currentYear) {
+                const { data: yearStudents } = await supabase
+                    .from('students')
+                    .select('id')
+                    .eq('training_year', currentYear);
+                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
+            }
 
             // 2. ดึงสิทธิ์ (Permissions)
             const { data: permissions } = await supabase
@@ -305,10 +320,13 @@ export default function SupervisorStudentList() {
                 )
             `).eq('supervisor_id', supervisor.id)
 
-            // 🚩 กรอง 'ทีมฉัน' ให้ตรงกับสิทธิ์ปัจจุบันเสมอ (กันข้อมูลเก่าค้าง)
+            // 🚩 กรอง 'ทีมฉัน' ให้ตรงกับสิทธิ์ปัจจุบัน + 🔒 กรองตามปีการศึกษา
             const filteredMine = (mine || []).filter((item: any) => {
                 const assign = item.student_assignments;
                 if (!assign) return false;
+                // 🔒 กรองตามปีการศึกษา
+                const studentId = String(assign.students?.id || assign.student_id || '');
+                if (currentYear && !yearStudentIds.has(studentId)) return false;
                 return checkPermission(assign, permissions || []);
             });
 
@@ -364,8 +382,11 @@ export default function SupervisorStudentList() {
                 rotations:rotation_id ( name )
             `).eq('site_id', supervisor.site_id)
 
-            // 🚩 กรอง 'ทั้งหมด' ให้โชว์เฉพาะที่มีสิทธิ์กดรับ
+            // 🚩 กรอง 'ทั้งหมด' ให้โชว์เฉพาะที่มีสิทธิ์กดรับ + 🔒 กรองตามปีการศึกษา
             const filteredAll = (all || []).filter((assign: any) => {
+                // 🔒 กรองตามปีการศึกษา
+                const studentId = String(assign.students?.id || assign.student_id || '');
+                if (currentYear && !yearStudentIds.has(studentId)) return false;
                 return checkPermission(assign, permissions || []);
             });
             setAllSiteStudents(filteredAll)
@@ -500,6 +521,13 @@ export default function SupervisorStudentList() {
                     <div className="text-center">
                         <h1 className="text-xl font-black text-slate-900 tracking-tight">รายชื่อนักศึกษา</h1>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Students List</p>
+                        {/* 🔒 Badge ปีการศึกษา */}
+                        {configYear && (
+                            <span className="inline-flex items-center gap-1.5 mt-1 bg-emerald-50 text-emerald-700 text-[10px] font-black px-3 py-1 rounded-full border border-emerald-100">
+                                <CalendarDays size={10} />
+                                ปีการศึกษา {configYear}
+                            </span>
+                        )}
                     </div>
                     <div className="w-11 h-11 flex items-center justify-center text-slate-300 bg-slate-50 rounded-2xl border border-slate-100">
                         <GraduationCap size={20} />
@@ -544,8 +572,8 @@ export default function SupervisorStudentList() {
                                         <div className="min-w-0 flex-1 space-y-1">
                                             <span className="inline-block px-2 py-0.5 rounded-lg bg-slate-100 text-[9px] font-black text-slate-500 mb-1">#{student.student_code}</span>
                                             <h3 className="text-[15px] font-bold text-slate-900">{student.first_name} {student.last_name}</h3>
-                                            <p className="text-slate-700 font-black text-xs flex items-center gap-1"><SquareUserRound size={12} />{student.nickname || '-'}</p>
-                                            <p className="text-slate-700 font-black text-xs flex items-center gap-1"><Send size={10} />{student.email || '-'}</p>
+                                            <p className="text-slate-700 font-black text-xs flex items-center gap-1"><User size={12} />{student.nickname || '-'}</p>
+                                            <p className="text-slate-700 font-black text-xs flex items-center gap-1"><Mail size={10} />{student.email || '-'}</p>
                                             <a href={`tel:${student.phone}`} className="text-[11px] text-slate-600 font-black underline flex items-center gap-1"><PhoneCall size={10} /> {student.phone}</a>
                                         </div>
                                         <button onClick={() => setExpandedId(isExpanded ? null : groupKey)} className={`p-3 rounded-2xl transition-all shadow-lg ${isExpanded ? 'bg-slate-900 text-white rotate-180' : 'bg-[#064e3b] text-white'}`}>
@@ -580,7 +608,19 @@ export default function SupervisorStudentList() {
                             </div>
                         )
                     })
-                ) : <div className="text-center py-20 text-slate-400 font-bold italic">ไม่พบข้อมูล</div>}
+                ) : (
+                    <div className="text-center py-16">
+                        {configYear ? (
+                            <div className="bg-amber-50 border border-amber-200 p-6 rounded-[2rem] mx-auto max-w-sm">
+                                <AlertCircle size={36} className="mx-auto mb-3 text-amber-500" />
+                                <p className="font-black text-amber-800 text-sm">ไม่พบรายชื่อนักศึกษา</p>
+                                <p className="text-xs text-amber-600 font-medium mt-1">ในรอบปีการศึกษา {configYear}</p>
+                            </div>
+                        ) : (
+                            <p className="text-slate-400 font-bold italic">ไม่พบข้อมูล</p>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     )

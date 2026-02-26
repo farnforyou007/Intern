@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     Users, CheckCircle, AlertCircle, TrendingUp, TrendingDown,
-    GraduationCap, User, LayoutDashboard, Award, MapPin
+    GraduationCap, User, LayoutDashboard, Award, MapPin,
+    CalendarDays, ChevronDown, Filter
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import {
@@ -26,6 +27,10 @@ export default function TeacherDashboard() {
     const [selectedSubject, setSelectedSubject] = useState<string | 'all'>('all')
     const [hasDoubleRole, setHasDoubleRole] = useState(false)
     const [analyticsData, setAnalyticsData] = useState<any[]>([])
+    // 🔒 Year & Batch filter
+    const [selectedYear, setSelectedYear] = useState<string>('')
+    const [yearOptions, setYearOptions] = useState<string[]>([])
+    const [selectedBatch, setSelectedBatch] = useState<string>('all')
 
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,7 +39,6 @@ export default function TeacherDashboard() {
 
     useEffect(() => {
         fetchDashboardData()
-        // Subscribe ทุกตารางที่ส่งผลต่อ KPI และ Analytics
         const channel = supabase
             .channel('evaluation_realtime')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, () => fetchDashboardData())
@@ -42,7 +46,7 @@ export default function TeacherDashboard() {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'evaluation_answers' }, () => fetchDashboardData())
             .subscribe()
         return () => { supabase.removeChannel(channel) }
-    }, [])
+    }, [selectedYear])
 
     const calculateKPI = (assignments: any[], subjectId: string) => {
         const filtered = subjectId === 'all' ? assignments : assignments.filter(a => a.subject_id === subjectId)
@@ -55,23 +59,39 @@ export default function TeacherDashboard() {
 
     const fetchDashboardData = async () => {
         setLoading(true)
-        // const lineId = 'test-c'
         try {
-            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
-
-            // if (!liff.isLoggedIn()) {
-            //     liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
-            //     return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
-            // }
-
-            // const profile = await liff.getProfile();
-            //  const lineId = profile.userId; // ใช้ ID จริงจาก LINE
-
-
             const urlParams = new URLSearchParams(window.location.search);
             const lineUserId = await getLineUserId(urlParams);
 
             if (!lineUserId) return;
+
+            // 🔒 ดึงปีการศึกษา default + options
+            if (!selectedYear) {
+                const { data: configData } = await supabase
+                    .from('system_configs')
+                    .select('key_value')
+                    .eq('key_name', 'current_training_year')
+                    .single();
+                if (configData?.key_value) setSelectedYear(configData.key_value);
+            }
+            const { data: yearsData } = await supabase
+                .from('students')
+                .select('training_year')
+                .not('training_year', 'is', null);
+            if (yearsData) {
+                const unique = Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a));
+                setYearOptions(unique as string[]);
+            }
+
+            // 🔒 ดึง student IDs ในปีที่เลือก
+            let yearStudentIds: Set<string> | null = null;
+            if (selectedYear) {
+                const { data: yearStudents } = await supabase
+                    .from('students')
+                    .select('id, student_code')
+                    .eq('training_year', selectedYear);
+                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
+            }
             // console.log("User Profile:", profile); // เช็คค่าได้ตรงนี้
             const { data: user } = await supabase
                 .from('supervisors')
@@ -99,7 +119,7 @@ export default function TeacherDashboard() {
                         setSelectedSubject(firstSubjectId)
                     }
 
-                    const { data: assignments } = await supabase
+                    const { data: rawAssignments } = await supabase
                         .from('student_assignments')
                         .select(`
                             id, subject_id, student_id,
@@ -110,6 +130,11 @@ export default function TeacherDashboard() {
                             evaluation_logs(id)
                         `)
                         .in('subject_id', subjectIds)
+
+                    // 🔒 กรองเฉพาะ student ในปีที่เลือก
+                    const assignments = yearStudentIds
+                        ? (rawAssignments || []).filter((a: any) => yearStudentIds!.has(String(a.student_id)))
+                        : rawAssignments
 
                     if (assignments) {
                         setAllAssignments(assignments)
@@ -130,10 +155,10 @@ export default function TeacherDashboard() {
                         // }
 
                         // โหลดข้อมูลสำหรับกราฟ/KPI แบบ analytics (evaluation_groups, evaluation_answers)
-                        const { data: analyticsRes } = await supabase
+                        const { data: rawAnalyticsRes } = await supabase
                             .from('student_assignments')
                             .select(`
-                                id, subject_id,
+                                id, subject_id, student_id,
                                 students (id, first_name, last_name, student_code),
                                 subjects (name, id),
                                 training_sites (site_name, province),
@@ -145,6 +170,11 @@ export default function TeacherDashboard() {
                                 )
                             `)
                             .in('subject_id', subjectIds)
+
+                        // 🔒 กรองเฉพาะปี
+                        const analyticsRes = yearStudentIds
+                            ? (rawAnalyticsRes || []).filter((a: any) => yearStudentIds!.has(String(a.student_id)))
+                            : rawAnalyticsRes
 
                         const processed = (analyticsRes || []).map((item: any) => {
                             const logs = item.evaluation_logs || []
@@ -213,7 +243,16 @@ export default function TeacherDashboard() {
         ? allAssignments
         : allAssignments.filter(a => a.subject_id === selectedSubject)
 
-    const uniqueStudents = [...new Set(filteredAssignmentsForSubject.map(a => a.student_id))].length
+    // 🔒 Batch filter (client-side)
+    const batchFilteredAssignments = selectedBatch === 'all'
+        ? filteredAssignmentsForSubject
+        : filteredAssignmentsForSubject.filter((a: any) => a.students?.student_code?.substring(0, 2) === selectedBatch)
+
+    const batchOptions = Array.from(new Set(
+        filteredAssignmentsForSubject.map((a: any) => a.students?.student_code?.substring(0, 2)).filter(Boolean)
+    )).sort((a: string, b: string) => b.localeCompare(a))
+
+    const uniqueStudents = [...new Set(batchFilteredAssignments.map(a => a.student_id))].length
 
     // สรุปสถานะการประเมิน (แบบฝั่งพี่เลี้ยง แต่มองภาพรวมรายวิชา)
     // const teacherStats = useMemo(() => {
@@ -501,6 +540,34 @@ export default function TeacherDashboard() {
                         <span>TEACHER <span className="text-indigo-600">Dashboard</span></span>
                     </h1>
                     <p className="text-slate-400 font-bold mt-2 ml-1 text-xs uppercase tracking-[0.2em]">ภาพรวม KPI สถิติ และข้อมูลอาจารย์</p>
+                </div>
+                {/* 🔒 Year & Batch Filter */}
+                <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 bg-white px-4 h-12 rounded-xl border border-slate-200 shadow-sm">
+                        <CalendarDays size={16} className="text-indigo-500" />
+                        <select
+                            value={selectedYear}
+                            onChange={(e) => { setSelectedYear(e.target.value); setSelectedBatch('all'); }}
+                            className="text-sm font-black text-indigo-600 bg-transparent outline-none cursor-pointer"
+                        >
+                            {yearOptions.map(year => (
+                                <option key={year} value={year}>ปีการศึกษา {year}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white px-4 h-12 rounded-xl border border-slate-200 shadow-sm">
+                        <Filter size={16} className="text-slate-400" />
+                        <select
+                            value={selectedBatch}
+                            onChange={(e) => setSelectedBatch(e.target.value)}
+                            className="text-sm font-black text-slate-600 bg-transparent outline-none cursor-pointer"
+                        >
+                            <option value="all">ทุกรุ่นรหัส</option>
+                            {batchOptions.map((b: string) => (
+                                <option key={b} value={b}>รหัส {b}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </div>
 

@@ -381,7 +381,7 @@ import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     Search, ArrowLeft, Calendar,
-    Clock, AlertCircle, Users, BookOpen
+    Clock, AlertCircle, Users, BookOpen, CalendarDays
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { getLineUserId } from '@/utils/auth';
@@ -391,40 +391,63 @@ export default function RotationSchedule() {
     const [loading, setLoading] = useState(true)
     const [groupedSchedule, setGroupedSchedule] = useState<any[]>([])
     const [searchTerm, setSearchTerm] = useState('')
+    const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
 
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    
+
 
     const fetchData = async () => {
         setLoading(true)
-        // const userId = 'U678862bd992a4cda7aaf972743b585ac'
-        // const userId = 'test-somruk'
         const urlParams = new URLSearchParams(window.location.search);
         const lineUserId = await getLineUserId(urlParams);
 
         if (!lineUserId) return;
 
+        // 🔒 0. ดึงปีการศึกษาปัจจุบันจาก system_configs
+        const { data: configData } = await supabase
+            .from('system_configs')
+            .select('key_value')
+            .eq('key_name', 'current_training_year')
+            .single();
+        const currentYear = configData?.key_value || '';
+        setConfigYear(currentYear);
+
         const { data: sv } = await supabase.from('supervisors').select('id, site_id').eq('line_user_id', lineUserId).single()
 
         if (sv) {
+            // 🔒 ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
+            let yearStudentIds: Set<string> = new Set();
+            if (currentYear) {
+                const { data: yearStudents } = await supabase
+                    .from('students')
+                    .select('id')
+                    .eq('training_year', currentYear);
+                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
+            }
+
             const { data, error } = await supabase
                 .from('student_assignments')
                 .select(`
                     student_id,
                     subjects:subject_id ( name ),
                     sub_subjects:sub_subject_id ( name ),
-                    rotations:rotation_id ( id, name, start_date, end_date )
+                    rotations:rotation_id ( id, name, start_date, end_date, academic_year )
                 `)
                 .eq('site_id', sv.site_id)
 
             if (!error && data) {
+                // 🔒 กรองเฉพาะนักศึกษาในปีปัจจุบัน
+                const filteredData = currentYear
+                    ? data.filter((item: any) => yearStudentIds.has(String(item.student_id)))
+                    : data;
+
                 const groups: { [key: string]: any } = {}
 
-                data.forEach((item: any) => {
+                filteredData.forEach((item: any) => {
                     const r = item.rotations
                     if (!r) return
 
@@ -441,11 +464,15 @@ export default function RotationSchedule() {
                     groups[r.id].studentIds.add(item.student_id)
                 })
 
-                // ดึง rotation ทั้งหมดที่มีในระบบ (ไม่ filter site_id เพราะตาราง rotations ไม่มี)
-                const rotationsResult = await supabase
+                // 🔒 ดึง rotation เฉพาะปีปัจจุบัน (ไม่ใช้ทั้งหมด)
+                let rotationQuery = supabase
                     .from('rotations')
-                    .select('id, name, start_date, end_date')
+                    .select('id, name, start_date, end_date, academic_year')
                     .order('start_date');
+                if (currentYear) {
+                    rotationQuery = rotationQuery.eq('academic_year', currentYear);
+                }
+                const rotationsResult = await rotationQuery;
                 const allRotations: any[] = rotationsResult.data || [];
 
                 // เพิ่ม rotation ที่ไม่มีใน groups (เช่น ผลัดที่ยังไม่มี student_assignments)
@@ -459,11 +486,14 @@ export default function RotationSchedule() {
                     }
                 })
 
-                const result = Object.values(groups).map((g: any) => ({
-                    rotation: g.rotation,
-                    subjects: Array.from(g.subjects || []),
-                    studentCount: g.studentIds.size
-                })).sort((a, b) => new Date(a.rotation.end_date).getTime() - new Date(b.rotation.end_date).getTime())
+                const result = Object.values(groups)
+                    // 🔒 กรองเฉพาะ rotation ที่ตรงกับปีการศึกษา
+                    .filter((g: any) => !currentYear || g.rotation.academic_year === currentYear)
+                    .map((g: any) => ({
+                        rotation: g.rotation,
+                        subjects: Array.from(g.subjects || []),
+                        studentCount: g.studentIds.size
+                    })).sort((a, b) => new Date(a.rotation.end_date).getTime() - new Date(b.rotation.end_date).getTime())
 
                 setGroupedSchedule(result)
             }
@@ -498,6 +528,13 @@ export default function RotationSchedule() {
                     <div className="text-center">
                         <h1 className="text-xl font-black text-slate-900 tracking-tight">ตารางผลัดฝึก</h1>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rotation Summary</p>
+                        {/* 🔒 Badge ปีการศึกษา */}
+                        {configYear && (
+                            <span className="inline-flex items-center gap-1.5 mt-1 bg-purple-50 text-purple-700 text-[10px] font-black px-3 py-1 rounded-full border border-purple-100">
+                                <CalendarDays size={10} />
+                                ปีการศึกษา {configYear}
+                            </span>
+                        )}
                     </div>
                     <div className="w-11 h-11 flex items-center justify-center text-slate-300 bg-slate-50 rounded-2xl border border-slate-100">
                         <Calendar size={20} />
@@ -584,9 +621,19 @@ export default function RotationSchedule() {
                         )
                     })
                 ) : (
-                    <div className="text-center py-20 opacity-30">
-                        <Calendar size={48} className="mx-auto mb-2" />
-                        <p className="font-bold uppercase tracking-widest text-xs">No Data Found</p>
+                    <div className="text-center py-16">
+                        {configYear ? (
+                            <div className="bg-amber-50 border border-amber-200 p-6 rounded-[2rem] mx-auto max-w-sm">
+                                <Calendar size={36} className="mx-auto mb-3 text-amber-500" />
+                                <p className="font-black text-amber-800 text-sm">ไม่พบข้อมูลผลัดฝึก</p>
+                                <p className="text-xs text-amber-600 font-medium mt-1">ในรอบปีการศึกษา {configYear}</p>
+                            </div>
+                        ) : (
+                            <>
+                                <Calendar size={48} className="mx-auto mb-2 opacity-30" />
+                                <p className="font-bold uppercase tracking-widest text-xs opacity-30">No Data Found</p>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

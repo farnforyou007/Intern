@@ -5,7 +5,7 @@ import {
     Users, Hospital, BookOpen, GraduationCap,
     AlertCircle, Clock, UserPlus, CheckCircle2,
     ArrowUpRight, ListFilter, TrendingUp, FileText,
-    Activity, BellRing
+    Activity, BellRing, CalendarDays
 } from 'lucide-react'
 import Link from 'next/link'
 import AdminLayout from '@/components/AdminLayout'
@@ -99,6 +99,9 @@ export default function AdminDashboard() {
     const [filterType, setFilterType] = useState('all') // 'all' | 'supervisor' | 'site' | 'student'
     const [viewType, setViewType] = useState<'main' | 'sub'>('main');
     const [subjectRatioData, setSubjectRatioData] = useState<any[]>([]);
+    // 🔒 Year filter
+    const [selectedYear, setSelectedYear] = useState<string>('')
+    const [yearOptions, setYearOptions] = useState<string[]>([])
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -116,12 +119,46 @@ export default function AdminDashboard() {
             .subscribe()
 
         return () => { supabase.removeChannel(channel) }
-    }, [])
+    }, [selectedYear])
 
     const fetchData = async () => {
         // ไม่ set loading true ตรงนี้เพื่อให้ UI ไม่กระพริบตอน Realtime update
         try {
-            // 1. ดึง KPI Stats
+            // 🔒 ดึงปี default + options
+            if (!selectedYear) {
+                const { data: configData } = await supabase
+                    .from('system_configs')
+                    .select('key_value')
+                    .eq('key_name', 'current_training_year')
+                    .single();
+                if (configData?.key_value) {
+                    setSelectedYear(configData.key_value);
+                    return; // จะ re-fetch อีกรอบ
+                }
+            }
+            const { data: yearsData } = await supabase
+                .from('students')
+                .select('training_year')
+                .not('training_year', 'is', null);
+            if (yearsData) {
+                const unique = Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a));
+                setYearOptions(unique as string[]);
+            }
+
+            // 🔒 ดึง student IDs ในปีที่เลือก
+            let yearStudentIds: string[] | null = null;
+            if (selectedYear) {
+                const { data: yearStudents } = await supabase
+                    .from('students')
+                    .select('id')
+                    .eq('training_year', selectedYear);
+                yearStudentIds = (yearStudents || []).map((s: any) => String(s.id));
+            }
+
+            // 1. ดึง KPI Stats (กรองตามปี)
+            let studentCountQuery = supabase.from('students').select('*', { count: 'exact', head: true });
+            if (selectedYear) studentCountQuery = studentCountQuery.eq('training_year', selectedYear);
+
             const [
                 { count: studentCount },
                 { count: siteCount },
@@ -129,7 +166,7 @@ export default function AdminDashboard() {
                 { count: pendingSvCount },
                 { count: subjectCount }
             ] = await Promise.all([
-                supabase.from('students').select('*', { count: 'exact', head: true }),
+                studentCountQuery,
                 supabase.from('training_sites').select('*', { count: 'exact', head: true }),
                 supabase.from('supervisors').select('*', { count: 'exact', head: true }),
                 supabase.from('supervisors').select('*', { count: 'exact', head: true }).eq('is_verified', false),
@@ -144,25 +181,38 @@ export default function AdminDashboard() {
                 subjects: subjectCount || 0
             })
 
-            // 🚩 เพิ่มการดึงข้อมูลการประเมินจากตาราง assignment_supervisors
-            const { data: evalData, count: totalCount } = await supabase
+            // 🔒 ดึงข้อมูลการประเมิน (กรองตามปี)
+            const { data: allEvalData, count: totalCount } = await supabase
                 .from('assignment_supervisors')
-                .select('evaluation_status', { count: 'exact' });
+                .select('evaluation_status, assignment_id', { count: 'exact' });
+
+            // กรองตาม yearStudentIds ถ้ามี
+            let evalData = allEvalData;
+            if (yearStudentIds && yearStudentIds.length > 0) {
+                // ดึง assignment_ids ที่เกี่ยวข้องกับนักศึกษาในปีที่เลือก
+                const { data: yearAssignments } = await supabase
+                    .from('student_assignments')
+                    .select('id')
+                    .in('student_id', yearStudentIds);
+                const yearAssignmentIds = new Set((yearAssignments || []).map((a: any) => String(a.id)));
+                evalData = (allEvalData || []).filter((e: any) => yearAssignmentIds.has(String(e.assignment_id)));
+            }
 
             // const completed = evalData?.filter(item => item.is_evaluated).length || 0;
             // const pending = (totalCount || 0) - completed;
             const completed = evalData?.filter(item => item.evaluation_status === 2).length || 0;
-            const inProgress = evalData?.filter(item => item.evaluation_status === 1).length || 0; // ✅ นับ status 1
+            const inProgress = evalData?.filter(item => item.evaluation_status === 1).length || 0;
             const pending = evalData?.filter(item => item.evaluation_status === 0).length || 0;
+            const evalTotal = evalData?.length || 0;
 
             // const percent = totalCount ? Math.round((completed / totalCount) * 100) : 0;
 
             setEvalStats({
-                total: totalCount || 0,
+                total: evalTotal,
                 completed,
                 pending,
                 inProgress,
-                percent: totalCount ? Math.round((completed / totalCount) * 100) : 0
+                percent: evalTotal ? Math.round((completed / evalTotal) * 100) : 0
             });
 
 
@@ -208,16 +258,28 @@ export default function AdminDashboard() {
             const subSubjectsList = subSubjectsRes.data || [];
 
             // 2. ดึงข้อมูลการประเมินพร้อมความสัมพันธ์
-            const { data: assignments } = await supabase
+            const { data: rawAssignments } = await supabase
                 .from('assignment_supervisors')
                 .select(`
                 is_evaluated,
                 evaluation_status,
+                assignment_id,
                 student_assignments:assignment_id (
                     subject_id,
-                    sub_subject_id
+                    sub_subject_id,
+                    student_id
                 )
             `);
+
+            // 🔒 กรองตามปี
+            let assignments = rawAssignments;
+            if (yearStudentIds && yearStudentIds.length > 0) {
+                const yearStudentSet = new Set(yearStudentIds);
+                assignments = (rawAssignments || []).filter((item: any) => {
+                    const studentId = item.student_assignments?.student_id;
+                    return studentId && yearStudentSet.has(String(studentId));
+                });
+            }
             // console.log("Assignments with Relation:", assignments);
 
             // const { data: evalData2 } = await supabase
@@ -425,9 +487,24 @@ export default function AdminDashboard() {
                         </div>
                         <h1 className="text-3xl font-black text-slate-900 tracking-tight">ภาพรวมระบบ</h1>
                     </div>
-                    <div className="flex items-center gap-2 text-sm font-bold text-slate-400 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">
-                        <Clock size={16} />
-                        {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}
+                    <div className="flex items-center gap-3 flex-wrap">
+                        {/* 🔒 Year Filter */}
+                        <div className="flex items-center gap-2 bg-white px-4 h-10 rounded-xl border border-slate-200 shadow-sm">
+                            <CalendarDays size={16} className="text-emerald-500" />
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(e.target.value)}
+                                className="text-sm font-black text-emerald-600 bg-transparent outline-none cursor-pointer"
+                            >
+                                {yearOptions.map(year => (
+                                    <option key={year} value={year}>ปีการศึกษา {year}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm font-bold text-slate-400 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">
+                            <Clock size={16} />
+                            {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}
+                        </div>
                     </div>
                 </div>
 

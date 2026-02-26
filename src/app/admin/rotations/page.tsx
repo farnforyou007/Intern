@@ -340,7 +340,7 @@ export default function RotationsPage() {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-    
+
 
     // 1. ดึงรายการปีการศึกษาที่มีอยู่จริงในระบบมาทำ Dropdown Filter
     const fetchAvailableYears = useCallback(async () => {
@@ -624,7 +624,7 @@ export default function RotationsPage() {
                             <Input type="number" value={formData.round_number} onChange={(e) => setFormData({ ...formData, round_number: parseInt(e.target.value) })} className="h-12 rounded-xl border-slate-200" />
                         </div>
                         <div className="col-span-2 md:col-span-1">
-                            <label className="text-sm font-bold text-slate-700 mb-1.5 block">ปีการศึกษา (กรอกเอง)</label>
+                            <label className="text-sm font-bold text-slate-700 mb-1.5 block">ปีการศึกษา</label>
                             <Input value={formData.academic_year} onChange={(e) => setFormData({ ...formData, academic_year: e.target.value })} placeholder="เช่น 2569" className="h-12 rounded-xl border-slate-200" />
                         </div>
 

@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     Search, Users, User, ChevronLeft, ChevronRight, ChevronDown,
-    X, Maximize2, Mail, Phone, GraduationCap
+    X, Maximize2, Mail, Phone, GraduationCap, CalendarDays, Filter
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -12,10 +12,13 @@ export default function StudentListPage() {
     const [loading, setLoading] = useState(true)
     const [students, setStudents] = useState<any[]>([])
     const [searchTerm, setSearchTerm] = useState('')
-    const [selectedYear, setSelectedYear] = useState('all')
+    const [selectedBatch, setSelectedBatch] = useState('all')
     const [expandedImage, setExpandedImage] = useState<string | null>(null)
     const [currentPage, setCurrentPage] = useState(1)
     const [itemsPerPage, setItemsPerPage] = useState(10)
+    // 🔒 Year filter
+    const [selectedTrainingYear, setSelectedTrainingYear] = useState<string>('')
+    const [trainingYearOptions, setTrainingYearOptions] = useState<string[]>([])
 
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,17 +28,43 @@ export default function StudentListPage() {
     useEffect(() => {
         const fetchStudents = async () => {
             setLoading(true)
-            const { data } = await supabase
+
+            // 🔒 ดึงปี default + options
+            if (!selectedTrainingYear) {
+                const { data: config } = await supabase
+                    .from('system_configs')
+                    .select('key_value')
+                    .eq('key_name', 'current_training_year')
+                    .single();
+                if (config?.key_value) {
+                    setSelectedTrainingYear(config.key_value);
+                    setLoading(false);
+                    return; // จะ re-fetch อีกรอบเมื่อ state เปลี่ยน
+                }
+            }
+
+            const { data: yearsData } = await supabase
                 .from('students')
-                .select('*')
-                .order('student_code', { ascending: true })
+                .select('training_year')
+                .not('training_year', 'is', null);
+            if (yearsData) {
+                const unique = Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a));
+                setTrainingYearOptions(unique as string[]);
+            }
+
+            // 🔒 ดึงนักศึกษาตามปีที่เลือก
+            let query = supabase.from('students').select('*').order('student_code', { ascending: true });
+            if (selectedTrainingYear) query = query.eq('training_year', selectedTrainingYear);
+
+            const { data } = await query;
             if (data) setStudents(data)
             setLoading(false)
         }
         fetchStudents()
-    }, [])
+    }, [selectedTrainingYear])
 
-    const yearOptions = useMemo(() => {
+    // 🔒 Batch options (2-digit code prefix) from loaded students
+    const batchOptions = useMemo(() => {
         const codes = students.map(s => s.student_code?.substring(0, 2)).filter(Boolean)
         return Array.from(new Set(codes)).sort().reverse()
     }, [students])
@@ -44,10 +73,10 @@ export default function StudentListPage() {
         return students.filter(s => {
             const searchStr = (s.first_name + s.last_name + (s.nickname || '') + s.student_code).toLowerCase()
             const matchesSearch = searchStr.includes(searchTerm.toLowerCase())
-            const matchesYear = selectedYear === 'all' || s.student_code?.startsWith(selectedYear)
-            return matchesSearch && matchesYear
+            const matchesBatch = selectedBatch === 'all' || s.student_code?.startsWith(selectedBatch)
+            return matchesSearch && matchesBatch
         })
-    }, [students, searchTerm, selectedYear])
+    }, [students, searchTerm, selectedBatch])
 
     // Pagination
     const totalPages = Math.ceil(filteredStudents.length / itemsPerPage)
@@ -57,7 +86,7 @@ export default function StudentListPage() {
     }, [filteredStudents, currentPage, itemsPerPage])
 
     // Reset page on filter change
-    useEffect(() => { setCurrentPage(1) }, [searchTerm, selectedYear, itemsPerPage])
+    useEffect(() => { setCurrentPage(1) }, [searchTerm, selectedBatch, itemsPerPage])
 
     if (loading) return <SkeletonLoader />
 
@@ -79,16 +108,30 @@ export default function StudentListPage() {
             {/* Admin-style Filter Bar */}
             <div className="bg-white/50 backdrop-blur-md p-4 rounded-[2.5rem] border border-slate-100 shadow-sm mb-8">
                 <div className="flex flex-col xl:flex-row items-center gap-4">
-                    {/* Year Dropdown Filter */}
+                    {/* 🔒 Training Year Filter (server-side) */}
+                    <div className="flex items-center gap-2 bg-white px-4 h-14 rounded-[1.5rem] border-2 border-slate-50 shadow-sm shrink-0">
+                        <CalendarDays size={16} className="text-indigo-500" />
+                        <select
+                            value={selectedTrainingYear}
+                            onChange={(e) => { setSelectedTrainingYear(e.target.value); setSelectedBatch('all'); setCurrentPage(1); }}
+                            className="text-sm font-black text-indigo-600 bg-transparent outline-none cursor-pointer"
+                        >
+                            {trainingYearOptions.map(year => (
+                                <option key={year} value={year}>ปีการศึกษา {year}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Batch (2-digit code) Filter */}
                     <div className="relative w-full xl:w-64 shrink-0">
                         <Users className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <select
                             className="w-full h-14 pl-14 pr-10 rounded-[1.5rem] border-2 border-slate-50 bg-white font-bold text-sm focus:border-indigo-500 focus:ring-0 outline-none appearance-none cursor-pointer text-slate-700 transition-all"
-                            value={selectedYear}
-                            onChange={(e) => { setSelectedYear(e.target.value); setCurrentPage(1); }}
+                            value={selectedBatch}
+                            onChange={(e) => { setSelectedBatch(e.target.value); setCurrentPage(1); }}
                         >
                             <option value="all">ทุกรุ่นรหัส</option>
-                            {yearOptions.map(year => (
+                            {batchOptions.map(year => (
                                 <option key={year} value={year}>รหัส {year}</option>
                             ))}
                         </select>

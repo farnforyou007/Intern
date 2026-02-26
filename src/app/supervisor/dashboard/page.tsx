@@ -34,6 +34,7 @@ export default function SupervisorDashboard() {
     const [pendingStudentsCount, setPendingStudentsCount] = useState(0)
     const [alertStatus, setAlertStatus] = useState<'normal' | 'overdue'>('normal') // เพิ่มบรรทัดนี้
     const [urgentRotationName, setUrgentRotationName] = useState<string>("")
+    const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -59,45 +60,30 @@ export default function SupervisorDashboard() {
     const fetchRealData = async () => {
         setLoading(true);
         try {
-            // 🟢 1. เริ่มต้น LIFF และตรวจสอบการ Login (ใช้ของจริง)
-            // (ต้องมั่นใจว่าใส่ NEXT_PUBLIC_LIFF_ID ใน .env.local แล้ว)
-            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+            // 🔒 0. ดึงปีการศึกษาปัจจุบันจาก system_configs
+            const { data: configData } = await supabase
+                .from('system_configs')
+                .select('key_value')
+                .eq('key_name', 'current_training_year')
+                .single();
+            const currentYear = configData?.key_value || '';
+            setConfigYear(currentYear);
 
-            // if (!liff.isLoggedIn()) {
-            //     liff.login(); // ถ้ายังไม่ล็อคอิน ให้เด้งไปหน้า Login ของ LINE ทันที
-            //     return; // จบการทำงานตรงนี้ รอ Redirect กลับมาใหม่
-            // }
-
-            // const profile = await liff.getProfile();
-            // console.log("User Profile:", profile); // เช็คค่าได้ตรงนี้
-
-            // ❌ ลบส่วนจำลอง (Hardcode) นี้ทิ้งไปได้เลยครับ
-            // const profile = {
-            //     userId: 'U678862bd992a4cda7aaf972743b585ac',
-            //     // userId: 'test-somruk',
-            //     displayName: '🐼 FARN 🌙'
-            // };
-
-            // version test and deploy
             // ✅ ใช้ฟังก์ชันกลางดึง ID (ส่ง URL Search Params เข้าไป)
             const urlParams = new URLSearchParams(window.location.search);
             const lineUserId = await getLineUserId(urlParams);
 
             if (!lineUserId) return;
 
-            // 2. ดึงข้อมูลพี่เลี้ยง และข้อมูลหน่วยงาน (ใช้ profile.userId จาก LIFF)
+            // 2. ดึงข้อมูลพี่เลี้ยง และข้อมูลหน่วยงาน
             const { data: svData, error: svError } = await supabase
                 .from('supervisors')
                 .select('*, training_sites(site_name)')
-                // .eq('line_user_id', profile.userId) // 👈 ใช้ ID จริงที่ดึงมา
-                .eq('line_user_id', lineUserId) // 👈 ใช้ ID จริงที่ดึงมา
-
+                .eq('line_user_id', lineUserId)
                 .single();
 
             if (svError || !svData) {
-                // กรณีไม่พบข้อมูลในระบบ (อาจจะยังไม่ได้ลงทะเบียน)
                 console.error("User not found in DB");
-                // อาจจะ Redirect ไปหน้าลงทะเบียน หรือแจ้งเตือน
                 return;
             }
 
@@ -109,8 +95,18 @@ export default function SupervisorDashboard() {
 
             setSupervisor({ ...svData, avatar_url: publicUrl });
 
+            // 🔒 2.5 ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
+            let yearStudentIds: Set<string> = new Set();
+            if (currentYear) {
+                const { data: yearStudents } = await supabase
+                    .from('students')
+                    .select('id')
+                    .eq('training_year', currentYear);
+                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
+            }
+
             // 3. ดึงข้อมูลงานที่ได้รับมอบหมายทั้งหมด (Assignments)
-            const { data: assignments, error: assignError } = await supabase
+            const { data: rawAssignments, error: assignError } = await supabase
                 .from('assignment_supervisors')
                 .select(`
                     evaluation_status,
@@ -125,9 +121,16 @@ export default function SupervisorDashboard() {
                 `)
                 .eq('supervisor_id', svData.id);
 
-            if (assignError) throw assignError;
+            // 🔒 กรองเฉพาะนักศึกษาในปีปัจจุบัน
+            const assignments = (rawAssignments || []).filter((a: any) => {
+                const studentId = String(a.student_assignments?.students?.id || a.student_assignments?.student_id || '');
+                return yearStudentIds.has(studentId);
+            });
 
-            if (assignments) {
+            if (assignError) throw assignError;
+            // (assignments ถูกกรองตามปีแล้วจากด้านบน)
+
+            if (assignments && assignments.length > 0) {
                 // --- ส่วนคำนวณ Stats (เหมือนเดิมเป๊ะ) ---
                 // const pendingTasksData = assignments.filter((a: any) => !a.is_evaluated);
 
@@ -403,6 +406,13 @@ export default function SupervisorDashboard() {
                         </div>
                         <h1 className="text-2xl font-black text-white">{supervisor?.full_name}</h1>
                         <p className="text-emerald-100/70 text-sm font-medium">{supervisor?.training_sites?.site_name}</p>
+                        {/* 🔒 Badge ปีการศึกษา */}
+                        {configYear && (
+                            <span className="inline-flex items-center gap-1.5 mt-2 bg-white/15 backdrop-blur-sm text-emerald-100 text-[10px] font-black px-3 py-1 rounded-full border border-white/10">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                ปีการศึกษา {configYear}
+                            </span>
+                        )}
                     </div>
                     {/* <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
                         <img src={supervisor?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=fallback`} alt="avatar" className="w-full h-full object-cover" />
@@ -520,6 +530,19 @@ export default function SupervisorDashboard() {
                     )}
                 </div>
             </div>
+
+            {/* 🔒 แจ้งเตือนเมื่อไม่มีนักศึกษาในปีปัจจุบัน */}
+            {configYear && stats.total === 0 && !loading && (
+                <div className="mx-6 mt-6 bg-amber-50 border border-amber-200 p-5 rounded-[2rem] flex items-start gap-4">
+                    <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600 shrink-0">
+                        <AlertCircle size={24} />
+                    </div>
+                    <div>
+                        <p className="text-sm font-black text-amber-800">ไม่พบรายชื่อนักศึกษา</p>
+                        <p className="text-xs text-amber-600 font-medium mt-0.5">ในรอบปีการศึกษา {configYear} ยังไม่มีนักศึกษาที่อยู่ในความดูแลของคุณ</p>
+                    </div>
+                </div>
+            )}
 
             {/* --- Main Menus --- */}
             <div className="p-8 space-y-4">

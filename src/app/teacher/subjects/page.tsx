@@ -6,7 +6,8 @@ import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     ChevronLeft, User, Users, Search, GraduationCap, FileText, X,
-    Download, MapPin, Phone, ListChecks, BookOpen, ChevronRight, FileSpreadsheet, Clock, ChevronDown
+    Download, MapPin, Phone, ListChecks, BookOpen, ChevronRight, FileSpreadsheet, Clock, ChevronDown,
+    CalendarDays, Filter
 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import html2canvas from 'html2canvas'
@@ -28,10 +29,14 @@ export default function EvaluationSummary() {
     const [data, setData] = useState<any[]>([])
     const [searchTerm, setSearchTerm] = useState('')
 
-    // Pagination & Year Filter
+    // Pagination & Batch Filter
     const [currentPage, setCurrentPage] = useState(1)
     const [itemsPerPage, setItemsPerPage] = useState(10)
-    const [selectedYear, setSelectedYear] = useState('all')
+    const [selectedBatch, setSelectedBatch] = useState('all')
+
+    // 🔒 Year Filter
+    const [selectedTrainingYear, setSelectedTrainingYear] = useState<string>('')
+    const [trainingYearOptions, setTrainingYearOptions] = useState<string[]>([])
 
     // Modal States
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -74,13 +79,36 @@ export default function EvaluationSummary() {
 
             if (!lineUserId) return;
 
-            if (!lineUserId) {
-                Swal.fire({
-                    title: 'ไม่พบสิทธิ์การเข้าถึง',
-                    text: 'กรุณาลงทะเบียนหรือติดต่อแอดมิน',
-                    icon: 'error'
-                }).then(() => router.replace('/'));
-                return;
+            // 🔒 ดึงปีการศึกษา default + options
+            if (!selectedTrainingYear) {
+                const { data: configData } = await supabase
+                    .from('system_configs')
+                    .select('key_value')
+                    .eq('key_name', 'current_training_year')
+                    .single();
+                if (configData?.key_value) {
+                    setSelectedTrainingYear(configData.key_value);
+                    setLoading(false);
+                    return;
+                }
+            }
+            const { data: yearsData } = await supabase
+                .from('students')
+                .select('training_year')
+                .not('training_year', 'is', null);
+            if (yearsData) {
+                const unique = Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a));
+                setTrainingYearOptions(unique as string[]);
+            }
+
+            // 🔒 ดึง student IDs ในปีที่เลือก
+            let yearStudentIds: Set<string> | null = null;
+            if (selectedTrainingYear) {
+                const { data: yearStudents } = await supabase
+                    .from('students')
+                    .select('id')
+                    .eq('training_year', selectedTrainingYear);
+                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
             }
 
             const { data: user } = await supabase.from('supervisors').select('id').eq('line_user_id', lineUserId).single()
@@ -127,7 +155,13 @@ export default function EvaluationSummary() {
                 else if (subData) query = query.in('subject_id', subData.map(s => s.subject_id))
 
                 const { data: res } = await query
-                const processed = res?.map((item: any) => {
+
+                // 🔒 กรองเฉพาะ student ในปีที่เลือก
+                const yearFiltered = yearStudentIds
+                    ? (res || []).filter((item: any) => yearStudentIds!.has(String(item.students?.id)))
+                    : res
+
+                const processed = yearFiltered?.map((item: any) => {
                     const logs = item.evaluation_logs || []
 
                     // จัดกลุ่ม logs ตาม supervisor_id
@@ -201,7 +235,7 @@ export default function EvaluationSummary() {
             setLoading(false)
         }
         fetchData()
-    }, [subjectId, supabase])
+    }, [subjectId, supabase, selectedTrainingYear])
 
     // ฟังก์ชันเปิด Modal รายละเอียด พร้อมดึงข้อคำถามจริง
     // const openDetailModal = async (student: any) => {
@@ -294,17 +328,17 @@ export default function EvaluationSummary() {
     };
 
     // Reset page on filter change
-    useEffect(() => { setCurrentPage(1) }, [searchTerm, selectedYear, subjectId])
+    useEffect(() => { setCurrentPage(1) }, [searchTerm, selectedBatch, subjectId])
 
-    // Derive unique year codes from data
-    const yearCodes = Array.from(new Set(
+    // Derive unique batch codes from data
+    const batchCodes = Array.from(new Set(
         data.map(item => (item.student?.student_code || '').substring(0, 2)).filter(Boolean)
     )).sort()
 
     const filteredData = data.filter(item => {
         const matchSearch = `${item.student?.first_name} ${item.student?.last_name} ${item.student?.student_code}`.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchYear = selectedYear === 'all' || (item.student?.student_code || '').startsWith(selectedYear)
-        return matchSearch && matchYear
+        const matchBatch = selectedBatch === 'all' || (item.student?.student_code || '').startsWith(selectedBatch)
+        return matchSearch && matchBatch
     })
 
     // Pagination helpers
@@ -626,15 +660,29 @@ export default function EvaluationSummary() {
                 {/* Filter Bar — admin style */}
                 <div className="bg-white/50 backdrop-blur-md p-4 rounded-[2.5rem] border border-slate-100 shadow-sm mb-8">
                     <div className="flex flex-col xl:flex-row items-center gap-4">
+                        {/* 🔒 Training Year Filter */}
+                        <div className="flex items-center gap-2 bg-white px-4 h-14 rounded-[1.5rem] border-2 border-slate-50 shadow-sm shrink-0">
+                            <CalendarDays size={16} className="text-indigo-500" />
+                            <select
+                                value={selectedTrainingYear}
+                                onChange={(e) => { setSelectedTrainingYear(e.target.value); setSelectedBatch('all'); }}
+                                className="text-sm font-black text-indigo-600 bg-transparent outline-none cursor-pointer"
+                            >
+                                {trainingYearOptions.map(year => (
+                                    <option key={year} value={year}>ปีการศึกษา {year}</option>
+                                ))}
+                            </select>
+                        </div>
+                        {/* Batch (2-digit code) Filter */}
                         <div className="relative w-full xl:w-64 shrink-0">
                             <Users className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <select
-                                value={selectedYear}
-                                onChange={(e) => setSelectedYear(e.target.value)}
+                                value={selectedBatch}
+                                onChange={(e) => setSelectedBatch(e.target.value)}
                                 className="w-full h-14 pl-14 pr-10 rounded-[1.5rem] border-2 border-slate-50 bg-white font-bold text-sm focus:border-indigo-500 focus:ring-0 outline-none appearance-none cursor-pointer text-slate-700 transition-all"
                             >
-                                <option value="all">ทุกรหัสชั้นปี</option>
-                                {yearCodes.map(code => (
+                                <option value="all">ทุกรุ่นรหัส</option>
+                                {batchCodes.map(code => (
                                     <option key={code} value={code}>รหัส {code}</option>
                                 ))}
                             </select>

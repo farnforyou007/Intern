@@ -4,7 +4,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import {
     Search, ArrowLeft, Calendar, User,
     Lock, Edit3, Clock, History,
-    ChevronRight, BookOpen
+    ChevronRight, BookOpen, AlertCircle, CalendarDays
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Swal from 'sweetalert2'
@@ -16,6 +16,7 @@ export default function EvaluationHistory() {
     const [loading, setLoading] = useState(true)
     const [historyList, setHistoryList] = useState<any[]>([])
     const [searchTerm, setSearchTerm] = useState('')
+    const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
 
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,36 +25,31 @@ export default function EvaluationHistory() {
 
     useEffect(() => {
         const init = async () => {
-            // 1. จำลอง User (ของจริงใช้ LIFF)
-            // const userId = 'U678862bd992a4cda7aaf972743b585ac'
-            // const userId = 'test-somruk'
-            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
-
-            // // 🟢 2. ตรวจสอบการ Login
-            // if (!liff.isLoggedIn()) {
-            //     liff.login({ redirectUri: window.location.href })
-            //     return
-            // }
-
-            // // 🟢 3. ดึง Profile จริง
-            // const profile = await liff.getProfile()
-            // const userId = profile.userId
-
             const urlParams = new URLSearchParams(window.location.search);
             const lineUserId = await getLineUserId(urlParams);
 
             if (!lineUserId) return;
-            // 2. ดึงข้อมูลพี่เลี้ยง
+
+            // 🔒 ดึงปีการศึกษาปัจจุบัน
+            const { data: configData } = await supabase
+                .from('system_configs')
+                .select('key_value')
+                .eq('key_name', 'current_training_year')
+                .single();
+            const currentYear = configData?.key_value || '';
+            setConfigYear(currentYear);
+
+            // ดึงข้อมูลพี่เลี้ยง
             const { data: sv } = await supabase.from('supervisors').select('id').eq('line_user_id', lineUserId).single()
 
             if (sv) {
-                fetchHistory(sv.id)
+                fetchHistory(sv.id, currentYear)
             }
         }
         init()
     }, [])
 
-    const fetchHistory = async (svId: string) => {
+    const fetchHistory = async (svId: string, currentYear: string = '') => {
         setLoading(true)
         try {
             // ดึงงานที่ "ตรวจแล้ว" (is_evaluated = true)
@@ -63,7 +59,8 @@ export default function EvaluationHistory() {
                     id, updated_at,
                     student_assignments:assignment_id (
                         id,
-                        students:student_id ( id, first_name, last_name, student_code, avatar_url, nickname ),
+                        student_id,
+                        students:student_id ( id, first_name, last_name, student_code, avatar_url, nickname, training_year ),
                         subjects:subject_id ( name ),
                         sub_subjects:sub_subject_id ( name ),
                         rotations:rotation_id ( name, end_date )
@@ -74,7 +71,15 @@ export default function EvaluationHistory() {
                 .order('updated_at', { ascending: false })
 
             if (error) throw error
-            setHistoryList(data || [])
+
+            // 🔒 กรองเฉพาะนักศึกษาในปีปัจจุบัน
+            const filtered = currentYear
+                ? (data || []).filter((item: any) => {
+                    const trainingYear = item.student_assignments?.students?.training_year;
+                    return trainingYear === currentYear;
+                })
+                : (data || []);
+            setHistoryList(filtered)
         } catch (error) {
             console.error("Error fetching history:", error)
         } finally {
@@ -135,6 +140,13 @@ export default function EvaluationHistory() {
                     <div className="text-center">
                         <h1 className="text-xl font-black text-slate-900 tracking-tight">ประวัติการประเมิน</h1>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">History Log</p>
+                        {/* 🔒 Badge ปีการศึกษา */}
+                        {configYear && (
+                            <span className="inline-flex items-center gap-1.5 mt-1 bg-blue-50 text-blue-700 text-[10px] font-black px-3 py-1 rounded-full border border-blue-100">
+                                <CalendarDays size={10} />
+                                ปีการศึกษา {configYear}
+                            </span>
+                        )}
                     </div>
                     <div className="w-11 h-11 flex items-center justify-center text-slate-300 bg-slate-50 rounded-2xl border border-slate-100">
                         <History size={20} />
@@ -249,11 +261,21 @@ export default function EvaluationHistory() {
                         )
                     })
                 ) : (
-                    <div className="text-center py-24 opacity-60">
-                        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
-                            <History size={40} />
-                        </div>
-                        <p className="font-black text-slate-400">ยังไม่มีประวัติการประเมิน</p>
+                    <div className="text-center py-16">
+                        {configYear ? (
+                            <div className="bg-amber-50 border border-amber-200 p-6 rounded-[2rem] mx-auto max-w-sm">
+                                <History size={36} className="mx-auto mb-3 text-amber-500" />
+                                <p className="font-black text-amber-800 text-sm">ยังไม่มีประวัติการประเมิน</p>
+                                <p className="text-xs text-amber-600 font-medium mt-1">ในรอบปีการศึกษา {configYear}</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
+                                    <History size={40} />
+                                </div>
+                                <p className="font-black text-slate-400">ยังไม่มีประวัติการประเมิน</p>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

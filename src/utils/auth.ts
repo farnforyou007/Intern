@@ -28,6 +28,7 @@ export const getLineUserId = async (searchParams: URLSearchParams): Promise<stri
     if (activeDebugKey) {
         // แมปชื่อย่อที่คุณต้องการใช้เทส เข้ากับ ID ที่คุณสร้างใน Supabase
         const mockMap: Record<string, string> = {
+            'farn': 'U678862bd992a4cda7aaf972743b585ac',      // พี่เลี้ยงคนที่ 1
             'sp1': 'DEBUG_SV_01',      // พี่เลี้ยงคนที่ 1
             'sp2': 'DEBUG_SV_02',      // พี่เลี้ยงคนที่ 2
             'sp3': 'DEBUG_SV_03',      // พี่เลี้ยงคนที่ 3
