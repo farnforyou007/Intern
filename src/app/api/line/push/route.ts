@@ -18,6 +18,11 @@ export async function POST(req: Request) {
         });
 
         const data = await response.json();
+
+        if (!response.ok) {
+            console.error("LINE API Error:", data); // ดู Error ใน Vercel Logs
+            return NextResponse.json({ success: false, detail: data }, { status: response.status });
+        }
         return NextResponse.json({ success: true, data });
     } catch (error) {
         return NextResponse.json({ success: false, error: 'Failed to send line message' }, { status: 500 });
