@@ -70,7 +70,7 @@ export const flexAccountApproved = (name: string) => ({
         contents: [
             {
                 type: "button",
-                action: { type: "uri", label: "เข้าสู่ระบบ", uri: `${process.env.NEXT_PUBLIC_APP_URL}/auth/login` },
+                action: { type: "uri", label: "เข้าใช้งาน", uri: `${process.env.NEXT_PUBLIC_LIFF_URL}/` },
                 style: "primary",
                 color: "#064e3b",
                 height: "sm"

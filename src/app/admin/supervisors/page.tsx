@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import Swal from 'sweetalert2'
 import AdminLayout from '@/components/AdminLayout'
 import * as XLSX from 'xlsx'
+import { flexAccountApproved } from '@/lib/lineFlex';
 // --- Component เสริม: Skeleton Loading ---
 function PersonnelSkeleton({ viewType }: { viewType: 'card' | 'table' }) {
     if (viewType === 'card') {
@@ -396,10 +397,67 @@ export default function AdminManagement() {
         if (error) Swal.fire('Error', error.message, 'error'); else { Swal.fire({ icon: 'success', title: 'อัปเดตข้อมูลแล้ว', timer: 1500, showConfirmButton: false }); fetchData(); setSelectedPersonnel(null); }
     }
 
-    const handleApprove = async (id: string, name: string) => {
-        const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการอนุมัติสิทธิ์?', html: `คุณกำลังจะอนุมัติสิทธิ์การเข้าใช้งานให้คุณ <b>"${name}"</b>`, icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981', cancelButtonColor: '#94a3b8', confirmButtonText: 'ยืนยันการอนุมัติ', cancelButtonText: 'ยกเลิก', customClass: { popup: 'rounded-[2.5rem] font-sans p-10', confirmButton: 'rounded-full px-10 py-3 font-bold order-1', cancelButton: 'rounded-full px-10 py-3 font-bold order-2' } })
-        if (isConfirmed) { const { error } = await supabase.from('supervisors').update({ is_verified: true }).eq('id', id); if (!error) { fetchData(); Swal.fire({ icon: 'success', title: 'อนุมัติเรียบร้อย', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem]' } }) } }
+    // const handleApprove = async (id: string, name: string) => {
+    //     const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการอนุมัติสิทธิ์?', html: `คุณกำลังจะอนุมัติสิทธิ์การเข้าใช้งานให้คุณ <b>"${name}"</b>`, icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981', cancelButtonColor: '#94a3b8', confirmButtonText: 'ยืนยันการอนุมัติ', cancelButtonText: 'ยกเลิก', customClass: { popup: 'rounded-[2.5rem] font-sans p-10', confirmButton: 'rounded-full px-10 py-3 font-bold order-1', cancelButton: 'rounded-full px-10 py-3 font-bold order-2' } })
+    //     if (isConfirmed) { const { error } = await supabase.from('supervisors').update({ is_verified: true }).eq('id', id); if (!error) { fetchData(); Swal.fire({ icon: 'success', title: 'อนุมัติเรียบร้อย', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem]' } }) } }
+    // }
+    // 2. ปรับฟังก์ชันให้รับ lineUserId เพิ่มเข้ามา
+const handleApprove = async (id: string, name: string, lineUserId: string) => {
+    const { isConfirmed } = await Swal.fire({ 
+        title: 'ยืนยันการอนุมัติสิทธิ์?', 
+        html: `คุณกำลังจะอนุมัติสิทธิ์การเข้าใช้งานให้คุณ <b>"${name}"</b>`, 
+        icon: 'question', 
+        showCancelButton: true, 
+        confirmButtonColor: '#10b981', 
+        cancelButtonColor: '#94a3b8', 
+        confirmButtonText: 'ยืนยันการอนุมัติ', 
+        cancelButtonText: 'ยกเลิก', 
+        customClass: { 
+            popup: 'rounded-[2.5rem] font-sans p-10', 
+            confirmButton: 'rounded-full px-10 py-3 font-bold order-1', 
+            cancelButton: 'rounded-full px-10 py-3 font-bold order-2' 
+        } 
+    })
+
+    if (isConfirmed) { 
+        // อัปเดตสถานะใน Database
+        const { error } = await supabase
+            .from('supervisors')
+            .update({ is_verified: true })
+            .eq('id', id); 
+
+        if (!error) { 
+            // 🚩 เพิ่มส่วนส่ง LINE ตรงนี้
+            if (lineUserId) {
+                try {
+                    await fetch('/api/line/push', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            lineUserId: lineUserId,
+                            flexMessage: {
+                                type: "flex",
+                                altText: "บัญชีของคุณได้รับการอนุมัติแล้ว",
+                                contents: flexAccountApproved(name) // ส่งชื่อไปแสดงในการ์ด
+                            }
+                        })
+                    });
+                } catch (err) {
+                    console.error("Line Notification Error:", err);
+                }
+            }
+
+            fetchData(); 
+            Swal.fire({ 
+                icon: 'success', 
+                title: 'อนุมัติเรียบร้อย', 
+                timer: 1500, 
+                showConfirmButton: false, 
+                customClass: { popup: 'rounded-[2.5rem]' } 
+            }) 
+        } 
     }
+}
 
     const handleDelete = async (id: string, name: string) => {
         const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการลบ?', html: `คุณกำลังจะลบ <b>"${name}"</b> ออกจากระบบ`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#94a3b8', confirmButtonText: 'ยืนยันการลบ', cancelButtonText: 'ยกเลิก', customClass: { popup: 'rounded-[2.5rem] font-sans p-10', confirmButton: 'rounded-full px-10 py-3 font-bold order-1', cancelButton: 'rounded-full px-10 py-3 font-bold order-2' } })
