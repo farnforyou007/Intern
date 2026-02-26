@@ -234,7 +234,7 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                             </div>
                         </div>
                         <div className="px-6 md:px-12 py-4 md:py-8 bg-slate-50 border-t border-slate-100 shrink-0">
-                            {isEditing ? <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700 h-16 rounded-[1.5rem] font-black text-white shadow-2xl shadow-blue-200 transition-all uppercase tracking-[0.2em] text-sm"><Save size={20} className="mr-3" /> บันทึกข้อมูล</Button> : !data.is_verified ? <div className="flex flex-row gap-4 w-full"><Button onClick={() => { onApprove(data.id, data.full_name); onClose(); }} className="flex-[3] bg-slate-900 hover:bg-blue-600 h-16 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] text-white shadow-xl transition-all">ยืนยันการอนุมัติ</Button><Button onClick={() => { onDelete(data.id, data.full_name); onClose(); }} variant="outline" className="flex-1 h-16 rounded-[1.5rem] text-red-500 border-red-200 bg-white font-black hover:bg-red-50 text-xs uppercase tracking-widest shadow-sm">ไม่อนุมัติ</Button></div> : <Button onClick={() => { onDelete(data.id, data.full_name); onClose(); }} variant="ghost" className="w-full h-16 rounded-[1.5rem] font-bold text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all text-[11px] uppercase tracking-[0.4em]">Delete Personnel Profile</Button>}
+                            {isEditing ? <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700 h-16 rounded-[1.5rem] font-black text-white shadow-2xl shadow-blue-200 transition-all uppercase tracking-[0.2em] text-sm"><Save size={20} className="mr-3" /> บันทึกข้อมูล</Button> : !data.is_verified ? <div className="flex flex-row gap-4 w-full"><Button onClick={() => { onApprove(data.id, data.full_name,data.line_user_id); onClose(); }} className="flex-[3] bg-slate-900 hover:bg-blue-600 h-16 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] text-white shadow-xl transition-all">ยืนยันการอนุมัติ</Button><Button onClick={() => { onDelete(data.id, data.full_name); onClose(); }} variant="outline" className="flex-1 h-16 rounded-[1.5rem] text-red-500 border-red-200 bg-white font-black hover:bg-red-50 text-xs uppercase tracking-widest shadow-sm">ไม่อนุมัติ</Button></div> : <Button onClick={() => { onDelete(data.id, data.full_name); onClose(); }} variant="ghost" className="w-full h-16 rounded-[1.5rem] font-bold text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all text-[11px] uppercase tracking-[0.4em]">Delete Personnel Profile</Button>}
                         </div>
                     </div>
                 </div>
@@ -376,7 +376,7 @@ export default function AdminManagement() {
     const fetchData = async () => {
         setLoading(true)
         try {
-            const { data: supervisors } = await supabase.from('supervisors').select(`*, training_sites:site_id(site_name, province), supervisor_subjects(subject_id, sub_subject_id, subjects:subject_id(name), sub_subjects:sub_subject_id(name))`).order('created_at', { ascending: false })
+            const { data: supervisors } = await supabase.from('supervisors').select(`*,line_user_id, training_sites:site_id(site_name, province), supervisor_subjects(subject_id, sub_subject_id, subjects:subject_id(name), sub_subjects:sub_subject_id(name))`).order('created_at', { ascending: false })
             const { data: subs } = await supabase.from('subjects').select('*').order('name')
             const { data: sSubs } = await supabase.from('sub_subjects').select('*').order('name')
             const { data: sits } = await supabase.from('training_sites').select('*').order('site_name')
@@ -403,6 +403,7 @@ export default function AdminManagement() {
     // }
     // 2. ปรับฟังก์ชันให้รับ lineUserId เพิ่มเข้ามา
 const handleApprove = async (id: string, name: string, lineUserId: string) => {
+    console.log("Checking Data before API call:", { id, name, lineUserId });
     const { isConfirmed } = await Swal.fire({ 
         title: 'ยืนยันการอนุมัติสิทธิ์?', 
         html: `คุณกำลังจะอนุมัติสิทธิ์การเข้าใช้งานให้คุณ <b>"${name}"</b>`, 
@@ -426,11 +427,12 @@ const handleApprove = async (id: string, name: string, lineUserId: string) => {
             .update({ is_verified: true })
             .eq('id', id); 
 
-        if (!error) { 
+        if (!error && lineUserId) { 
+            console.log("Attempting to send LINE to:", lineUserId);
             // 🚩 เพิ่มส่วนส่ง LINE ตรงนี้
             if (lineUserId) {
                 try {
-                    await fetch('/api/line/push', {
+                  const res =  await fetch('/api/line/push', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -441,7 +443,10 @@ const handleApprove = async (id: string, name: string, lineUserId: string) => {
                                 contents: flexAccountApproved(name) // ส่งชื่อไปแสดงในการ์ด
                             }
                         })
+             
                     });
+                               const debugResult = await res.json();
+            console.log("API Response:", debugResult);
                 } catch (err) {
                     console.error("Line Notification Error:", err);
                 }
@@ -455,6 +460,7 @@ const handleApprove = async (id: string, name: string, lineUserId: string) => {
                 showConfirmButton: false, 
                 customClass: { popup: 'rounded-[2.5rem]' } 
             }) 
+            
         } 
     }
 }
