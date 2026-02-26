@@ -25,10 +25,15 @@ const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-interface Mentor {
-    id: number;
-    full_name: string;
-    site_id: number;
+interface RegistrationForm {
+    student_code: string;
+    prefix: string;
+    first_name: string;
+    last_name: string;
+    nickname: string;
+    phone: string;
+    email: string;
+    assignments: any[]; // หรือระบุ Type ของ assignment ให้ละเอียด
 }
 
 export default function StudentRegisterPage() {
@@ -46,7 +51,7 @@ export default function StudentRegisterPage() {
     // const [trainingYear, setTrainingYear] = useState('');
     const [trainingYear, setTrainingYear] = useState<string>('');
     const [rotations, setRotations] = useState<any[]>([]);
-    const [form, setForm] = useState<any>({
+    const [form, setForm] = useState<RegistrationForm>({
         student_code: '', prefix: '',
         first_name: '', last_name: '',
         nickname: '', phone: '',
