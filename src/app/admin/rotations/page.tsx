@@ -441,9 +441,18 @@ export default function RotationsPage() {
                     .maybeSingle();
 
                 if (existing) {
-                    setLoading(false);
-                    return Swal.fire('ข้อมูลซ้ำ', `มีผลัดที่ ${formData.round_number} ของปี ${formData.academic_year} อยู่ในระบบแล้ว`, 'error');
-                }
+                setLoading(false); // ปลดล็อกปุ่มเพื่อให้แก้ไขข้อมูลได้
+                return Swal.fire({
+                    icon: 'error',
+                    title: 'ข้อมูลซ้ำ',
+                    text: `มีผลัดที่ ${formData.round_number} ของปี ${formData.academic_year} อยู่ในระบบแล้ว`,
+                    timer: 2000, // ให้หายไปเองภายใน 2 วินาที
+                    showConfirmButton: false, // ไม่ต้องรอให้กด OK
+                    customClass: {
+                        popup: 'rounded-[2rem] font-sans'
+                    }
+                });
+            }
 
                 const { data, error } = await supabase.from('rotations').insert(rotationPayload).select().single()
                 if (error) throw error;
