@@ -651,7 +651,7 @@ export default function StudentManagement() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="space-y-1">
-                                                    
+
                                                     <div className="flex items-center gap-2">
                                                         {/* Badge แสดงปีการศึกษาที่ฝึกงาน */}
                                                         <span className="bg-emerald-50 text-emerald-600 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-100 uppercase tracking-wider">
@@ -964,6 +964,7 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
     const handleSave = async () => {
         setLoading(true);
         try {
+            // 1. เตรียมข้อมูลพื้นฐานนักศึกษา
             const payload = {
                 prefix: form.prefix,
                 first_name: form.first_name,
@@ -971,23 +972,60 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                 student_code: form.student_code,
                 phone: form.phone,
                 email: form.email,
-                training_year: form.training_year, // 🚩 บันทึกปีการศึกษา
+                training_year: form.training_year, // บันทึกปีการศึกษา
                 avatar_url: form.avatar_url
             };
 
-            if (form.id) {
-                const { error } = await supabase.from('students').update(payload).eq('id', form.id);
-                if (error) throw error;
-            } else {
-                const { error } = await supabase.from('students').insert([payload]);
-                if (error) throw error;
+            // 2. อัปเดตข้อมูลนักศึกษา (ตาราง students)
+            const { error: studentError } = await supabase
+                .from('students')
+                .update(payload)
+                .eq('id', form.id);
+
+            if (studentError) throw studentError;
+
+            // 3. วนลูปจัดการข้อมูลสถานที่ฝึกและพี่เลี้ยง (ตารางพ่วง)
+            if (form.grouped_assignments && form.grouped_assignments.length > 0) {
+                for (const rot of form.grouped_assignments) {
+                    for (const sub of rot.subjects_in_rotation) {
+
+                        // A. อัปเดตสถานที่ฝึก (site_id) ในแต่ละ Assignment
+                        await supabase.from('student_assignments')
+                            .update({ site_id: rot.site_id })
+                            .eq('id', sub.assignment_id);
+
+                        // B. จัดการพี่เลี้ยง (ลบของเก่าออกก่อน แล้ว Insert ใหม่)
+                        await supabase.from('assignment_supervisors')
+                            .delete()
+                            .eq('assignment_id', sub.assignment_id);
+
+                        // C. ถ้ามีการเลือกพี่เลี้ยงใหม่ ให้บันทึกลงไป
+                        if (sub.supervisor_ids && sub.supervisor_ids.length > 0) {
+                            const mentorRecords = sub.supervisor_ids.map((sId: any) => ({
+                                assignment_id: sub.assignment_id,
+                                supervisor_id: sId
+                            }));
+                            await supabase.from('assignment_supervisors').insert(mentorRecords);
+                        }
+                    }
+                }
             }
 
-            Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
-            onClose();
-            // onRefresh();
+            // 4. แจ้งเตือนและอัปเดตหน้าจอหลัก
+            Swal.fire({
+                icon: 'success',
+                title: 'บันทึกข้อมูลสำเร็จ',
+                timer: 1500,
+                showConfirmButton: false,
+                customClass: { popup: 'rounded-[2rem]' }
+            });
+
+            if (fetchData) await fetchData(); // ดึงข้อมูลใหม่มาโชว์ที่ตารางหลัก
+            onClose(); // ปิด Modal
+
         } catch (error: any) {
-            Swal.fire('Error', error.message, 'error');
+            console.error('Save error:', error);
+            Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
         } finally {
             setLoading(false);
         }

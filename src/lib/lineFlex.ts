@@ -177,53 +177,114 @@ export const flexRegisterSuccess = (data: { name: string; site: string }) => ({
 /**
  * ✅ 2. แจ้งเตือนเมื่อได้รับการอนุมัติ (Approved) - สีเขียว Emerald
  */
-export const flexAccountApproved = (name: string) => ({
-    type: "flex",
-    altText: "🎊 บัญชีของคุณได้รับการอนุมัติแล้ว",
-    contents: {
-        type: "bubble",
-        size: "mega",
-        header: {
-            type: "box",
-            layout: "vertical",
-            contents: [
-                { type: "text", text: "APPROVED", weight: "bold", color: "#ffffff", size: "xs", align: "center" },
-                { type: "text", text: "บัญชีได้รับการอนุมัติ", weight: "bold", color: "#ffffff", size: "lg", align: "center", margin: "md" }
-            ],
-            backgroundColor: "#10b981",
-            paddingAll: "20px"
-        },
-        body: {
-            type: "box",
-            layout: "vertical",
-            contents: [
-                { type: "text", text: `สวัสดี อ.${name}`, weight: "bold", size: "xl", align: "center", color: "#1e293b" },
-                { type: "text", text: "ท่านสามารถเข้าใช้งานระบบได้แล้ว", size: "sm", color: "#64748b", align: "center", margin: "sm" },
-                { type: "separator", margin: "lg" },
-                {
-                    type: "box",
-                    layout: "vertical",
-                    margin: "lg",
-                    contents: [
-                        { type: "text", text: "ขณะนี้ท่านสามารถเริ่มดำเนินการประเมินนักศึกษาในส่วนที่รับผิดชอบได้ทันทีผ่าน LIFF Application", wrap: true, size: "xs", color: "#94a3b8", align: "center" }
-                    ]
-                }
-            ]
-        },
-        footer: {
-            type: "box",
-            layout: "vertical",
-            contents: [
-                {
-                    type: "button",
-                    action: { type: "uri", label: "เข้าใช้งานระบบ", uri: `${process.env.NEXT_PUBLIC_LIFF_URL}/` },
-                    style: "primary",
-                    color: "#10b981"
-                }
-            ]
+// export const flexAccountApproved = (name: string) => ({
+
+//     type: "flex",
+//     altText: "🎊 บัญชีของคุณได้รับการอนุมัติแล้ว",
+//     contents: {
+//         type: "bubble",
+//         size: "mega",
+//         header: {
+//             type: "box",
+//             layout: "vertical",
+//             contents: [
+//                 { type: "text", text: "APPROVED", weight: "bold", color: "#ffffff", size: "xs", align: "center" },
+//                 { type: "text", text: "บัญชีได้รับการอนุมัติ", weight: "bold", color: "#ffffff", size: "lg", align: "center", margin: "md" }
+//             ],
+//             backgroundColor: "#10b981",
+//             paddingAll: "20px"
+//         },
+//         body: {
+//             type: "box",
+//             layout: "vertical",
+//             contents: [
+//                 { type: "text", text: `สวัสดี อ.${name}`, weight: "bold", size: "xl", align: "center", color: "#1e293b" },
+//                 { type: "text", text: "ท่านสามารถเข้าใช้งานระบบได้แล้ว", size: "sm", color: "#64748b", align: "center", margin: "sm" },
+//                 { type: "separator", margin: "lg" },
+//                 {
+//                     type: "box",
+//                     layout: "vertical",
+//                     margin: "lg",
+//                     contents: [
+//                         { type: "text", text: "ขณะนี้ท่านสามารถเริ่มดำเนินการประเมินนักศึกษาในส่วนที่รับผิดชอบได้ทันที", wrap: true, size: "xs", color: "#94a3b8", align: "center" }
+//                     ]
+//                 }
+//             ]
+//         },
+//         footer: {
+//             type: "box",
+//             layout: "vertical",
+//             contents: [
+//                 {
+//                     type: "button",
+//                     action: { type: "uri", label: "เข้าใช้งานระบบ", uri: `${process.env.NEXT_PUBLIC_LIFF_URL}` },
+//                     style: "primary",
+//                     color: "#10b981"
+//                 }
+//             ]
+//         }
+//     }
+// });
+
+
+export const flexAccountApproved = (name: string) => {
+    // 1. จัดการค่า URL ให้ชัวร์ว่าไม่เป็นค่าว่าง
+    const liffUrl = process.env.NEXT_PUBLIC_LIFF_URL || "https://liff.line.me/2009096451-rkWSBIMh";
+    const finalUri = liffUrl.endsWith('/') ? liffUrl : `${liffUrl}/`;
+
+    // 2. Return Object ที่ถูกต้องออกไปเพียงตัวเดียว
+    return {
+        type: "flex" as const,
+        altText: "🎊 บัญชีของคุณได้รับการอนุมัติแล้ว",
+        contents: {
+            type: "bubble" as const,
+            size: "mega" as const,
+            header: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                    { type: "text", text: "APPROVED", weight: "bold", color: "#ffffff", size: "xs", align: "center" },
+                    { type: "text", text: "บัญชีได้รับการอนุมัติ", weight: "bold", color: "#ffffff", size: "lg", align: "center", margin: "md" }
+                ],
+                backgroundColor: "#10b981",
+                paddingAll: "20px"
+            },
+            body: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                    { type: "text", text: `สวัสดี อ.${name}`, weight: "bold", size: "xl", align: "center", color: "#1e293b" },
+                    { type: "text", text: "ท่านสามารถเข้าใช้งานระบบได้แล้ว", size: "sm", color: "#64748b", align: "center", margin: "sm" },
+                    { type: "separator", margin: "lg" },
+                    {
+                        type: "box",
+                        layout: "vertical",
+                        margin: "lg",
+                        contents: [
+                            { type: "text", text: "ขณะนี้ท่านสามารถเริ่มดำเนินการประเมินนักศึกษาในส่วนที่รับผิดชอบได้ทันที", wrap: true, size: "xs", color: "#94a3b8", align: "center" }
+                        ]
+                    }
+                ]
+            },
+            footer: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                    {
+                        type: "button",
+                        action: {
+                            type: "uri",
+                            label: "เข้าใช้งานระบบ",
+                            uri: finalUri
+                        },
+                        style: "primary",
+                        color: "#10b981"
+                    }
+                ]
+            }
         }
-    }
-});
+    };
+};
 
 /**
  * ⏰ 3. แจ้งเตือนใกล้ครบกำหนด (Reminder) - สีแดง Urgent
