@@ -126,6 +126,18 @@ export default function EvaluationSummary() {
                 return 99;
             };
 
+            const getTag = (title: string) => {
+                const match = title.match(/\((.*?)\)/);
+                return match ? match[1].trim() : "";
+            };
+
+            const sortEvaluations = (a: any, b: any) => {
+                const tagA = getTag(a.title || "");
+                const tagB = getTag(b.title || "");
+                if (tagA !== tagB) return tagA.localeCompare(tagB, 'th');
+                return getPriority(a.title || "") - getPriority(b.title || "");
+            };
+
             if (user) {
                 const { data: subData } = await supabase.from('supervisor_subjects').select('subject_id, subjects(name, id)').eq('supervisor_id', user.id)
                 setSubjects(subData || [])
@@ -137,11 +149,12 @@ export default function EvaluationSummary() {
                     return
                 }
 
-                // 🚩 Query รวม supervisor info
+                // 🚩 Query รวม supervisor info + sub_subjects
                 let query = supabase.from('student_assignments').select(`
                     id, 
                     students (id, first_name, last_name, student_code, avatar_url, phone),
-                    subjects (name),
+                    subjects (id, name),
+                    sub_subjects (id, name),
                     training_sites (site_name, province), 
                     evaluation_logs (
                         id, total_score, comment, supervisor_id,created_at,
@@ -159,13 +172,42 @@ export default function EvaluationSummary() {
                 // 🔒 กรองเฉพาะ student ในปีที่เลือก
                 const yearFiltered = yearStudentIds
                     ? (res || []).filter((item: any) => yearStudentIds!.has(String(item.students?.id)))
-                    : res
+                    : (res || [])
 
-                const processed = yearFiltered?.map((item: any) => {
-                    const logs = item.evaluation_logs || []
+                // 🟢 1. จัดกลุ่ม (Grouping) ข้อมูลนักศึกษา 1 คนต่อ 1 แถว
+                const groupedStudents: { [studentId: string]: any } = {}
+
+                yearFiltered.forEach((item: any) => {
+                    const studentId = item.students?.id
+                    if (!studentId) return
+
+                    if (!groupedStudents[studentId]) {
+                        groupedStudents[studentId] = {
+                            student: item.students,
+                            place: item.training_sites,
+                            subjectName: item.subjects?.name || 'ไม่ระบุวิชา',
+                            subSubjects: new Set<string>(), // เก็บชื่อวิชาย่อย
+                            allLogs: [] // รวม evaluation_logs ของทุกวิชาย่อยมาไว้ด้วยกัน
+                        }
+                    }
+
+                    // เพิ่มวิชาย่อย
+                    if (item.sub_subjects?.name) {
+                        groupedStudents[studentId].subSubjects.add(item.sub_subjects.name)
+                    }
+
+                    // รวม logs
+                    if (item.evaluation_logs && item.evaluation_logs.length > 0) {
+                        groupedStudents[studentId].allLogs.push(...item.evaluation_logs)
+                    }
+                })
+
+                // 🟢 2. ประมวลผลจากข้อมูลที่จัดกลุ่มแล้ว
+                const processed = Object.values(groupedStudents).map((item: any) => {
+                    const logs = item.allLogs || []
 
                     // จัดกลุ่ม logs ตาม supervisor_id
-                    const supervisorMap: { [key: string]: { supervisorId: string, supervisorName: string, logs: any[] } } = {}
+                    const supervisorMap: { [key: string]: { "supervisorId": string, "supervisorName": string, "logs": any[] } } = {}
                     logs.forEach((log: any) => {
                         const svId = log.supervisor_id || 'unknown'
                         if (!supervisorMap[svId]) {
@@ -188,7 +230,7 @@ export default function EvaluationSummary() {
                             comment: log.comment || '-',
                             answers: log.evaluation_answers || [],
                             evaluatedAt: log.created_at
-                        })).sort((a, b) => getPriority(a.title) - getPriority(b.title))
+                        })).sort(sortEvaluations)
                     }))
 
                     const mentorCount = supervisorEvaluations.length
@@ -219,12 +261,19 @@ export default function EvaluationSummary() {
                                 answers: evs[0].answers // ใช้ answers ของคนแรกเพื่อนับจำนวนข้อ
                             }
 
-                        }).sort((a, b) => getPriority(a.title) - getPriority(b.title));
+                        }).sort(sortEvaluations);
                     }
+
+                    // จัดรูปแบบชื่อวิชาที่จะแสดง ถ้ามีวิชาย่อยให้เอามาต่อท้ายวิชาหลัก
+                    let displaySubjectName = item.subjectName;
+                    if (item.subSubjects.size > 0) {
+                        displaySubjectName += ` (${Array.from(item.subSubjects).join(', ')})`
+                    }
+
                     return {
-                        student: item.students,
-                        place: item.training_sites,
-                        subjectName: item.subjects?.name,
+                        student: item.student,
+                        place: item.place,
+                        subjectName: displaySubjectName,
                         evaluations,
                         supervisorEvaluations,
                         mentorCount

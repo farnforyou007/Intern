@@ -39,7 +39,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         const colorMap: any = {
             'ประเมินแล้ว': '#10b981',
             'ประเมินแล้วบางส่วน': '#f59e0b',
-            'ยังไม่ประเมิน': '#ef4444'
+            'ยังไม่ประเมิน': '#94a3b8' // สีเทาให้ตรงกับกราฟ
         };
         return (
             <div className="bg-white p-4 rounded-2xl shadow-xl border-none font-sans">
@@ -181,22 +181,22 @@ export default function AdminDashboard() {
                 subjects: subjectCount || 0
             })
 
-            // 🔒 ดึงข้อมูลการประเมิน (กรองตามปี)
-            const { data: allEvalData, count: totalCount } = await supabase
+            // 🔒 ดึงข้อมูลการประเมิน (กรองตามปี) แท้จริงผ่าน inner join
+            let evalQuery = supabase
                 .from('assignment_supervisors')
-                .select('evaluation_status, assignment_id', { count: 'exact' });
+                .select(`
+                    evaluation_status,
+                    assignment_id,
+                    student_assignments!inner (
+                        students!inner (training_year)
+                    )
+                `);
 
-            // กรองตาม yearStudentIds ถ้ามี
-            let evalData = allEvalData;
-            if (yearStudentIds && yearStudentIds.length > 0) {
-                // ดึง assignment_ids ที่เกี่ยวข้องกับนักศึกษาในปีที่เลือก
-                const { data: yearAssignments } = await supabase
-                    .from('student_assignments')
-                    .select('id')
-                    .in('student_id', yearStudentIds);
-                const yearAssignmentIds = new Set((yearAssignments || []).map((a: any) => String(a.id)));
-                evalData = (allEvalData || []).filter((e: any) => yearAssignmentIds.has(String(e.assignment_id)));
+            if (selectedYear) {
+                evalQuery = evalQuery.eq('student_assignments.students.training_year', selectedYear);
             }
+
+            const { data: evalData } = await evalQuery;
 
             // const completed = evalData?.filter(item => item.is_evaluated).length || 0;
             // const pending = (totalCount || 0) - completed;
@@ -217,10 +217,13 @@ export default function AdminDashboard() {
 
 
             // 2. ดึง Recent Activities (อย่างละ 5)
+            let studentsActivityQuery = supabase.from('students').select('id, first_name, last_name, created_at').order('created_at', { ascending: false }).limit(5);
+            if (selectedYear) studentsActivityQuery = studentsActivityQuery.eq('training_year', selectedYear);
+
             const [newSupervisors, newSites, newStudents] = await Promise.all([
                 supabase.from('supervisors').select('id, full_name, created_at, is_verified').order('created_at', { ascending: false }).limit(5),
                 supabase.from('training_sites').select('id, site_name, created_at').order('created_at', { ascending: false }).limit(5),
-                supabase.from('students').select('id, first_name, last_name, created_at').order('created_at', { ascending: false }).limit(5)
+                studentsActivityQuery
             ]);
 
             setRawActivities({
@@ -257,29 +260,26 @@ export default function AdminDashboard() {
             const subjectsList = subjectsRes.data || [];
             const subSubjectsList = subSubjectsRes.data || [];
 
-            // 2. ดึงข้อมูลการประเมินพร้อมความสัมพันธ์
-            const { data: rawAssignments } = await supabase
+            // 2. ดึงข้อมูลการประเมินพร้อมความสัมพันธ์ และกรองตามปีแท้จริงด้วย inner join
+            let assignmentQuery = supabase
                 .from('assignment_supervisors')
                 .select(`
                 is_evaluated,
                 evaluation_status,
                 assignment_id,
-                student_assignments:assignment_id (
+                student_assignments!inner (
                     subject_id,
                     sub_subject_id,
-                    student_id
+                    student_id,
+                    students!inner(training_year)
                 )
             `);
 
-            // 🔒 กรองตามปี
-            let assignments = rawAssignments;
-            if (yearStudentIds && yearStudentIds.length > 0) {
-                const yearStudentSet = new Set(yearStudentIds);
-                assignments = (rawAssignments || []).filter((item: any) => {
-                    const studentId = item.student_assignments?.student_id;
-                    return studentId && yearStudentSet.has(String(studentId));
-                });
+            if (selectedYear) {
+                assignmentQuery = assignmentQuery.eq('student_assignments.students.training_year', selectedYear);
             }
+
+            const { data: assignments } = await assignmentQuery;
             // console.log("Assignments with Relation:", assignments);
 
             // const { data: evalData2 } = await supabase
@@ -403,8 +403,8 @@ export default function AdminDashboard() {
                 });
 
                 setChartData({
-                    main: Object.values(mainMap).sort((a: any, b: any) => b.total - a.total),
-                    sub: Object.values(subMap).filter((s: any) => s.total > 0).sort((a: any, b: any) => b.total - a.total)
+                    main: Object.values(mainMap).sort((a: any, b: any) => b.total - a.total).map((m: any) => ({ ...m, name: `${m.name} (${m.total} รายการ)` })),
+                    sub: Object.values(subMap).filter((s: any) => s.total > 0).sort((a: any, b: any) => b.total - a.total).map((s: any) => ({ ...s, name: `${s.name} (${s.total} รายการ)` }))
                 });
 
                 // 🚩 เตรียมข้อมูล Ratio Pie Chart

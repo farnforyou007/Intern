@@ -1164,7 +1164,7 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                                                     </div>
 
                                                     <div className="flex flex-wrap gap-2">
-                                                        {isEditing ? (
+                                                        {/* {isEditing ? (
                                                             mentors.filter((m: any) => String(m.site_id) === String(rot.site_id) && (m.supervisor_subjects || []).some((ss: any) => String(ss.subject_id) === String(sub.subject_id))).map((m: any) => (
                                                                 <button
                                                                     key={`${sub.assignment_id}-${m.id}`}
@@ -1179,6 +1179,40 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                                                                     {m.full_name}
                                                                 </button>
                                                             ))
+                                                        ) : ( */}
+                                                        {isEditing ? (
+                                                            mentors
+                                                                .filter((m: any) => {
+                                                                    // 1. กรองตามโรงพยาบาล (Site ID)
+                                                                    const isSameSite = String(m.site_id) === String(rot.site_id);
+
+                                                                    // 2. กรองตามวิชาที่พี่เลี้ยงรับผิดชอบ (Subject ID)
+                                                                    // เช็คว่าในรายการ supervisor_subjects ของพี่เลี้ยงคนนี้ มี subject_id ที่ตรงกับวิชานี้ไหม
+                                                                    const isResponsibleForSubject = (m.supervisor_subjects || []).some(
+                                                                        (ss: any) => String(ss.subject_id) === String(sub.subject_id)
+                                                                    );
+
+                                                                    return isSameSite && isResponsibleForSubject;
+                                                                })
+                                                                .map((m: any) => (
+                                                                    <button
+                                                                        key={`${sub.assignment_id}-${m.id}`}
+                                                                        onClick={() => {
+                                                                            const newG = [...form.grouped_assignments];
+                                                                            const cur = newG[idx].subjects_in_rotation[sIdx].supervisor_ids;
+                                                                            newG[idx].subjects_in_rotation[sIdx].supervisor_ids = cur.includes(m.id)
+                                                                                ? cur.filter((i: any) => i !== m.id)
+                                                                                : [...cur, m.id];
+                                                                            setForm({ ...form, grouped_assignments: newG });
+                                                                        }}
+                                                                        className={`px-3 py-1.5 rounded-lg text-[9px] font-bold border transition-all ${sub.supervisor_ids.includes(m.id)
+                                                                            ? 'bg-blue-600 border-blue-600 text-white'
+                                                                            : 'bg-slate-50 text-slate-400'
+                                                                            }`}
+                                                                    >
+                                                                        {m.full_name}
+                                                                    </button>
+                                                                ))
                                                         ) : (
                                                             sub.supervisors_data.length > 0 ? sub.supervisors_data.map((sv: any, i: number) => (
                                                                 <span key={`${sub.assignment_id}-sv-${i}`} className="px-2 py-1 bg-blue-50 text-blue-600 rounded-md text-[9px] font-bold border border-blue-100 flex items-center gap-1">
@@ -1220,29 +1254,43 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
 
     const [form, setForm] = useState<any>({
         student_code: '', prefix: 'นางสาว', first_name: '', last_name: '',
-        phone: '', email: '',
+        phone: '', email: '', training_year: '',
         assignments: []
     });
 
     useEffect(() => {
         if (isOpen) {
-            const initRotations = async () => {
-                const { data } = await supabase.from('rotations').select('*').order('round_number', { ascending: true }).limit(3);
-                if (data) {
-                    setForm({
-                        student_code: '', prefix: 'นางสาว', first_name: '', last_name: '',
-                        phone: '', email: '',
-                        assignments: data.map(r => ({
-                            rotation_id: r.id,
-                            rotation_name: r.name,
-                            site_id: "",
-                            site_name: "", // เก็บชื่อไว้แสดงใน Input
-                            supervisor_ids: []
-                        }))
-                    });
-                }
+            const initData = async () => {
+                // 1. ดึงปีการศึกษาล่าสุดจาก Config
+                const { data: config } = await supabase
+                    .from('system_configs')
+                    .select('key_value')
+                    .eq('key_name', 'current_training_year')
+                    .single();
+
+                const currentYear = config?.key_value || new Date().getFullYear() + 543;
+
+                // 2. ดึงข้อมูลผลัดตามปีการศึกษา
+                const { data: rotationsData } = await supabase
+                    .from('rotations')
+                    .select('*')
+                    .eq('academic_year', currentYear)
+                    .order('round_number', { ascending: true });
+
+                setForm({
+                    student_code: '', prefix: 'นางสาว', first_name: '', last_name: '',
+                    phone: '', email: '',
+                    training_year: currentYear.toString(),
+                    assignments: (rotationsData || []).map(r => ({
+                        rotation_id: r.id,
+                        rotation_name: r.name,
+                        site_id: "",
+                        site_name: "",
+                        supervisor_ids: []
+                    }))
+                });
             };
-            initRotations();
+            initData();
             setAvatarPreview(null);
             setAvatarFile(null);
         }
@@ -1380,7 +1428,8 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                     last_name: form.last_name,
                     phone: form.phone,
                     email: form.email,
-                    avatar_url: publicUrl
+                    avatar_url: publicUrl,
+                    training_year: form.training_year
                 }])
                 .select()
                 .single();
@@ -1512,6 +1561,20 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                                             <Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="h-14 pl-14 rounded-2xl bg-slate-50 border-none font-bold text-base focus:ring-2 ring-blue-500" placeholder="example@psu.ac.th" />
                                         </div>
                                     </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">ปีการศึกษาที่ฝึก (Training Year)</label>
+                                    <div className="relative">
+                                        <Calendar className="absolute left-5 top-[50%] -translate-y-[50%] text-slate-400 pointer-events-none" size={18} />
+                                        <Input
+                                            value={form.training_year}
+                                            onChange={e => setForm({ ...form, training_year: e.target.value.replace(/[^0-9]/g, '') })}
+                                            className="h-14 pl-14 rounded-2xl bg-slate-50 border-none font-bold text-base focus:ring-2 ring-blue-500"
+                                            placeholder="เช่น 2569"
+                                        />
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-1 italic pl-1">* กรองข้อมูลตามปีการศึกษาที่แอดมินเซตไว้ (current_training_year)</p>
                                 </div>
                             </div>
                         </div>

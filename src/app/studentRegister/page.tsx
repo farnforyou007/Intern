@@ -55,7 +55,7 @@ export default function StudentRegisterPage() {
         student_code: '', prefix: '',
         first_name: '', last_name: '',
         nickname: '', phone: '',
-        email: '', 
+        email: '',
         // class_year: '4',
         assignments: []
     })
@@ -479,10 +479,361 @@ export default function StudentRegisterPage() {
 
             if (stError) throw stError;
 
+            // if (form.assignments && form.assignments.length > 0) {
+            //     for (const as of form.assignments) {
+            //         if (as.site_id) {
+            //             // STEP A: ดึง ID วิชาหลัก
+            //             const { data: rotSubs } = await supabase
+            //                 .from('rotation_subjects')
+            //                 .select('subject_id')
+            //                 .eq('rotation_id', parseInt(as.rotation_id));
+
+            //             if (rotSubs && rotSubs.length > 0) {
+            //                 for (const rs of rotSubs) {
+            //                     const mainSubjectId = rs.subject_id;
+
+            //                     // STEP B: เช็คว่ามีวิชาย่อยไหม
+            //                     const { data: subSubjects } = await supabase
+            //                         .from('sub_subjects')
+            //                         .select('id')
+            //                         .eq('parent_subject_id', mainSubjectId);
+
+            //                     if (subSubjects && subSubjects.length > 0) {
+            //                         // 🟢 CASE 1: มีวิชาย่อย (เช่น ผดุงครรภ์)
+
+            //                         // 1.1 วนลูปสร้างวิชาย่อย (ANC, LR, PP)
+            //                         for (const sub of subSubjects) {
+            //                             const { data: assignment, error: asError } = await supabase
+            //                                 .from('student_assignments')
+            //                                 .insert([{
+            //                                     student_id: student.id,
+            //                                     rotation_id: parseInt(as.rotation_id),
+            //                                     subject_id: mainSubjectId,
+            //                                     sub_subject_id: sub.id, // ใส่ ID วิชาย่อย
+            //                                     site_id: parseInt(as.site_id),
+            //                                     status: 'active'
+            //                                 }]).select().single();
+
+            //                             if (asError) throw asError;
+
+            //                             // บันทึกพี่เลี้ยงวิชาย่อย
+            //                             if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                                 const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                                     assignment_id: assignment.id,
+            //                                     supervisor_id: parseInt(sId)
+            //                                 }));
+            //                                 await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                             }
+            //                         }
+
+            //                         // 1.2 🚩 สร้าง "เล่มรายงาน/Portfolio" (ทำแค่ครั้งเดียว นอกลูป sub)
+            //                         const { data: mainAssign, error: mainErr } = await supabase
+            //                             .from('student_assignments')
+            //                             .insert([{
+            //                                 student_id: student.id,
+            //                                 rotation_id: parseInt(as.rotation_id),
+            //                                 subject_id: mainSubjectId,
+            //                                 sub_subject_id: null, // เป็น NULL คือเล่มรายงาน
+            //                                 site_id: parseInt(as.site_id),
+            //                                 status: 'active'
+            //                             }]).select().single();
+
+            //                         if (mainErr) throw mainErr;
+
+            //                         // บันทึกพี่เลี้ยงให้เล่มรายงานด้วย (จะได้เห็นทุกคน)
+            //                         if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                             const mainMentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                                 assignment_id: mainAssign.id,
+            //                                 supervisor_id: parseInt(sId)
+            //                             }));
+            //                             await supabase.from('assignment_supervisors').insert(mainMentorRecords);
+            //                         }
+
+            //                     } else {
+            //                         // 🔵 CASE 2: วิชาทั่วไป (ไม่มีวิชาย่อย)
+            //                         const { data: assignment, error: asError } = await supabase
+            //                             .from('student_assignments')
+            //                             .insert([{
+            //                                 student_id: student.id,
+            //                                 rotation_id: parseInt(as.rotation_id),
+            //                                 subject_id: mainSubjectId,
+            //                                 sub_subject_id: null,
+            //                                 site_id: parseInt(as.site_id),
+            //                                 status: 'active'
+            //                             }]).select().single();
+
+            //                         if (asError) throw asError;
+
+            //                         if (as.supervisor_ids && as.supervisor_ids.length > 0) {
+            //                             const mentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                                 assignment_id: assignment.id,
+            //                                 supervisor_id: parseInt(sId)
+            //                             }));
+            //                             await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
+
+            // ??? 27/2/69
+            // if (form.assignments && form.assignments.length > 0) { 
+            //     for (const as of form.assignments) {
+            //         if (as.site_id) {
+            //             // STEP A: ดึงรายชื่อวิชาทั้งหมดในผลัดนั้น
+            //             const { data: rotSubs } = await supabase
+            //                 .from('rotation_subjects')
+            //                 .select('subject_id')
+            //                 .eq('rotation_id', parseInt(as.rotation_id));
+
+            //             if (rotSubs && rotSubs.length > 0) {
+            //                 for (const rs of rotSubs) {
+            //                     const mainSubjectId = rs.subject_id;
+
+            //                     // 🚩 ฟังก์ชัน Helper: กรองเฉพาะพี่เลี้ยงที่สอนวิชานั้นจริงๆ
+            //                     const getValidMentorRecords = (assignmentId: number, targetSubjectId: number) => {
+            //                         return mentors
+            //                             .filter(m =>
+            //                                 as.supervisor_ids.includes(String(m.id)) && // อยู่ในกลุ่มที่นักศึกษาเลือก
+            //                                 m.supervisor_subjects?.some((ss: any) => Number(ss.subject_id) === Number(targetSubjectId)) // และสอนวิชานี้จริง
+            //                             )
+            //                             .map((m: any) => ({
+            //                                 assignment_id: assignmentId,
+            //                                 supervisor_id: m.id
+            //                             }));
+            //                     };
+
+            //                     // STEP B: เช็คว่าวิชาหลักนี้มีวิชาย่อยไหม
+            //                     const { data: subSubjects } = await supabase
+            //                         .from('sub_subjects')
+            //                         .select('id')
+            //                         .eq('parent_subject_id', mainSubjectId);
+
+            //                     if (subSubjects && subSubjects.length > 0) {
+            //                         // 🟢 CASE 1: มีวิชาย่อย (เช่น ผดุงครรภ์)
+            //                         for (const sub of subSubjects) {
+            //                             const { data: assignment, error: asError } = await supabase
+            //                                 .from('student_assignments')
+            //                                 .insert([{
+            //                                     student_id: student.id,
+            //                                     rotation_id: parseInt(as.rotation_id),
+            //                                     subject_id: mainSubjectId,
+            //                                     sub_subject_id: sub.id,
+            //                                     site_id: parseInt(as.site_id),
+            //                                     status: 'active'
+            //                                 }]).select().single();
+
+            //                             if (asError) throw asError;
+
+            //                             // 🚩 บันทึกเฉพาะพี่เลี้ยงที่สอนวิชานี้ (เช่น สอนผดุงครรภ์)
+            //                             const mentorRecords = getValidMentorRecords(assignment.id, mainSubjectId);
+            //                             if (mentorRecords.length > 0) {
+            //                                 await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                             }
+            //                         }
+
+            //                         // 1.2 สร้างเล่มรายงาน (Portfolio)
+            //                         const { data: mainAssign, error: mainErr } = await supabase
+            //                             .from('student_assignments')
+            //                             .insert([{
+            //                                 student_id: student.id,
+            //                                 rotation_id: parseInt(as.rotation_id),
+            //                                 subject_id: mainSubjectId,
+            //                                 sub_subject_id: null,
+            //                                 site_id: parseInt(as.site_id),
+            //                                 status: 'active'
+            //                             }]).select().single();
+
+            //                         if (mainErr) throw mainErr;
+
+            //                         // 🚩 เล่มรายงาน: บันทึกพี่เลี้ยงทุกคนที่เลือกมาในผลัดนี้ (เพราะเล่มรายงานต้องเห็นภาพรวม)
+            //                         if (as.supervisor_ids.length > 0) {
+            //                             const mainMentorRecords = as.supervisor_ids.map((sId: any) => ({
+            //                                 assignment_id: mainAssign.id,
+            //                                 supervisor_id: parseInt(sId)
+            //                             }));
+            //                             await supabase.from('assignment_supervisors').insert(mainMentorRecords);
+            //                         }
+
+            //                     } else {
+            //                         // 🔵 CASE 2: วิชาทั่วไป (ไม่มีวิชาย่อย)
+            //                         const { data: assignment, error: asError } = await supabase
+            //                             .from('student_assignments')
+            //                             .insert([{
+            //                                 student_id: student.id,
+            //                                 rotation_id: parseInt(as.rotation_id),
+            //                                 subject_id: mainSubjectId,
+            //                                 sub_subject_id: null,
+            //                                 site_id: parseInt(as.site_id),
+            //                                 status: 'active'
+            //                             }]).select().single();
+
+            //                         if (asError) throw asError;
+
+            //                         // 🚩 บันทึกเฉพาะพี่เลี้ยงที่สอนวิชานี้
+            //                         const mentorRecords = getValidMentorRecords(assignment.id, mainSubjectId);
+            //                         if (mentorRecords.length > 0) {
+            //                             await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
+
+            // 🚩 แก้ไข Logic ให้รัดกุม: กรองตามวิชาที่สอนเท่านั้น (รวมถึงเล่มรายงานด้วย)
+            // 27/2/69
+            // if (form.assignments && form.assignments.length > 0) {
+            //     for (const as of form.assignments) {
+            //         if (as.site_id) {
+            //             const { data: rotSubs } = await supabase
+            //                 .from('rotation_subjects')
+            //                 .select('subject_id')
+            //                 .eq('rotation_id', parseInt(as.rotation_id));
+
+            //             if (rotSubs && rotSubs.length > 0) {
+            //                 for (const rs of rotSubs) {
+            //                     const mainSubjectId = rs.subject_id;
+
+            //                     // 🚩 ฟังก์ชัน Helper สำหรับกรองพี่เลี้ยงที่ "สอนวิชานี้" และ "อยู่รพ. นี้"
+            //                     // const getValidMentorRecords = (assignmentId: number, targetSubjectId: number) => {
+            //                     //     return mentors
+            //                     //         .filter(m => 
+            //                     //             as.supervisor_ids.includes(String(m.id)) && 
+            //                     //             String(m.site_id) === String(as.site_id) && 
+            //                     //             m.supervisor_subjects?.some((ss: any) => Number(ss.subject_id) === Number(targetSubjectId))
+            //                     //         )
+            //                     //         .map((m: any) => ({
+            //                     //             assignment_id: assignmentId,
+            //                     //             supervisor_id: m.id
+            //                     //         }));
+            //                     // };
+
+            //                     // 🚩 ปรับปรุง Logic การบันทึกพี่เลี้ยงให้เช็คทั้งวิชาหลักและวิชาย่อย (page.tsx)
+            //                     //27/2/69
+            //                     const getValidMentorRecords = (assignmentId: number, mainSubjectId: number, subSubjectId: number | null) => {
+            //                         return mentors.filter(m => {
+            //                             // 1. ตรวจสอบว่าเป็นพี่เลี้ยงที่นักศึกษาเลือก และอยู่ รพ. เดียวกัน
+            //                             const isSelected = as.supervisor_ids.includes(String(m.id));
+            //                             const isSameSite = String(m.site_id) === String(as.site_id);
+
+            //                             if (!isSelected || !isSameSite) return false;
+
+            //                             // 2. ตรวจสอบความรับผิดชอบในวิชา
+            //                             return m.supervisor_subjects?.some((ss: any) => {
+            //                                 const matchMain = Number(ss.subject_id) === Number(mainSubjectId);
+
+            //                                 // กรณีเป็นวิชาย่อย (เช่น PP): ต้องเช็คว่า ss.sub_subject_id ตรงกันด้วย
+            //                                 if (subSubjectId !== null) {
+            //                                     return matchMain && Number(ss.sub_subject_id) === Number(subSubjectId);
+            //                                 }
+
+            //                                 // กรณีเป็นวิชาหลัก/เล่มรายงาน: เช็คแค่ subject_id และ sub_subject_id ใน DB ต้องเป็น NULL
+            //                                 return matchMain && (ss.sub_subject_id === null);
+            //                             });
+            //                         }).map((m: any) => ({
+            //                             assignment_id: assignmentId,
+            //                             supervisor_id: m.id
+            //                         }));
+            //                     };
+
+            //                     // --- ตอนเรียกใช้งานในลูป ---
+
+            //                     // 🟢 สำหรับวิชาย่อย (ANC, LR, PP)
+            //                     const mentorRecords = getValidMentorRecords(assignment.id, mainSubjectId, sub.id); // ส่ง sub.id เข้าไปด้วย
+            //                     if (mentorRecords.length > 0) {
+            //                         await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                     }
+
+            //                     // 🔵 สำหรับวิชาทั่วไป หรือ เล่มรายงาน
+            //                     const mainMentorRecords = getValidMentorRecords(mainAssign.id, mainSubjectId, null); // ส่ง null สำหรับวิชาหลัก
+            //                     if (mainMentorRecords.length > 0) {
+            //                         await supabase.from('assignment_supervisors').insert(mainMentorRecords);
+            //                     }
+
+            //                     const { data: subSubjects } = await supabase
+            //                         .from('sub_subjects')
+            //                         .select('id')
+            //                         .eq('parent_subject_id', mainSubjectId);
+
+            //                     if (subSubjects && subSubjects.length > 0) {
+            //                         // 🟢 CASE 1: มีวิชาย่อย (เช่น ผดุงครรภ์)
+            //                         for (const sub of subSubjects) {
+            //                             const { data: assignment, error: asError } = await supabase
+            //                                 .from('student_assignments')
+            //                                 .insert([{
+            //                                     student_id: student.id,
+            //                                     rotation_id: parseInt(as.rotation_id),
+            //                                     subject_id: mainSubjectId,
+            //                                     sub_subject_id: sub.id,
+            //                                     site_id: parseInt(as.site_id),
+            //                                     status: 'active'
+            //                                 }]).select().single();
+
+            //                             if (asError) throw asError;
+
+            //                             // ✅ ใส่เฉพาะพี่เลี้ยงที่สอนวิชานี้ (เช่น อิฟฟานที่สอน ANC/LR จะไม่ติดมาใน PP)
+            //                             const mentorRecords = getValidMentorRecords(assignment.id, mainSubjectId);
+            //                             if (mentorRecords.length > 0) {
+            //                                 await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                             }
+            //                         }
+
+            //                         // 1.2 เล่มรายงาน (Portfolio) ของวิชานี้
+            //                         const { data: mainAssign, error: mainErr } = await supabase
+            //                             .from('student_assignments')
+            //                             .insert([{
+            //                                 student_id: student.id,
+            //                                 rotation_id: parseInt(as.rotation_id),
+            //                                 subject_id: mainSubjectId,
+            //                                 sub_subject_id: null, // เล่มรายงาน
+            //                                 site_id: parseInt(as.site_id),
+            //                                 status: 'active'
+            //                             }]).select().single();
+
+            //                         if (mainErr) throw mainErr;
+
+            //                         // ✅ แก้ไข: เล่มรายงานก็ต้องกรอง! 
+            //                         // ปาณิที่สอนแค่นวดไทย จะไม่ถูกดึงมาใส่ในเล่มรายงานผดุงครรภ์
+            //                         const mainMentorRecords = getValidMentorRecords(mainAssign.id, mainSubjectId);
+            //                         if (mainMentorRecords.length > 0) {
+            //                             await supabase.from('assignment_supervisors').insert(mainMentorRecords);
+            //                         }
+
+            //                     } else {
+            //                         // 🔵 CASE 2: วิชาทั่วไป (เช่น นวดไทย)
+            //                         const { data: assignment, error: asError } = await supabase
+            //                             .from('student_assignments')
+            //                             .insert([{
+            //                                 student_id: student.id,
+            //                                 rotation_id: parseInt(as.rotation_id),
+            //                                 subject_id: mainSubjectId,
+            //                                 sub_subject_id: null,
+            //                                 site_id: parseInt(as.site_id),
+            //                                 status: 'active'
+            //                             }]).select().single();
+
+            //                         if (asError) throw asError;
+
+            //                         const mentorRecords = getValidMentorRecords(assignment.id, mainSubjectId);
+            //                         if (mentorRecords.length > 0) {
+            //                             await supabase.from('assignment_supervisors').insert(mentorRecords);
+            //                         }
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
+
+
             if (form.assignments && form.assignments.length > 0) {
                 for (const as of form.assignments) {
                     if (as.site_id) {
-                        // STEP A: ดึง ID วิชาหลัก
+                        // STEP 1: ดึงรายชื่อวิชาทั้งหมดในผลัดนั้น
                         const { data: rotSubs } = await supabase
                             .from('rotation_subjects')
                             .select('subject_id')
@@ -492,66 +843,79 @@ export default function StudentRegisterPage() {
                             for (const rs of rotSubs) {
                                 const mainSubjectId = rs.subject_id;
 
-                                // STEP B: เช็คว่ามีวิชาย่อยไหม
+                                // 🚩 ฟังก์ชัน Helper สำหรับบันทึกพี่เลี้ยง (ย้ายมาไว้ตรงนี้เพื่อให้เรียกใช้ได้ทุก Case)
+                                // 🚩 ฟังก์ชัน Helper ที่ปรับปรุงใหม่เพื่อให้พี่เลี้ยงเข้าเล่มรายงานได้
+                                const saveMentorsForAssignment = async (targetAssignmentId: number, targetMainSub: number, targetSubSub: number | null) => {
+                                    const validMentorRecords = mentors.filter(m => {
+                                        const isSelected = as.supervisor_ids.includes(String(m.id));
+                                        const isSameSite = String(m.site_id) === String(as.site_id);
+                                        if (!isSelected || !isSameSite) return false;
+
+                                        return m.supervisor_subjects?.some((ss: any) => {
+                                            const matchMain = Number(ss.subject_id) === Number(targetMainSub);
+
+                                            // 🟢 Case 1: ถ้าเป็นวิชาย่อย (ANC, LR, PP)
+                                            // ต้องตรงทั้งวิชาหลัก และวิชาย่อยเป๊ะๆ (อิฟฟานเลยไม่ติด PP)
+                                            if (targetSubSub !== null) {
+                                                return matchMain && Number(ss.sub_subject_id) === Number(targetSubSub);
+                                            }
+
+                                            // 🔵 Case 2: ถ้าเป็นเล่มรายงาน (Portfolio) หรือวิชาที่ไม่มีวิชาย่อย
+                                            // ให้ยอมรับถ้าพี่เลี้ยงสอนวิชาหลักนั้น (null) หรือ สอนวิชาย่อยใดๆ ของวิชานั้น
+                                            return matchMain;
+                                        });
+                                    }).map((m: any) => ({
+                                        assignment_id: targetAssignmentId,
+                                        supervisor_id: m.id
+                                    }));
+
+                                    if (validMentorRecords.length > 0) {
+                                        await supabase.from('assignment_supervisors').insert(validMentorRecords);
+                                    }
+                                };
+
+                                // STEP 2: ตรวจสอบวิชาย่อย (ANC, LR, PP)
                                 const { data: subSubjects } = await supabase
                                     .from('sub_subjects')
                                     .select('id')
                                     .eq('parent_subject_id', mainSubjectId);
 
                                 if (subSubjects && subSubjects.length > 0) {
-                                    // 🟢 CASE 1: มีวิชาย่อย (เช่น ผดุงครรภ์)
-
-                                    // 1.1 วนลูปสร้างวิชาย่อย (ANC, LR, PP)
+                                    // 🟢 CASE 1: มีวิชาย่อย
                                     for (const sub of subSubjects) {
-                                        const { data: assignment, error: asError } = await supabase
+                                        const { data: subAssign, error: asError } = await supabase
                                             .from('student_assignments')
                                             .insert([{
                                                 student_id: student.id,
                                                 rotation_id: parseInt(as.rotation_id),
                                                 subject_id: mainSubjectId,
-                                                sub_subject_id: sub.id, // ใส่ ID วิชาย่อย
+                                                sub_subject_id: sub.id,
                                                 site_id: parseInt(as.site_id),
                                                 status: 'active'
                                             }]).select().single();
 
                                         if (asError) throw asError;
-
-                                        // บันทึกพี่เลี้ยงวิชาย่อย
-                                        if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-                                            const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-                                                assignment_id: assignment.id,
-                                                supervisor_id: parseInt(sId)
-                                            }));
-                                            await supabase.from('assignment_supervisors').insert(mentorRecords);
-                                        }
+                                        if (subAssign) await saveMentorsForAssignment(subAssign.id, mainSubjectId, sub.id);
                                     }
 
-                                    // 1.2 🚩 สร้าง "เล่มรายงาน/Portfolio" (ทำแค่ครั้งเดียว นอกลูป sub)
+                                    // 1.2 สร้างเล่มรายงาน (Portfolio)
                                     const { data: mainAssign, error: mainErr } = await supabase
                                         .from('student_assignments')
                                         .insert([{
                                             student_id: student.id,
                                             rotation_id: parseInt(as.rotation_id),
                                             subject_id: mainSubjectId,
-                                            sub_subject_id: null, // เป็น NULL คือเล่มรายงาน
+                                            sub_subject_id: null,
                                             site_id: parseInt(as.site_id),
                                             status: 'active'
                                         }]).select().single();
 
                                     if (mainErr) throw mainErr;
-
-                                    // บันทึกพี่เลี้ยงให้เล่มรายงานด้วย (จะได้เห็นทุกคน)
-                                    if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-                                        const mainMentorRecords = as.supervisor_ids.map((sId: any) => ({
-                                            assignment_id: mainAssign.id,
-                                            supervisor_id: parseInt(sId)
-                                        }));
-                                        await supabase.from('assignment_supervisors').insert(mainMentorRecords);
-                                    }
+                                    if (mainAssign) await saveMentorsForAssignment(mainAssign.id, mainSubjectId, null);
 
                                 } else {
                                     // 🔵 CASE 2: วิชาทั่วไป (ไม่มีวิชาย่อย)
-                                    const { data: assignment, error: asError } = await supabase
+                                    const { data: singleAssign, error: asError } = await supabase
                                         .from('student_assignments')
                                         .insert([{
                                             student_id: student.id,
@@ -563,14 +927,7 @@ export default function StudentRegisterPage() {
                                         }]).select().single();
 
                                     if (asError) throw asError;
-
-                                    if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-                                        const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-                                            assignment_id: assignment.id,
-                                            supervisor_id: parseInt(sId)
-                                        }));
-                                        await supabase.from('assignment_supervisors').insert(mentorRecords);
-                                    }
+                                    if (singleAssign) await saveMentorsForAssignment(singleAssign.id, mainSubjectId, null);
                                 }
                             }
                         }
