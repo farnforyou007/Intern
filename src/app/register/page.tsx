@@ -740,16 +740,13 @@ export default function SmartRegister() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        lineUserId: supervisor.line_user_id, // ข้อมูลจาก Database
-                        flexMessage: {
-                            type: "flex",
-                            altText: "ลงทะเบียนสำเร็จ",
-                            contents: flexRegisterSuccess({
-                                name: supervisor.full_name, // ข้อมูลจาก Database
-                                site: userType === 'supervisor' ? selectedSite.site_name : 'มหาวิทยาลัย'
-                            })
-                        }
+                        lineUserId: supervisor.line_user_id,
+                        flexMessage: flexRegisterSuccess({
+                            name: supervisor.full_name,
+                            site: userType === 'supervisor' ? selectedSite.site_name : 'มหาวิทยาลัย'
+                        })
                     })
+
                 });
             } catch (lineErr) {
                 console.error("Line Notification Error:", lineErr);

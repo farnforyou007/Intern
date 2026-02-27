@@ -7,7 +7,7 @@ import {
     Check, Search, Users, Loader2, RefreshCw,
     MessageCircle, Calendar, User, X, Edit2,
     Save, BookOpen, Building2, Layers, Hospital, Plus,
-    ChevronLeft, ChevronRight , Download
+    ChevronLeft, ChevronRight, Download
 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -235,24 +235,25 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                         </div>
                         <div className="px-6 md:px-12 py-4 md:py-8 bg-slate-50 border-t border-slate-100 shrink-0">
                             {isEditing ?
-                            <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700 h-16 rounded-[1.5rem] font-black text-white shadow-2xl shadow-blue-200 transition-all uppercase tracking-[0.2em] text-sm">
-                                <Save size={20} className="mr-3" /> บันทึกข้อมูล
+                                <Button onClick={handleSave} className="w-full bg-blue-600 hover:bg-blue-700 h-16 rounded-[1.5rem] font-black text-white shadow-2xl shadow-blue-200 transition-all uppercase tracking-[0.2em] text-sm">
+                                    <Save size={20} className="mr-3" /> บันทึกข้อมูล
                                 </Button> : !data.is_verified ? <div className="flex flex-row gap-4 w-full">
-                                    <Button onClick={() => { onApprove(data.id, data.full_name,data.line_user_id); onClose(); }} 
-                                    className="flex-[3] bg-slate-900 hover:bg-blue-600 h-16 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] text-white shadow-xl transition-all">
+                                    <Button onClick={() => { onApprove(data.id, data.full_name, data.line_user_id); onClose(); }}
+                                        className="flex-[3] bg-slate-900 hover:bg-blue-600 h-16 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] text-white shadow-xl transition-all">
                                         ยืนยันการอนุมัติ
-                                        </Button>
-                                        <Button onClick={() => { onDelete(data.id, data.full_name); onClose(); }} variant="outline" 
+                                    </Button>
+                                    <Button onClick={() => { onDelete(data.id, data.full_name); onClose(); }} variant="outline"
                                         className="flex-1 h-16 rounded-[1.5rem] text-red-500 border-red-200 bg-white font-black hover:bg-red-50 text-xs uppercase tracking-widest shadow-sm">
-                                            ไม่อนุมัติ
-                                            </Button>
-                                            </div> 
-                                            : 
-                                            <Button onClick={() => { 
-                                                onDelete(data.id, data.full_name); onClose(); }} variant="ghost" 
-                                                className="w-full h-16 rounded-[1.5rem] font-bold text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all text-[11px] uppercase tracking-[0.4em]">
-                                                    Delete Personnel Profile
-                                                    </Button>}
+                                        ไม่อนุมัติ
+                                    </Button>
+                                </div>
+                                    :
+                                    <Button onClick={() => {
+                                        onDelete(data.id, data.full_name); onClose();
+                                    }} variant="ghost"
+                                        className="w-full h-16 rounded-[1.5rem] font-bold text-slate-300 hover:text-red-600 hover:bg-red-50 transition-all text-[11px] uppercase tracking-[0.4em]">
+                                        Delete Personnel Profile
+                                    </Button>}
                         </div>
                     </div>
                 </div>
@@ -348,13 +349,13 @@ function PersonnelTable({ list, totalItems, itemsPerPage, currentPage, onPageCha
                     <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">ไม่พบข้อมูลในหมวดนี้</p>
                 </div>
             )}
-            
+
             {/* Pagination Footer */}
             <div className="mt-auto">
-                <PaginationFooter 
-                    currentPage={currentPage} 
-                    totalItems={totalItems} 
-                    itemsPerPage={itemsPerPage} 
+                <PaginationFooter
+                    currentPage={currentPage}
+                    totalItems={totalItems}
+                    itemsPerPage={itemsPerPage}
                     onPageChange={onPageChange}
                     onItemsPerPageChange={onItemsPerPageChange}
                 />
@@ -372,7 +373,7 @@ export default function AdminManagement() {
     const [searchTerm, setSearchTerm] = useState('')
     const [selectedPersonnel, setSelectedPersonnel] = useState<any>(null)
     const [subSubjects, setSubSubjects] = useState<any[]>([])
-    
+
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1)
     const [activeTab, setActiveTab] = useState('pending')
@@ -420,69 +421,65 @@ export default function AdminManagement() {
     //     if (isConfirmed) { const { error } = await supabase.from('supervisors').update({ is_verified: true }).eq('id', id); if (!error) { fetchData(); Swal.fire({ icon: 'success', title: 'อนุมัติเรียบร้อย', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem]' } }) } }
     // }
     // 2. ปรับฟังก์ชันให้รับ lineUserId เพิ่มเข้ามา
-const handleApprove = async (id: string, name: string) => {
-    const lineUserId = selectedPersonnel?.line_user_id;
-    console.log("Checking Data before API call:", { id, name, lineUserId });
-    const { isConfirmed } = await Swal.fire({ 
-        title: 'ยืนยันการอนุมัติสิทธิ์?', 
-        html: `คุณกำลังจะอนุมัติสิทธิ์การเข้าใช้งานให้คุณ <b>"${name}"</b>`, 
-        icon: 'question', 
-        showCancelButton: true, 
-        confirmButtonColor: '#10b981', 
-        cancelButtonColor: '#94a3b8', 
-        confirmButtonText: 'ยืนยันการอนุมัติ', 
-        cancelButtonText: 'ยกเลิก', 
-        customClass: { 
-            popup: 'rounded-[2.5rem] font-sans p-10', 
-            confirmButton: 'rounded-full px-10 py-3 font-bold order-1', 
-            cancelButton: 'rounded-full px-10 py-3 font-bold order-2' 
-        } 
-    })
-
-    if (isConfirmed) { 
-        // อัปเดตสถานะใน Database
-        const { error } = await supabase
-            .from('supervisors')
-            .update({ is_verified: true })
-            .eq('id', id); 
-
-        if (!error && lineUserId) { 
-            console.log("Attempting to send LINE to:", lineUserId);
-            // 🚩 เพิ่มส่วนส่ง LINE ตรงนี้
-            if (lineUserId) {
-                try {
-                  const res =  await fetch('/api/line/push', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            lineUserId: lineUserId,
-                            flexMessage: {
-                                type: "flex",
-                                altText: "บัญชีของคุณได้รับการอนุมัติแล้ว",
-                                contents: flexAccountApproved(name) // ส่งชื่อไปแสดงในการ์ด
-                            }
-                        })
-             
-                    });
-                               const debugResult = await res.json();
-            console.log("API Response:", debugResult);
-                } catch (err) {
-                    console.error("Line Notification Error:", err);
-                }
+    const handleApprove = async (id: string, name: string) => {
+        const lineUserId = selectedPersonnel?.line_user_id;
+        console.log("Checking Data before API call:", { id, name, lineUserId });
+        const { isConfirmed } = await Swal.fire({
+            title: 'ยืนยันการอนุมัติสิทธิ์?',
+            html: `คุณกำลังจะอนุมัติสิทธิ์การเข้าใช้งานให้คุณ <b>"${name}"</b>`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: 'ยืนยันการอนุมัติ',
+            cancelButtonText: 'ยกเลิก',
+            customClass: {
+                popup: 'rounded-[2.5rem] font-sans p-10',
+                confirmButton: 'rounded-full px-10 py-3 font-bold order-1',
+                cancelButton: 'rounded-full px-10 py-3 font-bold order-2'
             }
+        })
 
-            fetchData(); 
-            Swal.fire({ 
-                icon: 'success', 
-                title: 'อนุมัติเรียบร้อย', 
-                timer: 1500, 
-                showConfirmButton: false, 
-                customClass: { popup: 'rounded-[2.5rem]' } 
-            }) 
-            
-        } 
+        if (isConfirmed) {
+            // อัปเดตสถานะใน Database
+            const { error } = await supabase
+                .from('supervisors')
+                .update({ is_verified: true })
+                .eq('id', id);
+
+            if (!error && lineUserId) {
+                console.log("Attempting to send LINE to:", lineUserId);
+                // 🚩 เพิ่มส่วนส่ง LINE ตรงนี้
+                if (lineUserId) {
+                    try {
+                        const res = await fetch('/api/line/push', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                lineUserId: lineUserId,
+                                flexMessage: flexAccountApproved(name) // 👈 ส่งค่าจากฟังก์ชันไป "ตรงๆ" ไม่ต้องครอบ {} ซ้ำ
+                            })
+
+                        });
+                        const debugResult = await res.json();
+                        console.log("API Response:", debugResult);
+                    } catch (err) {
+                        console.error("Line Notification Error:", err);
+                    }
+                }
+
+                fetchData();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'อนุมัติเรียบร้อย',
+                    timer: 1500,
+                    showConfirmButton: false,
+                    customClass: { popup: 'rounded-[2.5rem]' }
+                })
+
+            }
+        }
     }
-}
 
     const handleDelete = async (id: string, name: string) => {
         const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการลบ?', html: `คุณกำลังจะลบ <b>"${name}"</b> ออกจากระบบ`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#94a3b8', confirmButtonText: 'ยืนยันการลบ', cancelButtonText: 'ยกเลิก', customClass: { popup: 'rounded-[2.5rem] font-sans p-10', confirmButton: 'rounded-full px-10 py-3 font-bold order-1', cancelButton: 'rounded-full px-10 py-3 font-bold order-2' } })
@@ -536,7 +533,7 @@ const handleApprove = async (id: string, name: string) => {
             "หน่วยงาน/โรงพยาบาล": item.training_sites?.site_name || '-',
             "ไลน์ (Display Name)": item.line_display_name || '-',
             "สถานะ": item.is_verified ? 'อนุมัติแล้ว' : 'รออนุมัติ',
-            "วิชาที่รับผิดชอบ": item.supervisor_subjects?.map((s: any) => 
+            "วิชาที่รับผิดชอบ": item.supervisor_subjects?.map((s: any) =>
                 `${s.subjects?.name} ${s.sub_subjects ? `(${s.sub_subjects.name})` : ''}`
             ).join(', ') || '-'
         }));
@@ -545,7 +542,7 @@ const handleApprove = async (id: string, name: string) => {
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Personnel_List");
         XLSX.writeFile(workbook, `${fileNamePrefix}_${new Date().toLocaleDateString('th-TH')}.xlsx`);
-    }   
+    }
     return (
         <AdminLayout>
             <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 overflow-x-hidden">
@@ -560,12 +557,12 @@ const handleApprove = async (id: string, name: string) => {
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
                             <Input placeholder="ค้นหาชื่อ, จังหวัด, เบอร์โทร..." className="w-full md:w-64 h-11 pl-11 pr-4 rounded-xl bg-white border-slate-200 shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                         </div>
-                        <Button 
-                            onClick={handleExport} 
-                            variant="outline" 
+                        <Button
+                            onClick={handleExport}
+                            variant="outline"
                             className="h-11 px-4 rounded-xl shadow-sm bg-white border-slate-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 font-bold gap-2"
                         >
-                            <Download size={18} /> 
+                            <Download size={18} />
                             <span className="hidden sm:inline">Export</span>
                         </Button>
 
@@ -598,30 +595,30 @@ const handleApprove = async (id: string, name: string) => {
 
                     <TabsContent value="teachers">
                         {loading ? <PersonnelSkeleton viewType="table" /> : (
-                            <PersonnelTable 
-                                list={getPaginatedList(teacherList)} 
+                            <PersonnelTable
+                                list={getPaginatedList(teacherList)}
                                 totalItems={teacherList.length}
                                 itemsPerPage={itemsPerPage}
                                 currentPage={currentPage}
                                 onPageChange={setCurrentPage}
                                 onItemsPerPageChange={setItemsPerPage}
-                                onView={setSelectedPersonnel} 
-                                onDelete={handleDelete} 
+                                onView={setSelectedPersonnel}
+                                onDelete={handleDelete}
                             />
                         )}
                     </TabsContent>
 
                     <TabsContent value="supervisors">
                         {loading ? <PersonnelSkeleton viewType="table" /> : (
-                            <PersonnelTable 
-                                list={getPaginatedList(supervisorList)} 
+                            <PersonnelTable
+                                list={getPaginatedList(supervisorList)}
                                 totalItems={supervisorList.length}
                                 itemsPerPage={itemsPerPage}
                                 currentPage={currentPage}
                                 onPageChange={setCurrentPage}
                                 onItemsPerPageChange={setItemsPerPage}
-                                onView={setSelectedPersonnel} 
-                                onDelete={handleDelete} 
+                                onView={setSelectedPersonnel}
+                                onDelete={handleDelete}
                             />
                         )}
                     </TabsContent>
