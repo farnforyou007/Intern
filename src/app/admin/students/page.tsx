@@ -80,7 +80,7 @@ export default function StudentManagement() {
         try {
             // 1. ดึงข้อมูลนักศึกษาพร้อมความสัมพันธ์ (เลือกเฉพาะคอลัมน์ที่ใช้โชว์ในตาราง)
             const { data: st, error: stError } = await supabase.from('students').select(`
-            id, student_code, prefix, first_name, last_name, phone, email, avatar_url,training_year,
+            id, student_code, prefix, first_name, last_name, nickname, phone, email, avatar_url,training_year,
             student_assignments (
                 id, rotation_id, site_id, subject_id, sub_subject_id,
                 training_sites (site_name, province),
@@ -102,7 +102,7 @@ export default function StudentManagement() {
             // เพื่อใช้ใน Modal เท่านั้น ไม่จำเป็นต้อง Join ไปกับ Students ทุก Row
             const [sitesRes, mentorsRes] = await Promise.all([
                 supabase.from('training_sites').select('id, site_name, province').order('site_name'),
-                supabase.from('supervisors').select('id, full_name, site_id, supervisor_subjects(subject_id)').order('full_name')
+                supabase.from('supervisors').select('id, full_name, site_id, supervisor_subjects(subject_id, sub_subject_id)').order('full_name')
             ]);
 
             setStudents(st || []);
@@ -831,6 +831,7 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                     acc[rId].subjects_in_rotation.push({
                         assignment_id: curr.id,
                         subject_id: curr.subject_id,
+                        sub_subject_id: curr.sub_subject_id,
                         // ✅ ใช้ชื่อที่ดึงมาจากการ Optimize
                         displayName: curr.sub_subjects?.name || curr.subjects?.name || 'ไม่ระบุวิชา',
                         supervisor_ids: curr.assignment_supervisors?.map((sv: any) => sv.supervisor_id) || [],
@@ -969,6 +970,7 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                 prefix: form.prefix,
                 first_name: form.first_name,
                 last_name: form.last_name,
+                nickname: form.nickname,
                 student_code: form.student_code,
                 phone: form.phone,
                 email: form.email,
@@ -1045,7 +1047,8 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                         </div>
                         <div className="p-6 md:p-10 flex-1 flex flex-col justify-start -mt-14 md:-mt-20 relative z-10">
                             <span className="inline-block w-fit px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] mb-4 bg-blue-600 text-white border border-blue-400">ID: {form.student_code}</span>
-                            <h2 className="text-2xl font-black text-white leading-[1.1] mb-4 uppercase">{form.prefix}{form.first_name} <br /> {form.last_name}</h2>
+                            <h2 className="text-2xl font-black text-white leading-[1.1] mb-2 uppercase">{form.prefix}{form.first_name} <br /> {form.last_name}</h2>
+                            {form.nickname && <p className="text-blue-400 font-bold text-sm mb-4">({form.nickname})</p>}
                             <div className="space-y-3">
                                 <div className="flex items-center gap-3 text-blue-400 font-bold"><Mail size={16} /><span className="text-[14px] truncate">{form.email || '-'}</span></div>
                                 <div className="flex items-center gap-3 text-blue-400 font-bold"><Phone size={16} /><span className="text-[14px]">{form.phone || '-'}</span></div>
@@ -1073,8 +1076,24 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                             {isEditing && (
                                 <div className="p-8 bg-blue-50/50 rounded-[2.5rem] border border-blue-100/50 space-y-4 animate-in fade-in duration-300">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <Input value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} placeholder="ชื่อ" className="h-12 rounded-xl bg-white border-none font-bold" />
-                                        <Input value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} placeholder="นามสกุล" className="h-12 rounded-xl bg-white border-none font-bold" />
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสนักศึกษา</label>
+                                            <Input value={form.student_code} onChange={e => setForm({ ...form, student_code: e.target.value })} placeholder="รหัสนักศึกษา" className="h-12 rounded-xl bg-white border-none font-bold" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อเล่น</label>
+                                            <Input value={form.nickname || ''} onChange={e => setForm({ ...form, nickname: e.target.value })} placeholder="ชื่อเล่น" className="h-12 rounded-xl bg-white border-none font-bold" />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">คำนำหน้า - ชื่อ - นามสกุล</label>
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                            <select className="h-12 rounded-xl bg-white border-none font-bold px-4 text-sm focus:ring-2 ring-blue-500 outline-none" value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value })}>
+                                                <option>นางสาว</option><option>นาย</option>
+                                            </select>
+                                            <Input value={form.first_name} onChange={e => setForm({ ...form, first_name: e.target.value })} placeholder="ชื่อ" className="h-12 rounded-xl bg-white border-none font-bold md:col-span-1.5" />
+                                            <Input value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} placeholder="นามสกุล" className="h-12 rounded-xl bg-white border-none font-bold md:col-span-1.5" />
+                                        </div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="เบอร์โทร" className="h-12 rounded-xl bg-white border-none font-bold" />
@@ -1186,10 +1205,15 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                                                                     // 1. กรองตามโรงพยาบาล (Site ID)
                                                                     const isSameSite = String(m.site_id) === String(rot.site_id);
 
-                                                                    // 2. กรองตามวิชาที่พี่เลี้ยงรับผิดชอบ (Subject ID)
-                                                                    // เช็คว่าในรายการ supervisor_subjects ของพี่เลี้ยงคนนี้ มี subject_id ที่ตรงกับวิชานี้ไหม
+                                                                    // 2. กรองตามวิชาที่พี่เลี้ยงรับผิดชอบ (Subject ID & Sub-subject ID)
                                                                     const isResponsibleForSubject = (m.supervisor_subjects || []).some(
-                                                                        (ss: any) => String(ss.subject_id) === String(sub.subject_id)
+                                                                        (ss: any) => {
+                                                                            const matchMain = String(ss.subject_id) === String(sub.subject_id);
+                                                                            if (sub.sub_subject_id) {
+                                                                                return matchMain && String(ss.sub_subject_id) === String(sub.sub_subject_id);
+                                                                            }
+                                                                            return matchMain;
+                                                                        }
                                                                     );
 
                                                                     return isSameSite && isResponsibleForSubject;
@@ -1270,20 +1294,21 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
 
                 const currentYear = config?.key_value || new Date().getFullYear() + 543;
 
-                // 2. ดึงข้อมูลผลัดตามปีการศึกษา
+                // 2. ดึงข้อมูลผลัดตามปีการศึกษา พร้อมรายชื่อวิชาในผลัด
                 const { data: rotationsData } = await supabase
                     .from('rotations')
-                    .select('*')
+                    .select('*, rotation_subjects(subject_id)')
                     .eq('academic_year', currentYear)
                     .order('round_number', { ascending: true });
 
                 setForm({
-                    student_code: '', prefix: 'นางสาว', first_name: '', last_name: '',
+                    student_code: '', prefix: 'นางสาว', first_name: '', last_name: '', nickname: '',
                     phone: '', email: '',
                     training_year: currentYear.toString(),
                     assignments: (rotationsData || []).map(r => ({
                         rotation_id: r.id,
                         rotation_name: r.name,
+                        subject_ids: (r.rotation_subjects || []).map((rs: any) => rs.subject_id),
                         site_id: "",
                         site_name: "",
                         supervisor_ids: []
@@ -1426,6 +1451,7 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                     prefix: form.prefix,
                     first_name: form.first_name,
                     last_name: form.last_name,
+                    nickname: form.nickname,
                     phone: form.phone,
                     email: form.email,
                     avatar_url: publicUrl,
@@ -1436,30 +1462,99 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
 
             if (stError) throw stError;
 
-            // 6. เพิ่มข้อมูลการมอบหมาย (Assignments)
+            // 6. เพิ่มข้อมูลการมอบหมาย (Assignments) แบบแยกตามวิชา
             if (form.assignments && form.assignments.length > 0) {
                 for (const as of form.assignments) {
                     if (as.site_id) {
-                        const { data: assignment, error: asError } = await supabase
-                            .from('student_assignments')
-                            .insert([{
-                                student_id: student.id,
-                                rotation_id: as.rotation_id,
-                                site_id: as.site_id,
-                                status: 'active'
-                            }])
-                            .select()
-                            .single();
+                        // ดึงรายชื่อวิชาทั้งหมดในผลัดนั้น
+                        const { data: rotSubs } = await supabase
+                            .from('rotation_subjects')
+                            .select('subject_id')
+                            .eq('rotation_id', parseInt(as.rotation_id));
 
-                        if (asError) throw asError;
+                        if (rotSubs && rotSubs.length > 0) {
+                            for (const rs of rotSubs) {
+                                const mainSubjectId = rs.subject_id;
 
-                        // 7. เพิ่มรายชื่อพี่เลี้ยง
-                        if (as.supervisor_ids && as.supervisor_ids.length > 0) {
-                            const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-                                assignment_id: assignment.id,
-                                supervisor_id: sId
-                            }));
-                            await supabase.from('assignment_supervisors').insert(mentorRecords);
+                                // ฟังก์ชัน Helper สำหรับบันทึกพี่เลี้ยง
+                                const saveMentorsForAssignment = async (targetAssignmentId: number, targetMainSub: number, targetSubSub: number | null) => {
+                                    const validMentorRecords = mentors.filter((m: any) => {
+                                        const isSelected = as.supervisor_ids.includes(m.id);
+                                        const isSameSite = String(m.site_id) === String(as.site_id);
+                                        if (!isSelected || !isSameSite) return false;
+
+                                        return m.supervisor_subjects?.some((ss: any) => {
+                                            const matchMain = Number(ss.subject_id) === Number(targetMainSub);
+                                            if (targetSubSub !== null) {
+                                                return matchMain && Number(ss.sub_subject_id) === Number(targetSubSub);
+                                            }
+                                            return matchMain;
+                                        });
+                                    }).map((m: any) => ({
+                                        assignment_id: targetAssignmentId,
+                                        supervisor_id: m.id
+                                    }));
+
+                                    if (validMentorRecords.length > 0) {
+                                        await supabase.from('assignment_supervisors').insert(validMentorRecords);
+                                    }
+                                };
+
+                                // ตรวจสอบวิชาย่อย
+                                const { data: subSubjects } = await supabase
+                                    .from('sub_subjects')
+                                    .select('id')
+                                    .eq('parent_subject_id', mainSubjectId);
+
+                                if (subSubjects && subSubjects.length > 0) {
+                                    for (const sub of subSubjects) {
+                                        const { data: subAssign, error: asError } = await supabase
+                                            .from('student_assignments')
+                                            .insert([{
+                                                student_id: student.id,
+                                                rotation_id: parseInt(as.rotation_id),
+                                                subject_id: mainSubjectId,
+                                                sub_subject_id: sub.id,
+                                                site_id: parseInt(as.site_id),
+                                                status: 'active'
+                                            }]).select().single();
+
+                                        if (asError) throw asError;
+                                        if (subAssign) await saveMentorsForAssignment(subAssign.id, mainSubjectId, sub.id);
+                                    }
+
+                                    // สร้างเล่มรายงาน (Portfolio)
+                                    const { data: mainAssign, error: mainErr } = await supabase
+                                        .from('student_assignments')
+                                        .insert([{
+                                            student_id: student.id,
+                                            rotation_id: parseInt(as.rotation_id),
+                                            subject_id: mainSubjectId,
+                                            sub_subject_id: null,
+                                            site_id: parseInt(as.site_id),
+                                            status: 'active'
+                                        }]).select().single();
+
+                                    if (mainErr) throw mainErr;
+                                    if (mainAssign) await saveMentorsForAssignment(mainAssign.id, mainSubjectId, null);
+
+                                } else {
+                                    // วิชาทั่วไป (ไม่มีวิชาย่อย)
+                                    const { data: singleAssign, error: asError } = await supabase
+                                        .from('student_assignments')
+                                        .insert([{
+                                            student_id: student.id,
+                                            rotation_id: parseInt(as.rotation_id),
+                                            subject_id: mainSubjectId,
+                                            sub_subject_id: null,
+                                            site_id: parseInt(as.site_id),
+                                            status: 'active'
+                                        }]).select().single();
+
+                                    if (asError) throw asError;
+                                    if (singleAssign) await saveMentorsForAssignment(singleAssign.id, mainSubjectId, null);
+                                }
+                            }
                         }
                     }
                 }
@@ -1530,13 +1625,19 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                             </div>
 
                             <div className="space-y-6">
-                                <div className="space-y-2">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสนักศึกษา</label>
-                                    <Input value={form.student_code} onChange={e => setForm({ ...form, student_code: e.target.value })} className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-base px-6 focus:ring-2 ring-blue-500" placeholder="6XXXXXXX" />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสนักศึกษา</label>
+                                        <Input value={form.student_code} onChange={e => setForm({ ...form, student_code: e.target.value })} className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-base px-6 focus:ring-2 ring-blue-500" placeholder="6XXXXXXX" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อเล่น</label>
+                                        <Input value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-base px-6 focus:ring-2 ring-blue-500" placeholder="ชื่อเล่น" />
+                                    </div>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อ - นามสกุล</label>
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">คำนำหน้า - ชื่อ - นามสกุล</label>
                                     <div className="flex flex-col sm:flex-row gap-3">
                                         <select className="h-14 rounded-2xl bg-slate-50 border-none font-bold px-4 text-sm w-32 focus:ring-2 ring-blue-500 outline-none" value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value })}>
                                             <option>นางสาว</option><option>นาย</option>
@@ -1638,7 +1739,13 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                                             <div className="space-y-3">
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 block">พี่เลี้ยงที่ดูแล</label>
                                                 <div className="flex flex-wrap gap-2.5">
-                                                    {mentors.filter((m: any) => String(m.site_id) === String(as.site_id)).map((m: any) => (
+                                                    {mentors.filter((m: any) => {
+                                                        const isSameSite = String(m.site_id) === String(as.site_id);
+                                                        const teachesThisSubject = m.supervisor_subjects?.some((sub: any) =>
+                                                            as.subject_ids?.includes(sub.subject_id)
+                                                        );
+                                                        return isSameSite && teachesThisSubject;
+                                                    }).map((m: any) => (
                                                         <button key={m.id} onClick={() => {
                                                             const nAs = [...form.assignments];
                                                             const current = nAs[idx].supervisor_ids;
@@ -1648,7 +1755,13 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                                                             {m.full_name}
                                                         </button>
                                                     ))}
-                                                    {as.site_id && mentors.filter((m: any) => String(m.site_id) === String(as.site_id)).length === 0 && <p className="text-[11px] text-slate-300 font-bold italic py-2 ml-2">ไม่มีรายชื่อพี่เลี้ยงในสถานที่นี้</p>}
+                                                    {as.site_id && mentors.filter((m: any) => {
+                                                        const isSameSite = String(m.site_id) === String(as.site_id);
+                                                        const teachesThisSubject = m.supervisor_subjects?.some((sub: any) =>
+                                                            as.subject_ids?.includes(sub.subject_id)
+                                                        );
+                                                        return isSameSite && teachesThisSubject;
+                                                    }).length === 0 && <p className="text-[11px] text-slate-300 font-bold italic py-2 ml-2">ไม่มีรายชื่อพี่เลี้ยงในสถานที่นี้</p>}
                                                 </div>
                                             </div>
                                         </div>
@@ -1666,8 +1779,8 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                         <Button onClick={onClose} variant="ghost" className="h-16 px-10 rounded-[1.5rem] font-black text-slate-400 uppercase tracking-widest hover:bg-red-50 hover:text-red-600">ยกเลิก</Button>
                     </div>
                 </div>
-            </DialogContent>
-        </Dialog>
+            </DialogContent >
+        </Dialog >
     );
 }
 

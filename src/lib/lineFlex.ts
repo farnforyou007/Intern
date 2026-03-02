@@ -142,7 +142,7 @@ export const flexRegisterSuccess = (data: { name: string; site: string }) => ({
             type: "box",
             layout: "vertical",
             contents: [
-                { type: "text", text: `เรียน อ.${data.name}`, weight: "bold", size: "xl", align: "center", color: "#1e293b" },
+                { type: "text", text: `เรียน ${data.name}`, weight: "bold", size: "xl", align: "center", color: "#1e293b" },
                 { type: "separator", margin: "lg" },
                 {
                     type: "box",
@@ -253,7 +253,7 @@ export const flexAccountApproved = (name: string) => {
                 type: "box",
                 layout: "vertical",
                 contents: [
-                    { type: "text", text: `สวัสดี อ.${name}`, weight: "bold", size: "xl", align: "center", color: "#1e293b" },
+                    { type: "text", text: `สวัสดี ${name}`, weight: "bold", size: "xl", align: "center", color: "#1e293b" },
                     { type: "text", text: "ท่านสามารถเข้าใช้งานระบบได้แล้ว", size: "sm", color: "#64748b", align: "center", margin: "sm" },
                     { type: "separator", margin: "lg" },
                     {
@@ -308,7 +308,7 @@ export const flexTimeReminder = (data: { name: string; rotation: string; daysLef
             type: "box",
             layout: "vertical",
             contents: [
-                { type: "text", text: `เรียน อ.${data.name}`, weight: "bold", size: "md", color: "#1e293b" },
+                { type: "text", text: `เรียน ${data.name}`, weight: "bold", size: "md", color: "#1e293b" },
                 { type: "separator", margin: "lg" },
                 {
                     type: "box",
@@ -358,3 +358,105 @@ export const flexTimeReminder = (data: { name: string; rotation: string; daysLef
         }
     }
 });
+
+/**
+ * 📊 4. แจ้งเตือนการประเมินค้าง (Evaluation Reminder - ส่งจากแอดมิน)
+ */
+export const flexEvaluationReminder = (data: { name: string; evaluated: number; total: number; pending: number }) => {
+    const liffUrl = process.env.NEXT_PUBLIC_LIFF_URL || "https://liff.line.me/2009096451-rkWSBIMh";
+    const finalUri = liffUrl.endsWith('/') ? liffUrl : `${liffUrl}/`;
+    const percent = data.total > 0 ? Math.round((data.evaluated / data.total) * 100) : 0;
+
+    return {
+        type: "flex" as const,
+        altText: `📊 แจ้งเตือนการประเมิน: ค้างอีก ${data.pending} รายการ`,
+        contents: {
+            type: "bubble" as const,
+            size: "mega" as const,
+            header: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                    { type: "text", text: "EVALUATION REMINDER", weight: "bold", color: "#ffffff", size: "xs", align: "center" },
+                    { type: "text", text: "แจ้งเตือนการประเมิน", weight: "bold", color: "#ffffff", size: "lg", align: "center", margin: "md" }
+                ],
+                backgroundColor: "#d97706",
+                paddingAll: "20px"
+            },
+            body: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                    { type: "text", text: `เรียน ${data.name}`, weight: "bold", size: "md", align: "center", color: "#1e293b" },
+                    { type: "text", text: "กรุณาดำเนินการประเมินนักศึกษาที่ยังค้างอยู่", size: "xs", color: "#64748b", align: "center", margin: "sm", wrap: true },
+                    { type: "separator", margin: "lg" },
+                    {
+                        type: "box",
+                        layout: "vertical",
+                        margin: "lg",
+                        spacing: "sm",
+                        contents: [
+                            {
+                                type: "box",
+                                layout: "baseline",
+                                contents: [
+                                    { type: "text", text: "ประเมินแล้ว", color: "#aaaaaa", size: "sm", flex: 3 },
+                                    { type: "text", text: `${data.evaluated}/${data.total} รายการ (${percent}%)`, color: "#475569", size: "sm", flex: 5, weight: "bold" }
+                                ]
+                            },
+                            {
+                                type: "box",
+                                layout: "baseline",
+                                contents: [
+                                    { type: "text", text: "ค้างประเมิน", color: "#aaaaaa", size: "sm", flex: 3 },
+                                    { type: "text", text: `${data.pending} รายการ`, color: "#d97706", size: "sm", flex: 5, weight: "bold" }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        type: "box",
+                        layout: "vertical",
+                        margin: "xl",
+                        contents: [
+                            {
+                                type: "box",
+                                layout: "vertical",
+                                height: "6px",
+                                backgroundColor: "#e2e8f0",
+                                cornerRadius: "3px",
+                                contents: [
+                                    {
+                                        type: "box",
+                                        layout: "vertical",
+                                        height: "6px",
+                                        width: `${percent}%`,
+                                        backgroundColor: percent === 100 ? "#10b981" : "#d97706",
+                                        cornerRadius: "3px",
+                                        contents: []
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            footer: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                    {
+                        type: "button",
+                        action: {
+                            type: "uri",
+                            label: "เข้าประเมินนักศึกษา",
+                            uri: finalUri
+                        },
+                        style: "primary",
+                        color: "#d97706"
+                    }
+                ]
+            }
+        }
+    };
+};

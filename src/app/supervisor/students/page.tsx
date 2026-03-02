@@ -365,10 +365,15 @@ export default function SupervisorStudentList() {
                 const subjId = item.student_assignments?.subject_id;
                 const logsCount = logsMap.get(assignId) || 0;
                 const totalGroups = groupsCountMap.get(subjId) || 1;
+
+                // ✅ คำนวณสถานะ: 2=เสร็จ, 1=ทำอยู่บ้าง, 0=ยังไม่ทำ
+                const status = item.is_evaluated ? 2 : (logsCount > 0 ? 1 : 0);
+
                 return {
                     ...item,
                     has_eval_logs: logsCount > 0,
-                    eval_progress: { done: logsCount, total: totalGroups }
+                    eval_progress: { done: logsCount, total: totalGroups },
+                    evaluation_status: status
                 };
             });
             setMyStudents(mineWithProgress)
@@ -473,9 +478,9 @@ export default function SupervisorStudentList() {
                 const myTask = myStudents.find(ms => ms.student_assignments?.id === tData.id);
                 if (myTask) router.push(`/supervisor/evaluate/${myTask.id}`);
             } else {
-                const isBook = !tData.sub_subject_id;
-                const showName = isBook ? "เล่มรายงาน/Portfolio" : tData.subjects?.name;
-                handleClaimStudent(tData.id, task.student?.first_name, showName);
+                const showName = tData.sub_subjects?.name || tData.subjects?.name || "เล่มรายงาน/Portfolio";
+                const studentName = `${tData.students?.first_name || ''} ${tData.students?.last_name || ''}`.trim() || 'ไม่ระบุชื่อ';
+                handleClaimStudent(tData.id, studentName, showName);
             }
         }
     }

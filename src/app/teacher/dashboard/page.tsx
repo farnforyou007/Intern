@@ -302,38 +302,40 @@ export default function TeacherDashboard() {
     //     return { total: filtered.length, evaluated, partial, pending }
     // }, [allAssignments, selectedSubject])
 
+    // ✅ KPI นับตามนักศึกษา — ง่ายต่อการเข้าใจสำหรับอาจารย์
     const teacherStats = useMemo(() => {
         const filtered = selectedSubject === 'all' ? allAssignments : allAssignments.filter(a => a.subject_id === selectedSubject)
 
-        let evaluated = 0; // ประเมินเสร็จสมบูรณ์ (กดบันทึกสรุปแล้ว) Status 2
-        let partial = 0;   // เริ่มทำแล้ว มี Log แล้ว แต่ยังไม่กดบันทึกสรุป Status 1
-        let waiting = 0;   // ยังไม่ได้เริ่มทำเลย (ไม่มี Log เลย) Status 0
-
+        // Group assignments by student_id
+        const studentMap: { [studentId: string]: any[] } = {}
         filtered.forEach((a: any) => {
-            const svs = a.assignment_supervisors || []
-            // const isDone = svs.length > 0 && svs.every((sv: any) => sv.is_evaluated)
-            const isDone = svs.length > 0 && svs.every((sv: any) => sv.evaluation_status === 2)
-            const isPartial = svs.length > 0 && svs.some((sv: any) => sv.evaluation_status === 1) && !isDone
-            // เช็คผ่าน analyticsData หรือ evaluation_logs ที่เรา Join มา
-            // const hasSomeLogs = a.evaluation_logs && a.evaluation_logs.length > 0
-
-            // if (isDone) {
-            //     evaluated++
-            // } else if (hasSomeLogs) {
-            //     partial++
-            // } else {
-            //     waiting++
-            // }
-            if (isDone) {
-                evaluated++
-            } else if (isPartial) {
-                partial++
-            } else {
-                waiting++
-            }
+            const sid = String(a.student_id)
+            if (!studentMap[sid]) studentMap[sid] = []
+            studentMap[sid].push(a)
         })
 
-        return { total: filtered.length, evaluated, partial, pending: waiting }
+        let evaluated = 0   // นศ. ที่ประเมินเสร็จ "ทุกใบ" แล้ว
+        let partial = 0     // นศ. ที่ประเมินไปแล้วบางส่วน (มีอย่างน้อย 1 ใบเสร็จ แต่ไม่ครบ)
+        let waiting = 0     // นศ. ที่ยังไม่ได้รับการประเมินเลย
+
+        // ✅ ใช้ Number() เพื่อป้องกัน type mismatch (string "2" vs number 2)
+        Object.values(studentMap).forEach((assignments: any[]) => {
+            const allDone = assignments.every((a: any) => {
+                const svs = a.assignment_supervisors || []
+                return svs.length > 0 && svs.every((sv: any) => Number(sv.evaluation_status) === 2)
+            })
+            const someDone = assignments.some((a: any) => {
+                const svs = a.assignment_supervisors || []
+                return svs.some((sv: any) => Number(sv.evaluation_status) === 2 || Number(sv.evaluation_status) === 1)
+            })
+
+            if (allDone) evaluated++
+            else if (someDone) partial++
+            else waiting++
+        })
+
+        const totalStudents = Object.keys(studentMap).length
+        return { total: totalStudents, evaluated, partial, pending: waiting }
     }, [allAssignments, selectedSubject])
 
     // --- ข้อมูลสำหรับกราฟ/KPI จาก analytics ---
@@ -612,10 +614,10 @@ export default function TeacherDashboard() {
 
                 {/* KPI Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <KPICard label="นักศึกษาทั้งหมด" value={uniqueStudents} unit="คน" icon={<Users size={20} />} color="bg-indigo-50 text-indigo-600" />
-                    <KPICard label="ประเมินครบ" value={teacherStats.evaluated} unit="รายการ" icon={<CheckCircle size={20} />} color="bg-emerald-50 text-emerald-600" />
-                    <KPICard label="ประเมินแล้วบางส่วน" value={teacherStats.partial} unit="รายการ" icon={<AlertCircle size={20} />} color="bg-amber-50 text-amber-600" />
-                    <KPICard label="ยังไม่ประเมิน" value={teacherStats.pending} unit="รายการ" icon={<AlertCircle size={20} />} color="bg-rose-50 text-rose-500" />
+                    <KPICard label="นักศึกษาทั้งหมด" value={teacherStats.total} unit="คน" icon={<Users size={20} />} color="bg-indigo-50 text-indigo-600" />
+                    <KPICard label="ประเมินครบทุกใบ" value={teacherStats.evaluated} unit="คน" icon={<CheckCircle size={20} />} color="bg-emerald-50 text-emerald-600" />
+                    <KPICard label="กำลังประเมิน" value={teacherStats.partial} unit="คน" icon={<AlertCircle size={20} />} color="bg-amber-50 text-amber-600" />
+                    <KPICard label="ยังไม่เริ่มประเมิน" value={teacherStats.pending} unit="คน" icon={<AlertCircle size={20} />} color="bg-rose-50 text-rose-500" />
                 </div>
 
                 {/* Progress Summary by Subject */}
@@ -625,7 +627,8 @@ export default function TeacherDashboard() {
                         {(selectedSubject === 'all' ? subjects : subjects.filter(s => s.subject_id === selectedSubject)).map((s, i) => {
                             const subAssignments = allAssignments.filter(a => a.subject_id === s.subject_id)
                             const total = subAssignments.length
-                            const done = subAssignments.filter((a: any) => a.assignment_supervisors?.some((sv: any) => sv.is_evaluated)).length
+                            // ✅ ใช้ evaluation_status เหมือน KPI (ป้องกัน type mismatch กับ is_evaluated)
+                            const done = subAssignments.filter((a: any) => a.assignment_supervisors?.some((sv: any) => Number(sv.evaluation_status) === 2)).length
                             const pct = total > 0 ? Math.round((done / total) * 100) : 0
                             return (
                                 <div key={i}>
@@ -648,33 +651,7 @@ export default function TeacherDashboard() {
                     </div>
                 </div>
 
-                {/* KPI จาก Analytics (คะแนนเชิงลึก) */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm text-center relative overflow-hidden group hover:border-indigo-200 transition-all">
-                        <div className="absolute -top-4 -right-4 w-16 h-16 bg-indigo-50 rounded-full opacity-50 group-hover:scale-150 transition-transform" />
-                        <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center mx-auto mb-3"><Users size={18} className="text-indigo-600" /></div>
-                        <p className="text-3xl font-black text-slate-800 leading-none">{analyticsKpi.count}</p>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2">นักศึกษา (ประเมินครบแล้ว)</p>
-                    </div>
-                    <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm text-center relative overflow-hidden group hover:border-cyan-200 transition-all">
-                        <div className="absolute -top-4 -right-4 w-16 h-16 bg-cyan-50 rounded-full opacity-50 group-hover:scale-150 transition-transform" />
-                        <div className="w-10 h-10 bg-cyan-50 rounded-xl flex items-center justify-center mx-auto mb-3"><TrendingUp size={18} className="text-cyan-600" /></div>
-                        <p className="text-3xl font-black text-slate-800 leading-none">{analyticsKpi.avg}</p>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2">คะแนนเฉลี่ย</p>
-                    </div>
-                    <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm text-center relative overflow-hidden group hover:border-emerald-200 transition-all">
-                        <div className="absolute -top-4 -right-4 w-16 h-16 bg-emerald-50 rounded-full opacity-50 group-hover:scale-150 transition-transform" />
-                        <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center mx-auto mb-3"><Award size={18} className="text-emerald-600" /></div>
-                        <p className="text-3xl font-black text-emerald-600 leading-none">{analyticsKpi.max}</p>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2">สูงสุด</p>
-                    </div>
-                    <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm text-center relative overflow-hidden group hover:border-rose-200 transition-all">
-                        <div className="absolute -top-4 -right-4 w-16 h-16 bg-rose-50 rounded-full opacity-50 group-hover:scale-150 transition-transform" />
-                        <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center mx-auto mb-3"><TrendingDown size={18} className="text-rose-500" /></div>
-                        <p className="text-3xl font-black text-rose-500 leading-none">{analyticsKpi.min}</p>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2">ต่ำสุด</p>
-                    </div>
-                </div>
+                {/* Analytics KPI section removed - top KPI + progress bar cover this */}
 
                 {/* Bar Chart: คะแนนเฉลี่ยรายแบบประเมิน */}
                 <div className="bg-white p-6 lg:p-8 rounded-[2rem] border border-slate-100 shadow-sm">

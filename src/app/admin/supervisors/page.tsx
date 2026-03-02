@@ -7,7 +7,7 @@ import {
     Check, Search, Users, Loader2, RefreshCw,
     MessageCircle, Calendar, User, X, Edit2,
     Save, BookOpen, Building2, Layers, Hospital, Plus,
-    ChevronLeft, ChevronRight, Download
+    ChevronLeft, ChevronRight, Download, Bell, Send
 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import Swal from 'sweetalert2'
 import AdminLayout from '@/components/AdminLayout'
 import * as XLSX from 'xlsx'
-import { flexAccountApproved } from '@/lib/lineFlex';
+import { flexAccountApproved, flexEvaluationReminder } from '@/lib/lineFlex';
 // --- Component เสริม: Skeleton Loading ---
 function PersonnelSkeleton({ viewType }: { viewType: 'card' | 'table' }) {
     if (viewType === 'card') {
@@ -53,6 +53,41 @@ function PersonnelSkeleton({ viewType }: { viewType: 'card' | 'table' }) {
                     </div>
                 </div>
             ))}
+        </div>
+    )
+}
+
+// --- Component เสริม: Evaluation Progress Bar ---
+function EvaluationProgressBar({ evaluated, total }: { evaluated: number; total: number }) {
+    if (total === 0) {
+        return (
+            <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-300 italic">ไม่มีงาน</span>
+            </div>
+        )
+    }
+    const percent = Math.round((evaluated / total) * 100)
+    const barColor = percent === 100 ? 'bg-emerald-500' : percent >= 50 ? 'bg-blue-500' : percent > 0 ? 'bg-amber-500' : 'bg-red-400'
+    const textColor = percent === 100 ? 'text-emerald-600' : percent >= 50 ? 'text-blue-600' : percent > 0 ? 'text-amber-600' : 'text-red-500'
+
+    return (
+        <div className="min-w-[100px]">
+            <div className="flex items-center justify-between mb-1.5">
+                <span className={`text-xs font-black ${textColor}`}>{evaluated}/{total}</span>
+                <span className={`text-[10px] font-bold ${textColor}`}>{percent}%</span>
+            </div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                    className={`h-full ${barColor} rounded-full transition-all duration-700 ease-out`}
+                    style={{ width: `${percent}%` }}
+                />
+            </div>
+            {percent === 100 && (
+                <div className="flex items-center gap-1 mt-1">
+                    <Check size={10} className="text-emerald-500" />
+                    <span className="text-[9px] font-bold text-emerald-500">ครบแล้ว</span>
+                </div>
+            )}
         </div>
     )
 }
@@ -293,8 +328,8 @@ function SupervisorCard({ data, onClick }: any) {
     )
 }
 
-// --- 3. Component: PersonnelTable (Tooltip + Pagination) ---
-function PersonnelTable({ list, totalItems, itemsPerPage, currentPage, onPageChange, onItemsPerPageChange, onView, onDelete }: any) {
+// --- 3. Component: PersonnelTable (Tooltip + Pagination + Eval Progress) ---
+function PersonnelTable({ list, totalItems, itemsPerPage, currentPage, onPageChange, onItemsPerPageChange, onView, onDelete, evalProgressMap, onSendReminder, sendingReminder }: any) {
     return (
         <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
             <div className="overflow-x-auto">
@@ -304,42 +339,67 @@ function PersonnelTable({ list, totalItems, itemsPerPage, currentPage, onPageCha
                             <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">บุคลากร</th>
                             <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">วิชาที่รับผิดชอบ</th>
                             <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">จังหวัด / หน่วยงาน</th>
+                            <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">ความคืบหน้า</th>
                             <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">การติดต่อ</th>
                             <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">จัดการ</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                        {list.map((item: any) => (
-                            <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
-                                <td className="px-8 py-5"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-[1.2rem] bg-slate-100 overflow-hidden border-2 border-white shadow-sm shrink-0">{item.avatar_url ? <img src={item.avatar_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><User size={20} /></div>}</div><div><div className="font-black text-slate-800 text-sm leading-tight">{item.full_name}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{item.role === 'teacher' ? 'อาจารย์' : 'พี่เลี้ยง'}</div></div></div></td>
-                                <td className="px-6 py-5"><div className="flex flex-wrap gap-1.5 max-w-[250px]">{item.supervisor_subjects && item.supervisor_subjects.length > 0 ? item.supervisor_subjects.map((ss: any, i: number) => (<div key={i} className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black border border-blue-100/50 flex items-center gap-1"><Layers size={10} strokeWidth={3} />{ss.subjects?.name} {ss.sub_subjects ? `(${ss.sub_subjects.name})` : ''}</div>)) : <span className="text-[10px] font-bold text-slate-300 italic">ไม่ได้ระบุวิชา</span>}</div></td>
-                                <td className="px-6 py-5"><div className="text-sm font-bold text-slate-700 leading-tight">{item.training_sites?.site_name || 'คณะการแพทย์แผนไทย'}</div><div className="text-[10px] font-bold text-slate-400 truncate max-w-[180px] mt-0.5">{item.training_sites?.province || item.province || 'สงขลา'}</div></td>
-                                <td className="px-6 py-5"><div className="flex items-center gap-2 text-slate-600"><Phone size={12} className="text-blue-400" /><span className="text-xs font-bold font-mono">{item.phone || '-'}</span></div></td>
-                                <td className="px-8 py-5 text-right">
-                                    <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                        <TooltipProvider delayDuration={200}>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button variant="ghost" size="icon" onClick={() => onView(item)} className="h-10 w-10 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all">
-                                                        <Edit2 size={16} />
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent className="bg-slate-900 text-white border-none text-xs font-bold rounded-lg px-3 py-1.5"><p>แก้ไขข้อมูล</p></TooltipContent>
-                                            </Tooltip>
+                        {list.map((item: any) => {
+                            const progress = evalProgressMap?.[item.id] || { total: 0, evaluated: 0 }
+                            const hasPending = progress.total > 0 && progress.evaluated < progress.total
+                            return (
+                                <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
+                                    <td className="px-8 py-5"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-[1.2rem] bg-slate-100 overflow-hidden border-2 border-white shadow-sm shrink-0">{item.avatar_url ? <img src={item.avatar_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><User size={20} /></div>}</div><div><div className="font-black text-slate-800 text-sm leading-tight">{item.full_name}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{item.role === 'teacher' ? 'อาจารย์' : 'พี่เลี้ยง'}</div></div></div></td>
+                                    <td className="px-6 py-5"><div className="flex flex-wrap gap-1.5 max-w-[250px]">{item.supervisor_subjects && item.supervisor_subjects.length > 0 ? item.supervisor_subjects.map((ss: any, i: number) => (<div key={i} className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black border border-blue-100/50 flex items-center gap-1"><Layers size={10} strokeWidth={3} />{ss.subjects?.name} {ss.sub_subjects ? `(${ss.sub_subjects.name})` : ''}</div>)) : <span className="text-[10px] font-bold text-slate-300 italic">ไม่ได้ระบุวิชา</span>}</div></td>
+                                    <td className="px-6 py-5"><div className="text-sm font-bold text-slate-700 leading-tight">{item.training_sites?.site_name || 'คณะการแพทย์แผนไทย'}</div><div className="text-[10px] font-bold text-slate-400 truncate max-w-[180px] mt-0.5">{item.training_sites?.province || item.province || 'สงขลา'}</div></td>
+                                    <td className="px-6 py-5">
+                                        <EvaluationProgressBar evaluated={progress.evaluated} total={progress.total} />
+                                    </td>
+                                    <td className="px-6 py-5"><div className="flex items-center gap-2 text-slate-600"><Phone size={12} className="text-blue-400" /><span className="text-xs font-bold font-mono">{item.phone || '-'}</span></div></td>
+                                    <td className="px-8 py-5 text-right">
+                                        <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                            <TooltipProvider delayDuration={200}>
+                                                {hasPending && (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={(e) => { e.stopPropagation(); onSendReminder(item); }}
+                                                                disabled={sendingReminder === item.id}
+                                                                className="h-10 w-10 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-2xl transition-all"
+                                                            >
+                                                                {sendingReminder === item.id ? <Loader2 size={16} className="animate-spin" /> : <Bell size={16} />}
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent className="bg-amber-500 text-white border-none text-xs font-bold rounded-lg px-3 py-1.5"><p>ส่ง LINE แจ้งเตือน</p></TooltipContent>
+                                                    </Tooltip>
+                                                )}
 
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button variant="ghost" size="icon" onClick={() => onDelete(item.id, item.full_name)} className="h-10 w-10 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
-                                                        <Trash2 size={16} />
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent className="bg-red-500 text-white border-none text-xs font-bold rounded-lg px-3 py-1.5"><p>ลบบัญชีผู้ใช้</p></TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button variant="ghost" size="icon" onClick={() => onView(item)} className="h-10 w-10 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all">
+                                                            <Edit2 size={16} />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="bg-slate-900 text-white border-none text-xs font-bold rounded-lg px-3 py-1.5"><p>แก้ไขข้อมูล</p></TooltipContent>
+                                                </Tooltip>
+
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button variant="ghost" size="icon" onClick={() => onDelete(item.id, item.full_name)} className="h-10 w-10 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
+                                                            <Trash2 size={16} />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="bg-red-500 text-white border-none text-xs font-bold rounded-lg px-3 py-1.5"><p>ลบบัญชีผู้ใช้</p></TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -373,6 +433,8 @@ export default function AdminManagement() {
     const [searchTerm, setSearchTerm] = useState('')
     const [selectedPersonnel, setSelectedPersonnel] = useState<any>(null)
     const [subSubjects, setSubSubjects] = useState<any[]>([])
+    const [evalProgressMap, setEvalProgressMap] = useState<Record<string, { total: number; evaluated: number }>>({})
+    const [sendingReminder, setSendingReminder] = useState<string | null>(null)
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1)
@@ -404,6 +466,22 @@ export default function AdminManagement() {
             setSubjects(subs || [])
             setSubSubjects(sSubs || [])
             setSites(sits || [])
+
+            // ดึงข้อมูลความคืบหน้าการประเมินของแต่ละ supervisor
+            const { data: evalData } = await supabase
+                .from('assignment_supervisors')
+                .select('supervisor_id, is_evaluated, evaluation_status')
+
+            if (evalData) {
+                const progressMap: Record<string, { total: number; evaluated: number }> = {}
+                evalData.forEach((item: any) => {
+                    const sid = item.supervisor_id
+                    if (!progressMap[sid]) progressMap[sid] = { total: 0, evaluated: 0 }
+                    progressMap[sid].total += 1
+                    if (Number(item.evaluation_status) === 2) progressMap[sid].evaluated += 1
+                })
+                setEvalProgressMap(progressMap)
+            }
         } catch (error: any) {
             Swal.fire('Error', error.message, 'error')
         } finally {
@@ -484,6 +562,93 @@ export default function AdminManagement() {
     const handleDelete = async (id: string, name: string) => {
         const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการลบ?', html: `คุณกำลังจะลบ <b>"${name}"</b> ออกจากระบบ`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#94a3b8', confirmButtonText: 'ยืนยันการลบ', cancelButtonText: 'ยกเลิก', customClass: { popup: 'rounded-[2.5rem] font-sans p-10', confirmButton: 'rounded-full px-10 py-3 font-bold order-1', cancelButton: 'rounded-full px-10 py-3 font-bold order-2' } })
         if (isConfirmed) { const { error } = await supabase.from('supervisors').delete().eq('id', id); if (!error) { fetchData(); Swal.fire({ icon: 'success', title: 'ลบข้อมูลสำเร็จ', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem] font-sans' } }) } }
+    }
+
+    // --- ส่ง LINE แจ้งเตือนการประเมินค้าง ---
+    const handleSendReminder = async (supervisor: any) => {
+        const progress = evalProgressMap[supervisor.id]
+        if (!progress || progress.evaluated >= progress.total) return
+
+        if (!supervisor.line_user_id) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'ไม่พบ LINE User ID',
+                text: `${supervisor.full_name} ยังไม่ได้เชื่อมต่อ LINE`,
+                timer: 2500,
+                showConfirmButton: false,
+                customClass: { popup: 'rounded-[2.5rem] font-sans p-8' }
+            })
+            return
+        }
+
+        const { isConfirmed } = await Swal.fire({
+            title: 'ส่งแจ้งเตือนผ่าน LINE?',
+            html: `ส่งการแจ้งเตือนไปยัง <b>"${supervisor.full_name}"</b><br/>ค้างประเมินอีก <b>${progress.total - progress.evaluated}</b> รายการ`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#d97706',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: 'ส่งแจ้งเตือน',
+            cancelButtonText: 'ยกเลิก',
+            customClass: {
+                popup: 'rounded-[2.5rem] font-sans p-10',
+                confirmButton: 'rounded-full px-10 py-3 font-bold',
+                cancelButton: 'rounded-full px-10 py-3 font-bold'
+            }
+        })
+
+        if (isConfirmed) {
+            setSendingReminder(supervisor.id)
+            try {
+                const pending = progress.total - progress.evaluated
+                const flexMessage = flexEvaluationReminder({
+                    name: supervisor.full_name,
+                    evaluated: progress.evaluated,
+                    total: progress.total,
+                    pending
+                })
+
+                const res = await fetch('/api/line/push', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lineUserId: supervisor.line_user_id,
+                        flexMessage
+                    })
+                })
+
+                const result = await res.json()
+
+                if (result.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'ส่งแจ้งเตือนสำเร็จ',
+                        html: `ส่งแจ้งเตือนไปยัง <b>${supervisor.full_name}</b> ผ่าน LINE เรียบร้อย`,
+                        timer: 2000,
+                        showConfirmButton: false,
+                        customClass: { popup: 'rounded-[2.5rem] font-sans p-8' }
+                    })
+                } else {
+                    console.error('LINE API Error:', result)
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'ส่งไม่สำเร็จ',
+                        text: 'ไม่สามารถส่งข้อความผ่าน LINE ได้ กรุณาลองใหม่อีกครั้ง',
+                        customClass: { popup: 'rounded-[2.5rem] font-sans p-8' }
+                    })
+                }
+            } catch (error) {
+                console.error('Send Reminder Error:', error)
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: 'เกิดข้อผิดพลาดขณะส่งแจ้งเตือน',
+                    customClass: { popup: 'rounded-[2.5rem] font-sans p-8' }
+                })
+            } finally {
+                setSendingReminder(null)
+            }
+        }
     }
 
     const filteredData = allSupervisors.filter(s => {
@@ -604,6 +769,9 @@ export default function AdminManagement() {
                                 onItemsPerPageChange={setItemsPerPage}
                                 onView={setSelectedPersonnel}
                                 onDelete={handleDelete}
+                                evalProgressMap={evalProgressMap}
+                                onSendReminder={handleSendReminder}
+                                sendingReminder={sendingReminder}
                             />
                         )}
                     </TabsContent>
@@ -619,6 +787,9 @@ export default function AdminManagement() {
                                 onItemsPerPageChange={setItemsPerPage}
                                 onView={setSelectedPersonnel}
                                 onDelete={handleDelete}
+                                evalProgressMap={evalProgressMap}
+                                onSendReminder={handleSendReminder}
+                                sendingReminder={sendingReminder}
                             />
                         )}
                     </TabsContent>
