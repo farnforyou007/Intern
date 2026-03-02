@@ -90,7 +90,7 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                 </p>
 
                 <button
-                    onClick={() => router.push('/supervisor/register')}
+                    onClick={() => router.push('/register')}
                     className="w-full max-w-xs py-5 bg-[#064e3b] text-white rounded-3xl font-black text-sm shadow-xl shadow-emerald-100 flex items-center justify-center gap-3 active:scale-95 transition-all"
                 >
                     <UserPlus size={20} />

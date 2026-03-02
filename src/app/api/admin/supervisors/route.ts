@@ -4,6 +4,8 @@ import { createServerSupabase } from '@/lib/supabase-server'
 import { apiSuccess, apiError } from '@/lib/api-helpers'
 import { flexAccountApproved, flexEvaluationReminder } from '@/lib/lineFlex'
 
+const isValidLineId = (id?: string) => id && /^U[0-9a-f]{32}$/.test(id)
+
 /**
  * GET /api/admin/supervisors
  * ดึงรายชื่อ supervisors + subjects + sites + eval progress ทั้งหมด
@@ -80,7 +82,7 @@ export async function POST(req: Request) {
                 if (error) return apiError(error.message, 500)
 
                 // ส่ง LINE แจ้งเตือนอนุมัติ
-                if (lineUserId) {
+                if (isValidLineId(lineUserId)) {
                     try {
                         await fetch('https://api.line.me/v2/bot/message/push', {
                             method: 'POST',
@@ -96,6 +98,8 @@ export async function POST(req: Request) {
                     } catch (lineErr) {
                         console.error('LINE Notification Error:', lineErr)
                     }
+                } else if (lineUserId) {
+                    console.warn(`Skipping LINE notification: Invalid User ID format "${lineUserId}"`)
                 }
 
                 return apiSuccess({ message: 'อนุมัติเรียบร้อย' })
@@ -171,7 +175,10 @@ export async function POST(req: Request) {
             case 'send-reminder': {
                 const { lineUserId, name, evaluated, total, pending } = body
 
-                if (!lineUserId) return apiError('ไม่พบ LINE User ID', 400)
+                if (!isValidLineId(lineUserId)) {
+                    console.warn(`Skipping LINE reminder: Invalid User ID format "${lineUserId}"`)
+                    return apiSuccess({ message: 'ข้ามการส่ง LINE เนื่องจาก ID ไม่ถูกต้อง (จำลอง)' })
+                }
 
                 const flexMessage = flexEvaluationReminder({ name, evaluated, total, pending })
 

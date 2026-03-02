@@ -244,10 +244,10 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                             <Button variant="ghost" onClick={() => setIsEditing(!isEditing)} className={`rounded-2xl px-6 h-12 transition-all text-xs font-black tracking-[0.1em] ${isEditing ? "text-red-500 bg-red-50" : "text-blue-600 bg-blue-50 hover:bg-blue-100"}`}>{isEditing ? <X size={18} className="mr-2" /> : <Edit2 size={18} className="mr-2" />}{isEditing ? "ยกเลิก" : "แก้ไขข้อมูล"}</Button>
                         </div>
                         <div className="flex-1 p-6 md:p-12 overflow-y-auto custom-scrollbar space-y-8 md:space-y-12">
-                            <div className="space-y-5">
+                            <div className="space-y-20">
                                 {/* Row 1: Contact Information */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-12">
-                                    <div className="space-y-1 group">
+                                    <div className="space-y-2 group">
                                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2.5">
                                             <div className="p-2 bg-blue-50 text-blue-500 rounded-xl transition-transform group-hover:scale-110">
                                                 <Phone size={14} strokeWidth={3} />
@@ -259,7 +259,7 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                                                 <Input
                                                     value={editForm.phone || ''}
                                                     onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                                                    className="h-16 w-[300px] rounded-[1.5rem] bg-slate-50 border-none px-6 text-xl  font-black text-slate-800 shadow-inner focus:bg-white transition-all ring-offset-0 focus:ring-4 focus:ring-blue-500/10"
+                                                    className="h-16 rounded-[1.5rem] bg-slate-50 border-none px-6 text-xl font-black text-slate-800 shadow-inner focus:bg-white transition-all ring-offset-0 focus:ring-4 focus:ring-blue-500/10"
                                                     placeholder="08X-XXX-XXXX"
                                                 />
                                             ) : (
@@ -270,7 +270,7 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                                         </div>
                                     </div>
 
-                                    <div className="space-y-1 group">
+                                    <div className="space-y-2 group">
                                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2.5">
                                             <div className="p-2 bg-rose-50 text-rose-500 rounded-xl transition-transform group-hover:scale-110">
                                                 <Mail size={14} strokeWidth={3} />
@@ -282,7 +282,7 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                                                 <Input
                                                     value={editForm.email || ''}
                                                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                                                    className="h-16 w-[300px] rounded-[1.5rem] bg-slate-50 border-none px-6 text-xl font-black text-slate-800 shadow-inner focus:bg-white transition-all ring-offset-0 focus:ring-4 focus:ring-rose-500/10"
+                                                    className="h-16 rounded-[1.5rem] bg-slate-50 border-none px-6 text-xl font-black text-slate-800 shadow-inner focus:bg-white transition-all ring-offset-0 focus:ring-4 focus:ring-rose-500/10"
                                                     placeholder="example@email.com"
                                                 />
                                             ) : (
@@ -296,7 +296,7 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
 
                                 {/* Row 2: Location Information */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-12">
-                                    <div className="space-y-1 group">
+                                    <div className="space-y-2 group">
                                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2.5">
                                             <div className="p-2 bg-orange-50 text-orange-500 rounded-xl transition-transform group-hover:scale-110">
                                                 <MapPin size={14} strokeWidth={3} />
@@ -310,7 +310,7 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                                         </div>
                                     </div>
 
-                                    <div className="space-y-1 group">
+                                    <div className="space-y-2 group">
                                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2.5">
                                             <div className="p-2 bg-indigo-50 text-indigo-500 rounded-xl transition-transform group-hover:scale-110">
                                                 <Building2 size={14} strokeWidth={3} />
@@ -318,7 +318,7 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                                             โรงพยาบาล / หน่วยงาน
                                         </label>
                                         <div className="px-1">
-                                            <p className="text-xl font-black text-slate-900 leading-tight">
+                                            <p className="text-xl font-black text-slate-900 tracking-tight">
                                                 {isTeacher ? 'คณะการแพทย์แผนไทย' : (data.training_sites?.site_name || '-')}
                                             </p>
                                         </div>
@@ -543,13 +543,50 @@ export default function AdminManagement() {
 
     useEffect(() => {
         fetchData()
-        const channel = supabase.channel('admin-personnel-realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'supervisors' }, (payload) => {
-                fetchData();
-                Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 4000, icon: 'info', title: `มีผู้สมัครใหม่: คุณ ${payload.new.full_name}` })
+        // const channel = supabase.channel('admin-personnel-realtime')
+        //     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'supervisors' }, (payload) => {
+        //         fetchData();
+        //         Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 4000, icon: 'info', title: `มีผู้สมัครใหม่: คุณ ${payload.new.full_name}` })
+        //     })
+        //     .subscribe()
+        // return () => { supabase.removeChannel(channel) }
+
+        const personnelChannel = supabase.channel('personnel-updates')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'supervisors'
+            }, (payload) => {
+                fetchData(); // รีโหลดข้อมูลใหม่
+                if (payload.eventType === 'INSERT') {
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'info',
+                        title: `มีผู้สมัครใหม่: คุณ ${payload.new.full_name}`,
+                        showConfirmButton: false,
+                        timer: 3000
+                    })
+                }
             })
             .subscribe()
-        return () => { supabase.removeChannel(channel) }
+
+        // ช่องสัญญาณที่ 2: ดักจับการประเมิน (เพื่ออัปเดตความคืบหน้า Realtime)
+        const progressChannel = supabase.channel('progress-updates')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'assignment_supervisors' // ตารางที่คุณใช้คำนวณ Progress
+            }, () => {
+                // เมื่อมีการ update/insert ในตารางนี้ ให้ดึง fetchData ใหม่เงียบๆ
+                fetchData();
+            })
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(personnelChannel)
+            supabase.removeChannel(progressChannel)
+        }
     }, [])
 
     const fetchData = async () => {
@@ -597,6 +634,8 @@ export default function AdminManagement() {
             cancelButtonColor: '#94a3b8',
             confirmButtonText: 'ยืนยันการอนุมัติ',
             cancelButtonText: 'ยกเลิก',
+            // heightAuto: false, // ป้องกันการคำนวณความสูงหน้าจอผิดพลาดเมื่อมี Modal ซ้อน
+            // returnFocus: false, // ป้องกันการแย่ง Focus กับตัว Dialog เดิม
             customClass: {
                 popup: 'rounded-[2.5rem] font-sans p-10',
                 confirmButton: 'rounded-full px-10 py-3 font-bold order-1',
@@ -606,6 +645,7 @@ export default function AdminManagement() {
 
         if (isConfirmed) {
             try {
+                Swal.showLoading();
                 const res = await fetch('/api/admin/supervisors', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

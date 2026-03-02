@@ -497,7 +497,7 @@ export default function SplitHomePage() {
                     router.replace('/supervisor/pending')
                 }
             } else {
-                router.push('/supervisor/register')
+                router.push('/register')
             }
         } catch (err) {
             console.error("Login failed", err)
