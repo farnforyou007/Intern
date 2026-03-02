@@ -378,10 +378,9 @@
 // ver3
 "use client"
 import { useState, useEffect } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 import {
     Search, ArrowLeft, Calendar,
-    Clock, AlertCircle, Users, BookOpen, CalendarDays
+    Clock, AlertCircle, Users, CalendarDays
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { getLineUserId } from '@/utils/auth';
@@ -393,112 +392,28 @@ export default function RotationSchedule() {
     const [searchTerm, setSearchTerm] = useState('')
     const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
 
-    const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+
 
 
 
     const fetchData = async () => {
         setLoading(true)
-        const urlParams = new URLSearchParams(window.location.search);
-        const lineUserId = await getLineUserId(urlParams);
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const lineUserId = await getLineUserId(urlParams);
+            if (!lineUserId) return;
 
-        if (!lineUserId) return;
+            const res = await fetch(`/api/supervisor/schedule?lineUserId=${encodeURIComponent(lineUserId)}`)
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
 
-        // 🔒 0. ดึงปีการศึกษาปัจจุบันจาก system_configs
-        const { data: configData } = await supabase
-            .from('system_configs')
-            .select('key_value')
-            .eq('key_name', 'current_training_year')
-            .single();
-        const currentYear = configData?.key_value || '';
-        setConfigYear(currentYear);
-
-        const { data: sv } = await supabase.from('supervisors').select('id, site_id').eq('line_user_id', lineUserId).single()
-
-        if (sv) {
-            // 🔒 ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
-            let yearStudentIds: Set<string> = new Set();
-            if (currentYear) {
-                const { data: yearStudents } = await supabase
-                    .from('students')
-                    .select('id')
-                    .eq('training_year', currentYear);
-                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
-            }
-
-            const { data, error } = await supabase
-                .from('student_assignments')
-                .select(`
-                    student_id,
-                    subjects:subject_id ( name ),
-                    sub_subjects:sub_subject_id ( name ),
-                    rotations:rotation_id ( id, name, start_date, end_date, academic_year )
-                `)
-                .eq('site_id', sv.site_id)
-
-            if (!error && data) {
-                // 🔒 กรองเฉพาะนักศึกษาในปีปัจจุบัน
-                const filteredData = currentYear
-                    ? data.filter((item: any) => yearStudentIds.has(String(item.student_id)))
-                    : data;
-
-                const groups: { [key: string]: any } = {}
-
-                filteredData.forEach((item: any) => {
-                    const r = item.rotations
-                    if (!r) return
-
-                    if (!groups[r.id]) {
-                        groups[r.id] = {
-                            rotation: r,
-                            subjects: new Set<string>(),
-                            studentIds: new Set<string>()
-                        }
-                    }
-
-                    const subName = item.sub_subjects?.name || item.subjects?.name
-                    if (subName) groups[r.id].subjects.add(subName)
-                    groups[r.id].studentIds.add(item.student_id)
-                })
-
-                // 🔒 ดึง rotation เฉพาะปีปัจจุบัน (ไม่ใช้ทั้งหมด)
-                let rotationQuery = supabase
-                    .from('rotations')
-                    .select('id, name, start_date, end_date, academic_year')
-                    .order('start_date');
-                if (currentYear) {
-                    rotationQuery = rotationQuery.eq('academic_year', currentYear);
-                }
-                const rotationsResult = await rotationQuery;
-                const allRotations: any[] = rotationsResult.data || [];
-
-                // เพิ่ม rotation ที่ไม่มีใน groups (เช่น ผลัดที่ยังไม่มี student_assignments)
-                allRotations.forEach((rot: any) => {
-                    if (!groups[rot.id]) {
-                        groups[rot.id] = {
-                            rotation: rot,
-                            subjects: new Set<string>(),
-                            studentIds: new Set<string>()
-                        }
-                    }
-                })
-
-                const result = Object.values(groups)
-                    // 🔒 กรองเฉพาะ rotation ที่ตรงกับปีการศึกษา
-                    .filter((g: any) => !currentYear || g.rotation.academic_year === currentYear)
-                    .map((g: any) => ({
-                        rotation: g.rotation,
-                        subjects: Array.from(g.subjects || []),
-                        studentCount: g.studentIds.size
-                    })).sort((a, b) => new Date(a.rotation.end_date).getTime() - new Date(b.rotation.end_date).getTime())
-
-                setGroupedSchedule(result)
-            }
+            setConfigYear(result.data.configYear || '')
+            setGroupedSchedule(result.data.groupedSchedule || [])
+        } catch (error) {
+            console.error('Schedule fetch error:', error)
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
     }
 
     useEffect(() => {

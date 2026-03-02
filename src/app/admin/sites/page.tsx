@@ -473,27 +473,26 @@
 
 
 
-// version not invite code 
+// version API Routes Migration
 "use client"
 import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import AdminLayout from '@/components/AdminLayout'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { 
-    Plus, Edit2, Trash2, MapPin, Search, X, 
-    Hospital, CalendarDays, ChevronRight, ChevronLeft, 
-    FileText, StickyNote 
+import {
+    Plus, Edit2, Trash2, MapPin, Search, X,
+    Hospital, CalendarDays, ChevronRight, ChevronLeft,
+    FileText, StickyNote
 } from "lucide-react"
 import Swal from 'sweetalert2'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
 } from "@/components/ui/tooltip"
 // รายชื่อจังหวัดคงเดิม
 const THAI_PROVINCES = [
@@ -568,15 +567,20 @@ export default function SitesPageV2() {
 
     useEffect(() => {
         setCurrentPage(1)
-    }, [searchTerm, selectedProvinceFilter,rowsPerPage])
-
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+    }, [searchTerm, selectedProvinceFilter, rowsPerPage])
 
     const fetchData = async () => {
         setLoading(true)
-        const { data } = await supabase.from('training_sites').select('*').order('created_at', { ascending: false })
-        if (data) setSites(data)
-        setLoading(false)
+        try {
+            const res = await fetch('/api/admin/sites')
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+            setSites(result.data.sites || [])
+        } catch (err: any) {
+            console.error('Fetch sites error:', err.message)
+        } finally {
+            setLoading(false)
+        }
     }
 
     useEffect(() => { fetchData() }, [])
@@ -633,11 +637,17 @@ export default function SitesPageV2() {
         }
 
         try {
-            if (selectedSite) {
-                await supabase.from('training_sites').update(payload).eq('id', selectedSite.id)
-            } else {
-                await supabase.from('training_sites').insert(payload)
-            }
+            const res = await fetch('/api/admin/sites', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save',
+                    siteId: selectedSite?.id || null,
+                    payload
+                })
+            })
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
 
             setIsModalOpen(false);
             fetchData();
@@ -659,10 +669,19 @@ export default function SitesPageV2() {
         })
 
         if (isConfirmed) {
-            const { error } = await supabase.from('training_sites').delete().eq('id', site.id)
-            if (!error) {
+            try {
+                const res = await fetch('/api/admin/sites', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', id: site.id })
+                })
+                const result = await res.json()
+                if (!result.success) throw new Error(result.error)
+
                 setSites(prev => prev.filter(item => item.id !== site.id))
                 Swal.fire({ icon: 'success', title: 'ลบข้อมูลสำเร็จ', timer: 1500, showConfirmButton: false })
+            } catch (error: any) {
+                Swal.fire('Error', error.message, 'error')
             }
         }
     }
@@ -675,7 +694,7 @@ export default function SitesPageV2() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                     <div>
                         <h1 className="text-3xl font-black flex items-center gap-3 text-slate-900">
-                            <Hospital className="text-blue-600" /> แหล่งฝึกงาน 
+                            <Hospital className="text-blue-600" /> แหล่งฝึกงาน
                             {/* <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full uppercase tracking-tighter"></span> */}
                         </h1>
                         <p className="text-slate-500 mt-1 font-medium text-sm">จัดการหน่วยงานฝึกงานและข้อมูลหมายเหตุประกอบ</p>
@@ -789,7 +808,7 @@ export default function SitesPageV2() {
                 </div>
             </div> */}
 
-            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
                     <Table>
                         <TableHeader className="bg-slate-50/50">
                             <TableRow>
@@ -867,7 +886,7 @@ export default function SitesPageV2() {
                             </div>
 
                             <div className="flex items-center gap-2">
-                                <Button variant="outline" size="sm" className="rounded-xl h-9" onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1}><ChevronLeft size={16}/></Button>
+                                <Button variant="outline" size="sm" className="rounded-xl h-9" onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1}><ChevronLeft size={16} /></Button>
                                 <div className="flex gap-1">
                                     {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
                                         // Logic ย่อหน้า pagination เหมือนเดิม
@@ -876,9 +895,9 @@ export default function SitesPageV2() {
                                             return null;
                                         }
                                         return (
-                                            <button 
-                                                key={page} 
-                                                onClick={() => setCurrentPage(page)} 
+                                            <button
+                                                key={page}
+                                                onClick={() => setCurrentPage(page)}
                                                 className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:bg-slate-100'}`}
                                             >
                                                 {page}
@@ -886,7 +905,7 @@ export default function SitesPageV2() {
                                         )
                                     })}
                                 </div>
-                                <Button variant="outline" size="sm" className="rounded-xl h-9" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage === totalPages}><ChevronRight size={16}/></Button>
+                                <Button variant="outline" size="sm" className="rounded-xl h-9" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage === totalPages}><ChevronRight size={16} /></Button>
                             </div>
                         </div>
                     )}
@@ -898,7 +917,7 @@ export default function SitesPageV2() {
                 <DialogContent className="max-w-2xl rounded-[2.5rem] p-10 border-none shadow-2xl bg-white focus:outline-none overflow-hidden">
                     <DialogHeader>
                         <DialogTitle className="text-3xl font-black text-slate-900 flex items-center gap-3">
-                            <div className="p-3 bg-blue-100 rounded-2xl text-blue-600"><Hospital size={24}/></div>
+                            <div className="p-3 bg-blue-100 rounded-2xl text-blue-600"><Hospital size={24} /></div>
                             {selectedSite ? 'แก้ไขข้อมูลแหล่งฝึก' : 'เพิ่มแหล่งฝึกใหม่'}
                         </DialogTitle>
                     </DialogHeader>
@@ -961,7 +980,7 @@ export default function SitesPageV2() {
                         {/* เพิ่มช่องหมายเหตุ แทนที่ Invite Code */}
                         <div className="space-y-3">
                             <label className="text-[10px] font-black uppercase tracking-widest ml-1 text-slate-400 flex items-center gap-2">
-                                <FileText size={12}/> หมายเหตุ / ข้อมูลเพิ่มเติม (ทางเลือก)
+                                <FileText size={12} /> หมายเหตุ / ข้อมูลเพิ่มเติม (ทางเลือก)
                             </label>
                             <textarea
                                 value={note}
@@ -973,11 +992,11 @@ export default function SitesPageV2() {
                     </div>
 
                     <DialogFooter className="sm:justify-start">
-                        <Button 
-                            onClick={handleSave} 
+                        <Button
+                            onClick={handleSave}
                             className="w-full bg-blue-600 hover:bg-blue-700 h-16 rounded-2xl text-xl font-black transition-all shadow-xl shadow-blue-100 flex items-center gap-3"
                         >
-                            <Plus size={24}/> {selectedSite ? 'บันทึกการเปลี่ยนแปลง' : 'สร้างแหล่งฝึกใหม่'}
+                            <Plus size={24} /> {selectedSite ? 'บันทึกการเปลี่ยนแปลง' : 'สร้างแหล่งฝึกใหม่'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

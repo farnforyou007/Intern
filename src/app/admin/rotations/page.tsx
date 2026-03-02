@@ -302,10 +302,9 @@
 // }
 
 
-//ver2
+//ver3 — API Routes Migration
 "use client"
 import { useState, useEffect, useCallback } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 import AdminLayout from '@/components/AdminLayout'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -336,53 +335,25 @@ export default function RotationsPage() {
         selected_subjects: [] as number[]
     })
 
-    const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
-
-    // 1. ดึงรายการปีการศึกษาที่มีอยู่จริงในระบบมาทำ Dropdown Filter
-    const fetchAvailableYears = useCallback(async () => {
-        const { data } = await supabase
-            .from('rotations')
-            .select('academic_year')
-            .order('academic_year', { ascending: false });
-
-        if (data && data.length > 0) {
-            const uniqueYears = Array.from(new Set(data.map(item => item.academic_year)));
-            setAvailableYears(uniqueYears);
-            // ถ้าปีปัจจุบันไม่มีในระบบ ให้ยึดปีล่าสุดที่มีเป็นค่าเริ่มต้นสำหรับ Filter
-            if (!uniqueYears.includes(selectedYearFilter)) {
-                setSelectedYearFilter(uniqueYears[0]);
-            }
-        } else {
-            setAvailableYears([currentYearBS]);
-        }
-    }, [supabase, selectedYearFilter, currentYearBS]);
-
-    // 2. ดึงข้อมูลผลัดตามปีที่ Filter
     const fetchData = useCallback(async () => {
         setLoading(true)
         try {
-            const { data: rotData } = await supabase
-                .from('rotations')
-                .select(`*, rotation_subjects(subject_id)`)
-                .eq('academic_year', selectedYearFilter) // กรองตามปีที่เลือก
-                .order('round_number', { ascending: true })
+            const res = await fetch(`/api/admin/rotations?year=${selectedYearFilter}`)
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
 
-            const { data: subData } = await supabase.from('subjects').select('*').order('name')
+            setRotations(result.data.rotations || [])
+            setSubjects(result.data.subjects || [])
 
-            if (rotData) setRotations(rotData)
-            if (subData) setSubjects(subData)
+            const years = result.data.availableYears || [currentYearBS]
+            setAvailableYears(years)
+            if (!years.includes(selectedYearFilter)) {
+                setSelectedYearFilter(years[0])
+            }
         } finally {
             setLoading(false)
         }
-    }, [supabase, selectedYearFilter]);
-
-    useEffect(() => {
-        fetchAvailableYears();
-    }, [fetchAvailableYears]);
+    }, [selectedYearFilter, currentYearBS]);
 
     useEffect(() => {
         fetchData()
@@ -420,9 +391,8 @@ export default function RotationsPage() {
 
         try {
             setLoading(true);
-            let rotationId = selectedRotation?.id
 
-            const rotationPayload = {
+            const payload = {
                 name: formData.name,
                 start_date: formData.start_date,
                 end_date: formData.end_date,
@@ -430,48 +400,33 @@ export default function RotationsPage() {
                 round_number: formData.round_number
             }
 
-            if (selectedRotation) {
-                await supabase.from('rotations').update(rotationPayload).eq('id', rotationId)
-            } else {
-                // ตรวจสอบผลัดซ้ำในปีเดียวกันก่อน Insert
-                const { data: existing } = await supabase.from('rotations')
-                    .select('id')
-                    .eq('academic_year', formData.academic_year)
-                    .eq('round_number', formData.round_number)
-                    .maybeSingle();
+            const res = await fetch('/api/admin/rotations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save',
+                    rotationId: selectedRotation?.id || null,
+                    payload,
+                    selected_subjects: formData.selected_subjects
+                })
+            })
+            const result = await res.json()
 
-                if (existing) {
-                setLoading(false); // ปลดล็อกปุ่มเพื่อให้แก้ไขข้อมูลได้
-                return Swal.fire({
-                    icon: 'error',
-                    title: 'ข้อมูลซ้ำ',
-                    text: `มีผลัดที่ ${formData.round_number} ของปี ${formData.academic_year} อยู่ในระบบแล้ว`,
-                    timer: 2000, // ให้หายไปเองภายใน 2 วินาที
-                    showConfirmButton: false, // ไม่ต้องรอให้กด OK
-                    customClass: {
-                        popup: 'rounded-[2rem] font-sans'
-                    }
-                });
-            }
-
-                const { data, error } = await supabase.from('rotations').insert(rotationPayload).select().single()
-                if (error) throw error;
-                rotationId = data.id
-            }
-
-            await supabase.from('rotation_subjects').delete().eq('rotation_id', rotationId)
-
-            if (formData.selected_subjects.length > 0) {
-                const junctionData = formData.selected_subjects.map(subId => ({
-                    rotation_id: rotationId,
-                    subject_id: subId
-                }))
-                await supabase.from('rotation_subjects').insert(junctionData)
+            if (!result.success) {
+                if (res.status === 409) {
+                    setLoading(false);
+                    return Swal.fire({
+                        icon: 'error', title: 'ข้อมูลซ้ำ',
+                        text: result.error,
+                        timer: 2000, showConfirmButton: false,
+                        customClass: { popup: 'rounded-[2rem] font-sans' }
+                    })
+                }
+                throw new Error(result.error)
             }
 
             Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false })
             setIsModalOpen(false)
-            fetchAvailableYears(); // เผื่อมีการเพิ่มปีการศึกษาใหม่
             fetchData()
         } catch (error: any) {
             Swal.fire('Error', error.message, 'error')
@@ -500,19 +455,20 @@ export default function RotationsPage() {
 
         if (isConfirmed) {
             try {
-                const { error } = await supabase.from('rotations').delete().eq('id', id)
-                // 🚩 จุดสำคัญ: ถ้า Supabase บล็อกเพราะติด RESTRICT มันจะส่ง error มาที่นี่
-                if (error) {
-                    if (error.code === '23503') { //รหัส Error ของ PostgreSQL สำหรับ Foreign Key Violation
-                        throw new Error('ไม่สามารถลบผลัดนี้ได้ เนื่องจากมีนักศึกษาลงทะเบียนฝึกงานในผลัดนี้อยู่แล้ว');
-                    }
-                    throw error;
+                const res = await fetch('/api/admin/rotations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', id })
+                })
+                const result = await res.json()
+
+                if (!result.success) {
+                    throw new Error(result.error)
                 }
+
                 Swal.fire({ icon: 'success', title: 'ลบข้อมูลเรียบร้อย', timer: 1500, showConfirmButton: false })
-                fetchAvailableYears();
                 fetchData()
             } catch (error: any) {
-                // ✅ แสดง Error ให้ Admin เห็นว่าทำไมถึงลบไม่ได้
                 Swal.fire({
                     title: 'ลบไม่สำเร็จ!',
                     text: error.message,
@@ -535,16 +491,17 @@ export default function RotationsPage() {
     return (
         <AdminLayout>
             <div className="p-8 max-w-6xl mx-auto">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
                     <div>
-                        <h1 className="text-3xl font-black text-slate-900 leading-tight">จัดการผลัดการฝึก</h1>
-                        <p className="text-slate-500">กำหนดช่วงเวลาและรายวิชาที่ฝึกในแต่ละผลัด</p>
+                        <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
+                            <Calendar className="text-blue-600" size={32} /> จัดการผลัดการฝึก
+                        </h1>
+                        <p className="text-slate-500 mt-1 font-medium text-sm">กำหนดช่วงเวลาและรายวิชาหลักที่ฝึกในแต่ละผลัดการฝึก</p>
                     </div>
 
-                    <div className="flex items-center gap-3 w-full md:w-auto">
-                        {/* Dynamic Year Filter Selector */}
-                        <div className="flex items-center gap-2 bg-white px-4 h-12 rounded-xl border border-slate-200 shadow-sm grow md:grow-0">
-                            <Filter size={16} className="text-slate-400" />
+                    <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">
+                        <div className="flex items-center gap-3 bg-white px-4 h-12 rounded-xl border border-slate-200 shadow-sm grow sm:grow-0">
+                            <Filter size={18} className="text-slate-400" />
                             <select
                                 value={selectedYearFilter}
                                 onChange={(e) => setSelectedYearFilter(e.target.value)}
@@ -556,8 +513,12 @@ export default function RotationsPage() {
                             </select>
                         </div>
 
-                        <Button onClick={() => handleOpenModal()} className="bg-blue-600 hover:bg-blue-700 rounded-xl h-12 px-6 font-bold shadow-lg shadow-blue-100 whitespace-nowrap">
-                            <Plus className="mr-2" size={20} /> เพิ่มผลัดใหม่
+                        <Button
+                            onClick={() => handleOpenModal()}
+                            className="h-12 px-6 rounded-xl bg-slate-900 hover:bg-black text-white font-black shadow-lg shadow-slate-200 flex items-center gap-2 transition-all active:scale-95 whitespace-nowrap"
+                        >
+                            <Plus size={20} />
+                            เพิ่มผลัดใหม่
                         </Button>
                     </div>
                 </div>

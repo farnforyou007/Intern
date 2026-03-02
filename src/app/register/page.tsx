@@ -573,7 +573,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     Camera, MapPin, Phone, User, Loader2, ImagePlus,
-    CheckCircle2, BookOpen, Building2, ChevronDown, UserCircle2, Hospital
+    CheckCircle2, BookOpen, Building2, ChevronDown, UserCircle2, Hospital, Mail
 } from 'lucide-react'
 import Swal from 'sweetalert2'
 import liff from '@line/liff'
@@ -582,6 +582,7 @@ import { flexRegisterSuccess } from '@/lib/lineFlex';
 export default function SmartRegister() {
     const [fullName, setFullName] = useState('')
     const [phone, setPhone] = useState('')
+    const [email, setEmail] = useState('')
     const [loading, setLoading] = useState(false)
     const [preview, setPreview] = useState<string | null>(null)
     const [file, setFile] = useState<File | null>(null)
@@ -681,9 +682,10 @@ export default function SmartRegister() {
             Swal.fire('เกิดข้อผิดพลาด', 'ไม่พบข้อมูล LINE ID กรุณาเข้าใช้งานผ่าน LINE', 'error');
             return;
         }
+
         // Validation เบื้องต้น
-        if (!file || !fullName || !phone || selectedSubjects.length === 0) {
-            Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกข้อมูลส่วนตัว แนบรูป และเลือกวิชาที่รับผิดชอบ', 'warning');
+        if (!file || !fullName || !phone || !email || selectedSubjects.length === 0) {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกข้อมูลส่วนตัว แแนบรูป และเลือกวิชาที่รับผิดชอบให้ครบถ้วน', 'warning');
             return;
         }
         if (userType === 'supervisor' && !selectedSite) {
@@ -693,48 +695,38 @@ export default function SmartRegister() {
 
         setLoading(true);
         try {
-            // 1. Upload รูปภาพ
+            // 1. Upload รูปภาพ (ยังทำที่ Client เพราะต้องการ direct storage interaction)
             const fileName = `avatar_${Date.now()}.jpg`;
             const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, file);
             if (uploadError) throw uploadError;
 
             const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
 
-            // 2. บันทึกข้อมูลลงตาราง supervisors
-            const { data: supervisor, error: insError } = await supabase
-                .from('supervisors')
-                .insert([{
-                    line_user_id: lineUserId,
-                    line_display_name: lineDisplayName,
-                    full_name: fullName,
-                    phone: phone,
-                    avatar_url: publicUrl,
-                    site_id: userType === 'supervisor' ? selectedSite.id : null,
+            // 2. ส่งข้อมูลไปที่ API
+            const res = await fetch('/api/register/supervisor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lineUserId,
+                    lineDisplayName,
+                    fullName,
+                    phone,
+                    email,
+                    avatarUrl: publicUrl,
+                    siteId: userType === 'supervisor' ? selectedSite.id : null,
                     province: userType === 'supervisor' ? selectedSite?.province : 'มหาวิทยาลัย',
                     role: userType,
-                    is_verified: false // รอแอดมินตรวจสอบ
-                }]).select().single();
+                    selectedSubjects,
+                    selectedSubSubjects
+                })
+            })
 
-            if (insError) throw insError;
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
 
-            // 3. บันทึกวิชาที่รับผิดชอบลง supervisor_subjects
-            const subjectInserts: any[] = [];
-            selectedSubjects.forEach(subId => {
-                const relatedSubSubs = subSubjects.filter(ss => ss.parent_subject_id === subId);
-                if (relatedSubSubs.length > 0) {
-                    const pickedSubSubs = selectedSubSubjects.filter(ssId => relatedSubSubs.some(rss => rss.id === ssId));
-                    pickedSubSubs.forEach(ssId => {
-                        subjectInserts.push({ supervisor_id: supervisor.id, subject_id: subId, sub_subject_id: ssId });
-                    });
-                } else {
-                    subjectInserts.push({ supervisor_id: supervisor.id, subject_id: subId, sub_subject_id: null });
-                }
-            });
+            const supervisor = result.data
 
-            if (subjectInserts.length > 0) {
-                await supabase.from('supervisor_subjects').insert(subjectInserts);
-            }
-
+            // 3. Line Notification
             try {
                 await fetch('/api/line/push', {
                     method: 'POST',
@@ -743,14 +735,12 @@ export default function SmartRegister() {
                         lineUserId: supervisor.line_user_id,
                         flexMessage: flexRegisterSuccess({
                             name: supervisor.full_name,
-                            site: userType === 'supervisor' ? selectedSite.site_name : 'มหาวิทยาลัย'
+                            site: userType === 'supervisor' ? selectedSite?.site_name : 'มหาวิทยาลัย'
                         })
                     })
-
                 });
             } catch (lineErr) {
                 console.error("Line Notification Error:", lineErr);
-                // ไม่ throw error เพื่อไม่ให้ขัดจังหวะการลงทะเบียนหลัก
             }
 
             Swal.fire({
@@ -759,8 +749,7 @@ export default function SmartRegister() {
                 icon: 'success',
                 confirmButtonColor: '#2563eb'
             }).then(() => {
-                // liff.closeWindow() // ปิดหน้าต่าง LIFF ทันทีเมื่อเสร็จ
-                window.location.reload(); // ให้รีเฟรชหน้าแทนเพื่อดูผลลัพธ์
+                window.location.reload();
             });
         } catch (error: any) {
             Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
@@ -859,6 +848,10 @@ export default function SmartRegister() {
                         <div className="relative">
                             <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                             <input placeholder="เบอร์โทรศัพท์" className="w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={phone} onChange={handlePhoneChange} />
+                        </div>
+                        <div className="relative">
+                            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                            <input placeholder="อีเมล (สำหรับติดต่อ)" className="w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={email} onChange={e => setEmail(e.target.value)} />
                         </div>
                     </div>
 

@@ -94,7 +94,9 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
-import { ShieldAlert, ArrowLeft, UserPlus, LayoutDashboard, Users, BookOpen, Settings, Menu, X, LogOut, GraduationCap, ArrowRight } from 'lucide-react'
+import {
+    ShieldAlert, ArrowLeft, ArrowRight, UserPlus, LayoutDashboard, GraduationCap, BookOpen, Settings, Users, LogOut, Menu, X, UserCircle
+} from 'lucide-react'
 import Link from 'next/link'
 import Swal from 'sweetalert2'
 import liff from '@line/liff'
@@ -115,7 +117,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         { name: 'แดชบอร์ด', desc: 'ภาพรวม KPI และสถิติ', icon: <LayoutDashboard size={20} />, href: '/teacher/dashboard' },
         { name: 'รายชื่อนักศึกษา', desc: 'ข้อมูลติดต่อ นศ.', icon: <Users size={20} />, href: '/teacher/students' },
         { name: 'ผลการประเมิน', desc: 'คะแนนและส่งออก Excel', icon: <BookOpen size={20} />, href: '/teacher/subjects' },
-        { name: 'ตั้งค่าระบบ', desc: 'โปรไฟล์และแจ้งเตือน', icon: <Settings size={20} />, href: '/teacher/settings' },
+        { name: 'ข้อมูลส่วนตัว', desc: 'ข้อมูลส่วนตัวและวิชาที่ดูแล', icon: <Settings size={20} />, href: '/teacher/profile' },
     ]
 
     const handleLogout = async () => {
@@ -184,8 +186,8 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         const checkTeacherAccess = async () => {
             try {
                 const cachedAuth = sessionStorage.getItem('teacher_auth_status')
-                if (cachedAuth === 'authorized' && status !== 'authorized') {
-                    setStatus('authorized')
+                if (cachedAuth === 'authorized') {
+                    if (status !== 'authorized') setStatus('authorized')
                     return // จบทันที ไม่ต้องรอโหลด LINE/DB ใหม่
                 }
 
@@ -212,28 +214,30 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 // ❌ 4. คอมเมนต์ หรือลบค่า Mock ID ของเก่าออก
                 // const lineUserId = 'test-c'
 
-                // 🟢 5. ดึงข้อมูลจาก Supabase โดยใช้ ID จริง
-                const { data: user } = await supabase
-                    .from('supervisors')
-                    .select('id, is_verified, role, supervisor_subjects(id)')
-                    .eq('line_user_id', lineUserId)
-                    .single()
-                setUser(user);
+                // 🟢 2. Fetch from API (แทนที่ Supabase direct)
+                const res = await fetch(`/api/teacher/profile?lineUserId=${lineUserId}`)
+                const result = await res.json()
 
-                if (!user) {
+                if (!result.success || !result.data) {
                     setStatus('unregistered')
                     setIsAuthorized(false)
-                } else if (!user.is_verified) {
+                    return
+                }
+
+                const userData = result.data
+                setUser(userData);
+
+                if (!userData.is_verified) {
                     setStatus('pending')
                     setIsAuthorized(false)
                     if (pathname !== '/teacher/pending') {
                         router.replace('/teacher/pending')
                     }
                 } else {
-                    const hasSubjects = user.supervisor_subjects && user.supervisor_subjects.length > 0
+                    const hasSubjects = userData.supervisor_subjects && userData.supervisor_subjects.length > 0
+                    const canAccess = userData.role === 'teacher' || userData.role === 'both'
 
-                    // ตรวจสอบทั้ง Role และการผูกวิชา
-                    if (user.role === 'teacher' && hasSubjects) {
+                    if (canAccess && hasSubjects) {
                         sessionStorage.setItem('teacher_auth_status', 'authorized')
                         setStatus('authorized')
                         setIsAuthorized(true)
@@ -433,12 +437,14 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                     </div>
                     <div className="flex items-center gap-3">
                         <div className="text-right hidden sm:block">
-                            <p className="text-sm font-bold text-slate-900 leading-none">Teacher</p>
-                            <p className="text-[10px] text-indigo-600 font-bold mt-1 uppercase tracking-widest">Management</p>
+                            <p className="text-sm font-black text-slate-900 leading-none">{user?.full_name || 'Teacher'}</p>
+                            <p className="text-[10px] text-blue-600 font-bold mt-1 uppercase tracking-widest truncate max-w-[200px]">
+                                {user?.supervisor_subjects && user.supervisor_subjects.length > 0
+                                    ? user.supervisor_subjects.map((s: any) => s.subjects?.name).filter(Boolean).join(', ')
+                                    : 'รายวิชาที่รับผิดชอบ'}
+                            </p>
                         </div>
-                        <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
-                            <GraduationCap size={16} />
-                        </div>
+                        <UserCircle size={32} className="text-slate-300" />
                     </div>
                 </header>
 

@@ -3,7 +3,6 @@
 //ver00
 "use client"
 import { useState, useEffect } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 import {
     ChevronLeft, User, Users, Search, GraduationCap, FileText, X,
     Download, MapPin, Phone, ListChecks, BookOpen, ChevronRight, FileSpreadsheet, Clock, ChevronDown,
@@ -25,6 +24,8 @@ export default function EvaluationSummary() {
 
 
     const [loading, setLoading] = useState(true)
+    const [isFirstLoad, setIsFirstLoad] = useState(true)
+    const [isTabLoading, setIsTabLoading] = useState(false)
     const [subjects, setSubjects] = useState<any[]>([])
     const [data, setData] = useState<any[]>([])
     const [searchTerm, setSearchTerm] = useState('')
@@ -46,10 +47,7 @@ export default function EvaluationSummary() {
     const [loadingDetail, setLoadingDetail] = useState(false)
     const [selectedSupervisorIdx, setSelectedSupervisorIdx] = useState(0)
 
-    const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+
 
     const handleFilterChange = (id: string) => {
         const params = new URLSearchParams(searchParams);
@@ -61,230 +59,59 @@ export default function EvaluationSummary() {
 
     useEffect(() => {
         const fetchData = async () => {
-            setLoading(true)
-            // const lineId = 'test-c'
-            // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+            if (isFirstLoad) {
+                setLoading(true)
+            } else {
+                setIsTabLoading(true)
+            }
 
-            // // 🟢 2. ตรวจสอบการ Login
-            // if (!liff.isLoggedIn()) {
-            //     liff.login({ redirectUri: window.location.href })
-            //     return
-            // }
-
-            // // 🟢 3. ดึง Profile จริง
-            // const profile = await liff.getProfile()
-            // const lineId = profile.userId // ใช้ ID จาก LINE จริงๆ
             const urlParams = new URLSearchParams(window.location.search);
             const lineUserId = await getLineUserId(urlParams);
-
-            if (!lineUserId) return;
-
-            // 🔒 ดึงปีการศึกษา default + options
-            if (!selectedTrainingYear) {
-                const { data: configData } = await supabase
-                    .from('system_configs')
-                    .select('key_value')
-                    .eq('key_name', 'current_training_year')
-                    .single();
-                if (configData?.key_value) {
-                    setSelectedTrainingYear(configData.key_value);
-                    setLoading(false);
-                    return;
-                }
-            }
-            const { data: yearsData } = await supabase
-                .from('students')
-                .select('training_year')
-                .not('training_year', 'is', null);
-            if (yearsData) {
-                const unique = Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a));
-                setTrainingYearOptions(unique as string[]);
+            if (!lineUserId) {
+                setLoading(false)
+                setIsTabLoading(false)
+                return;
             }
 
-            // 🔒 ดึง student IDs ในปีที่เลือก
-            let yearStudentIds: Set<string> | null = null;
-            if (selectedTrainingYear) {
-                const { data: yearStudents } = await supabase
-                    .from('students')
-                    .select('id')
-                    .eq('training_year', selectedTrainingYear);
-                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
-            }
+            const yearParam = selectedTrainingYear ? `&selectedTrainingYear=${encodeURIComponent(selectedTrainingYear)}` : ''
+            const subjectParam = subjectId ? `&subjectId=${encodeURIComponent(subjectId)}` : ''
 
-            const { data: user } = await supabase.from('supervisors').select('id').eq('line_user_id', lineUserId).single()
-            const PRIORITY_MAP: { [key: string]: number } = {
-                "บุคลิก": 1,
-                "ประสบการณ์": 2,
-                "ฝึก": 2,
-                "เล่ม": 3,
-                "รายงาน": 3
-            };
-            const getPriority = (title: string) => {
-                for (const key in PRIORITY_MAP) {
-                    if (title.includes(key)) return PRIORITY_MAP[key];
-                }
-                return 99;
-            };
+            try {
+                const res = await fetch(`/api/teacher/subjects?lineUserId=${encodeURIComponent(lineUserId)}${subjectParam}${yearParam}`)
+                const result = await res.json()
 
-            const getTag = (title: string) => {
-                const match = title.match(/\((.*?)\)/);
-                return match ? match[1].trim() : "";
-            };
-
-            const sortEvaluations = (a: any, b: any) => {
-                const tagA = getTag(a.title || "");
-                const tagB = getTag(b.title || "");
-                if (tagA !== tagB) return tagA.localeCompare(tagB, 'th');
-                return getPriority(a.title || "") - getPriority(b.title || "");
-            };
-
-            if (user) {
-                const { data: subData } = await supabase.from('supervisor_subjects').select('subject_id, subjects(name, id)').eq('supervisor_id', user.id)
-                setSubjects(subData || [])
-
-                // ถ้ายังไม่มี subjectId ให้ default เป็นวิชาแรก
-                if (!subjectId && subData && subData.length > 0) {
-                    handleFilterChange(subData[0].subject_id)
+                if (!result.success) {
                     setLoading(false)
+                    setIsTabLoading(false)
                     return
                 }
 
-                // 🚩 Query รวม supervisor info + sub_subjects
-                let query = supabase.from('student_assignments').select(`
-                    id, 
-                    students (id, first_name, last_name, student_code, avatar_url, phone),
-                    subjects (id, name),
-                    sub_subjects (id, name),
-                    training_sites (site_name, province), 
-                    evaluation_logs (
-                        id, total_score, comment, supervisor_id,created_at,
-                        supervisors (id, full_name),
-                        evaluation_groups (id, group_name, weight),
-                        evaluation_answers (score, item_id)
-                    )
-                `)
+                const d = result.data
+                if (!selectedTrainingYear && d.defaultYear) {
+                    setSelectedTrainingYear(d.defaultYear)
+                    // Don't set isFirstLoad to false yet, wait for the actual data fetch with year
+                    return
+                }
 
-                if (subjectId) query = query.eq('subject_id', subjectId)
-                else if (subData) query = query.in('subject_id', subData.map(s => s.subject_id))
+                setTrainingYearOptions(d.trainingYearOptions || [])
+                setSubjects(d.subjects || [])
 
-                const { data: res } = await query
+                if (!subjectId && d.effectiveSubjectId) {
+                    handleFilterChange(d.effectiveSubjectId)
+                    return
+                }
 
-                // 🔒 กรองเฉพาะ student ในปีที่เลือก
-                const yearFiltered = yearStudentIds
-                    ? (res || []).filter((item: any) => yearStudentIds!.has(String(item.students?.id)))
-                    : (res || [])
-
-                // 🟢 1. จัดกลุ่ม (Grouping) ข้อมูลนักศึกษา 1 คนต่อ 1 แถว
-                const groupedStudents: { [studentId: string]: any } = {}
-
-                yearFiltered.forEach((item: any) => {
-                    const studentId = item.students?.id
-                    if (!studentId) return
-
-                    if (!groupedStudents[studentId]) {
-                        groupedStudents[studentId] = {
-                            student: item.students,
-                            place: item.training_sites,
-                            subjectName: item.subjects?.name || 'ไม่ระบุวิชา',
-                            subSubjects: new Set<string>(), // เก็บชื่อวิชาย่อย
-                            allLogs: [] // รวม evaluation_logs ของทุกวิชาย่อยมาไว้ด้วยกัน
-                        }
-                    }
-
-                    // เพิ่มวิชาย่อย
-                    if (item.sub_subjects?.name) {
-                        groupedStudents[studentId].subSubjects.add(item.sub_subjects.name)
-                    }
-
-                    // รวม logs
-                    if (item.evaluation_logs && item.evaluation_logs.length > 0) {
-                        groupedStudents[studentId].allLogs.push(...item.evaluation_logs)
-                    }
-                })
-
-                // 🟢 2. ประมวลผลจากข้อมูลที่จัดกลุ่มแล้ว
-                const processed = Object.values(groupedStudents).map((item: any) => {
-                    const logs = item.allLogs || []
-
-                    // จัดกลุ่ม logs ตาม supervisor_id
-                    const supervisorMap: { [key: string]: { "supervisorId": string, "supervisorName": string, "logs": any[] } } = {}
-                    logs.forEach((log: any) => {
-                        const svId = log.supervisor_id || 'unknown'
-                        if (!supervisorMap[svId]) {
-                            supervisorMap[svId] = {
-                                supervisorId: svId,
-                                supervisorName: log.supervisors?.full_name || 'ไม่ระบุชื่อ',
-                                logs: []
-                            }
-                        }
-                        supervisorMap[svId].logs.push(log)
-                    })
-
-                    const supervisorEvaluations = Object.values(supervisorMap).map(sv => ({
-                        ...sv,
-                        evaluations: sv.logs.map((log: any) => ({
-                            groupId: log.evaluation_groups?.id,
-                            title: log.evaluation_groups?.group_name,
-                            rawScore: log.total_score || 0,
-                            weight: log.evaluation_groups?.weight || 1,
-                            comment: log.comment || '-',
-                            answers: log.evaluation_answers || [],
-                            evaluatedAt: log.created_at
-                        })).sort(sortEvaluations)
-                    }))
-
-                    const mentorCount = supervisorEvaluations.length
-
-                    // คำนวณ evaluations เฉลี่ย (สำหรับ card & summary)
-                    // ถ้า 1 คน ใช้ตรง ๆ / ถ้าหลายคน หาค่าเฉลี่ย
-                    let evaluations: any[] = []
-                    if (mentorCount === 1) {
-                        evaluations = supervisorEvaluations[0].evaluations
-                    } else if (mentorCount > 1) {
-                        // รวม evaluations จากทุก supervisor แล้วหาค่าเฉลี่ยตาม groupId
-                        const groupMap: { [groupId: string]: any[] } = {}
-                        supervisorEvaluations.forEach(sv => {
-                            sv.evaluations.forEach((ev: any) => {
-                                if (!groupMap[ev.groupId]) groupMap[ev.groupId] = []
-                                groupMap[ev.groupId].push(ev)
-                            })
-                        })
-                        evaluations = Object.values(groupMap).map(evs => {
-                            const avgRawScore = evs.reduce((sum: number, e: any) => sum + e.rawScore, 0) / evs.length
-                            return {
-                                groupId: evs[0].groupId,
-                                title: evs[0].title,
-                                rawScore: Math.round(avgRawScore * 100) / 100,
-                                weight: evs[0].weight,
-                                comment: evs.map((e: any) => e.comment).join(' / '),
-                                // comment: evs[0].comment, // ใช้ comment ของคนแรก (หรือจะปรับเป็นรวมทุกคนก็ได้)
-                                answers: evs[0].answers // ใช้ answers ของคนแรกเพื่อนับจำนวนข้อ
-                            }
-
-                        }).sort(sortEvaluations);
-                    }
-
-                    // จัดรูปแบบชื่อวิชาที่จะแสดง ถ้ามีวิชาย่อยให้เอามาต่อท้ายวิชาหลัก
-                    let displaySubjectName = item.subjectName;
-                    if (item.subSubjects.size > 0) {
-                        displaySubjectName += ` (${Array.from(item.subSubjects).join(', ')})`
-                    }
-
-                    return {
-                        student: item.student,
-                        place: item.place,
-                        subjectName: displaySubjectName,
-                        evaluations,
-                        supervisorEvaluations,
-                        mentorCount
-                    }
-                });
-                setData(processed || [])
+                setData(d.data || [])
+                setIsFirstLoad(false)
+            } catch (error) {
+                console.error("Fetch data error:", error)
+            } finally {
+                setLoading(false)
+                setIsTabLoading(false)
             }
-            setLoading(false)
         }
         fetchData()
-    }, [subjectId, supabase, selectedTrainingYear])
+    }, [subjectId, selectedTrainingYear])
 
     // ฟังก์ชันเปิด Modal รายละเอียด พร้อมดึงข้อคำถามจริง
     // const openDetailModal = async (student: any) => {
@@ -338,20 +165,24 @@ export default function EvaluationSummary() {
         });
         const groupIds = Array.from(allGroupIds);
 
-        const { data: questions } = await supabase
-            .from('evaluation_items')
-            .select('id, question_text, description, allow_na, order_index, group_id')
-            .in('group_id', groupIds);
+        // ดึง questions ผ่าน API
+        const res = await fetch('/api/teacher/subjects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'fetch-questions', groupIds })
+        })
+        const result = await res.json()
+        const questions = result.data?.questions || []
 
         // Helper: enrich evaluations with question details
         const enrichEvaluations = (evs: any[]) => evs.map((ev: any) => {
-            const groupQuestions = questions?.filter(q => q.group_id === ev.groupId) || [];
+            const groupQuestions = questions.filter((q: any) => q.group_id === ev.groupId) || [];
             const maxScore = groupQuestions.length * 5 || 40;
             return {
                 ...ev,
                 maxScore,
                 detailedAnswers: ev.answers.map((ans: any) => {
-                    const qInfo = questions?.find(q => q.id === ans.item_id);
+                    const qInfo = questions.find((q: any) => q.id === ans.item_id);
                     const isNoScore = ans.score === null || ans.score === undefined || ans.score === 0;
                     const displayScore = (isNoScore && qInfo?.allow_na) ? 'N/A' : (ans.score || 0);
                     return {
@@ -683,26 +514,79 @@ export default function EvaluationSummary() {
 
 
 
+    if (loading) return (
+        <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-slate-900">
+            <div className="max-w-7xl mx-auto pb-20 px-4 animate-pulse">
+                {/* Header skeleton */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
+                    <div>
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 bg-blue-200 rounded-2xl" />
+                            <div className="h-10 w-64 bg-slate-200 rounded-2xl" />
+                        </div>
+                        <div className="h-3 w-48 bg-slate-100 rounded mt-4 ml-1" />
+                    </div>
+                </div>
+
+                {/* Subject pills skeleton */}
+                <div className="flex gap-2 pb-4 mb-6">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="w-28 h-10 bg-slate-200 rounded-2xl" />
+                    ))}
+                </div>
+
+                {/* Filter bar skeleton */}
+                <div className="bg-white/50 p-4 rounded-[2.5rem] border border-slate-100 mb-8">
+                    <div className="flex flex-col xl:flex-row items-center gap-4">
+                        <div className="w-48 h-14 bg-slate-100 rounded-[1.5rem]" />
+                        <div className="w-64 h-14 bg-slate-100 rounded-[1.5rem]" />
+                        <div className="flex-1 h-14 bg-slate-100 rounded-[1.5rem] w-full" />
+                        <div className="w-40 h-14 bg-emerald-100 rounded-[1.5rem]" />
+                    </div>
+                </div>
+
+                {/* Table skeleton */}
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="h-16 bg-slate-50/50 border-b border-slate-100" />
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="flex items-center gap-6 px-6 py-5 border-b border-slate-50">
+                            <div className="w-8 h-4 bg-slate-100 rounded" />
+                            <div className="flex items-center gap-3 flex-1">
+                                <div className="w-10 h-10 bg-slate-100 rounded-xl" />
+                                <div className="space-y-2">
+                                    <div className="h-4 w-36 bg-slate-100 rounded" />
+                                    <div className="h-2 w-20 bg-slate-50 rounded" />
+                                </div>
+                            </div>
+                            <div className="h-6 w-32 bg-blue-50 rounded-lg hidden md:block" />
+                            <div className="h-4 w-24 bg-slate-100 rounded hidden lg:block" />
+                            <div className="h-8 w-16 bg-slate-100 rounded-lg" />
+                            <div className="h-8 w-8 bg-slate-100 rounded-lg" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
+
     return (
         <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-slate-900">
             {/* Admin-style Header */}
             <div className="max-w-7xl mx-auto pb-20 px-4">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
                     <div>
-                        <h1 className="text-4xl font-black text-slate-900 flex items-center gap-4">
-                            <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200">
-                                <GraduationCap size={32} className="text-white" />
-                            </div>
-                            <span>EVALUATION <span className="text-indigo-600">Results</span></span>
+                        <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
+                            <GraduationCap size={28} className="text-blue-600" />
+                            <span>EVALUATION <span className="text-blue-600">Results</span></span>
                         </h1>
-                        <p className="text-slate-400 font-bold mt-2 ml-1 text-xs uppercase tracking-[0.2em]">ผลการประเมินรายวิชา — Weighted Summary</p>
+                        <p className="text-slate-400 font-bold mt-2 ml-1 text-[11px] uppercase tracking-[0.2em]">ผลการประเมินรายวิชา — Weighted Summary</p>
                     </div>
                 </div>
 
                 {/* Subject pills */}
                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-4 mb-6">
                     {subjects.map((s, i) => (
-                        <button key={i} onClick={() => handleFilterChange(s.subject_id)} className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${String(subjectId) === String(s.subject_id) ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>{s.subjects.name}</button>
+                        <button key={i} onClick={() => handleFilterChange(s.subject_id)} className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${String(subjectId) === String(s.subject_id) ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>{s.subjects.name}</button>
                     ))}
                 </div>
 
@@ -711,12 +595,13 @@ export default function EvaluationSummary() {
                     <div className="flex flex-col xl:flex-row items-center gap-4">
                         {/* 🔒 Training Year Filter */}
                         <div className="flex items-center gap-2 bg-white px-4 h-14 rounded-[1.5rem] border-2 border-slate-50 shadow-sm shrink-0">
-                            <CalendarDays size={16} className="text-indigo-500" />
+                            <CalendarDays size={16} className="text-blue-500" />
                             <select
                                 value={selectedTrainingYear}
                                 onChange={(e) => { setSelectedTrainingYear(e.target.value); setSelectedBatch('all'); }}
-                                className="text-sm font-black text-indigo-600 bg-transparent outline-none cursor-pointer"
+                                className="text-sm font-black text-blue-600 bg-transparent outline-none cursor-pointer"
                             >
+                                <option value="">ปีการศึกษาทั้งหมด</option>
                                 {trainingYearOptions.map(year => (
                                     <option key={year} value={year}>ปีการศึกษา {year}</option>
                                 ))}
@@ -763,51 +648,78 @@ export default function EvaluationSummary() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
-                                {paginatedData.map((item, idx) => {
-                                    const totalNet = item.evaluations.reduce((acc: number, ev: any) => {
-                                        const max = (ev.answers?.length || 8) * 5;
-                                        return acc + (ev.rawScore / max * (ev.weight * 100));
-                                    }, 0).toFixed(2);
-                                    const isMultiMentor = item.mentorCount > 1;
-                                    const rowNum = (currentPage - 1) * itemsPerPage + idx + 1;
-
-                                    return (
-                                        <tr key={idx} className="hover:bg-slate-50/40 transition-colors group">
-                                            <td className="px-6 py-4 text-center text-sm font-bold text-slate-300">{rowNum}</td>
-                                            <td className="px-6 py-4">
+                                {isTabLoading ? (
+                                    /* Table Skeleton while switching tabs */
+                                    [1, 2, 3, 4, 5].map(i => (
+                                        <tr key={`skeleton-${i}`} className="animate-pulse">
+                                            <td className="px-6 py-5.5 text-center"><div className="w-4 h-4 bg-slate-100 rounded mx-auto" /></td>
+                                            <td className="px-6 py-5.5">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden border border-white shadow-sm shrink-0">
-                                                        {item.student?.avatar_url ? <img src={item.student.avatar_url} className="w-full h-full object-cover" /> : <User size={16} className="m-auto mt-2.5 text-slate-300" />}
-                                                    </div>
-                                                    <div>
-                                                        <div className="font-black text-slate-800 text-sm leading-tight">{item.student?.first_name} {item.student?.last_name}</div>
-                                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">รหัส {item.student?.student_code}</div>
-                                                        {isMultiMentor && (
-                                                            <div className="text-[9px] font-black text-violet-500 mt-0.5 flex items-center gap-1"><Users size={10} /> {item.mentorCount} พี่เลี้ยง</div>
-                                                        )}
+                                                    <div className="w-10 h-10 bg-slate-100 rounded-xl" />
+                                                    <div className="space-y-2">
+                                                        <div className="h-4 w-32 bg-slate-100 rounded" />
+                                                        <div className="h-2 w-20 bg-slate-50 rounded" />
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black border border-indigo-100/50">{item.subjectName}</span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm font-bold text-slate-700 leading-tight">{item.place?.site_name || 'ไม่ระบุ'}</div>
-                                                <div className="text-[10px] font-bold text-slate-400 mt-0.5">{item.place?.province || ''}</div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="text-lg font-black text-indigo-600">{totalNet}</span>
-                                                {isMultiMentor && <p className="text-[8px] font-black text-slate-300 uppercase">AVG</p>}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex justify-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => { setSelectedStudent(item); setModalMode('summary'); setIsModalOpen(true); setSelectedSupervisorIdx(0); }} className="h-9 w-9 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="สรุปผล"><FileText size={16} /></button>
-                                                    <button onClick={() => openDetailModal(item)} className="h-9 w-9 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="รายละเอียด"><ListChecks size={16} /></button>
+                                            <td className="px-6 py-5.5"><div className="h-6 w-24 bg-indigo-50 rounded-lg" /></td>
+                                            <td className="px-6 py-5.5">
+                                                <div className="space-y-2">
+                                                    <div className="h-4 w-28 bg-slate-100 rounded" />
+                                                    <div className="h-2 w-16 bg-slate-50 rounded" />
                                                 </div>
                                             </td>
+                                            <td className="px-6 py-5.5 text-center"><div className="h-6 w-12 bg-indigo-50 rounded mx-auto" /></td>
+                                            <td className="px-6 py-5.5 text-center"><div className="h-8 w-20 bg-slate-100 rounded-xl mx-auto" /></td>
                                         </tr>
-                                    )
-                                })}
+                                    ))
+                                ) : (
+                                    paginatedData.map((item, idx) => {
+                                        const totalNet = item.evaluations.reduce((acc: number, ev: any) => {
+                                            const max = (ev.answers?.length || 8) * 5;
+                                            return acc + (ev.rawScore / max * (ev.weight * 100));
+                                        }, 0).toFixed(2);
+                                        const isMultiMentor = item.mentorCount > 1;
+                                        const rowNum = (currentPage - 1) * itemsPerPage + idx + 1;
+
+                                        return (
+                                            <tr key={idx} className="hover:bg-slate-50/40 transition-colors group">
+                                                <td className="px-6 py-4 text-center text-sm font-bold text-slate-300">{rowNum}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden border border-white shadow-sm shrink-0">
+                                                            {item.student?.avatar_url ? <img src={item.student.avatar_url} className="w-full h-full object-cover" /> : <User size={16} className="m-auto mt-2.5 text-slate-300" />}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-black text-slate-800 text-sm leading-tight">{item.student?.first_name} {item.student?.last_name}</div>
+                                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">รหัส {item.student?.student_code}</div>
+                                                            {isMultiMentor && (
+                                                                <div className="text-[9px] font-black text-violet-500 mt-0.5 flex items-center gap-1"><Users size={10} /> {item.mentorCount} พี่เลี้ยง</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-[10px] font-black border border-indigo-100/50">{item.subjectName}</span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm font-bold text-slate-700 leading-tight">{item.place?.site_name || 'ไม่ระบุ'}</div>
+                                                    <div className="text-[10px] font-bold text-slate-400 mt-0.5">{item.place?.province || ''}</div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="text-lg font-black text-indigo-600">{totalNet}</span>
+                                                    {isMultiMentor && <p className="text-[8px] font-black text-slate-300 uppercase">AVG</p>}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex justify-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={() => { setSelectedStudent(item); setModalMode('summary'); setIsModalOpen(true); setSelectedSupervisorIdx(0); }} className="h-9 w-9 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="สรุปผล"><FileText size={16} /></button>
+                                                        <button onClick={() => openDetailModal(item)} className="h-9 w-9 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-all shadow-sm" title="รายละเอียด"><ListChecks size={16} /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })
+                                )}
                             </tbody>
                         </table>
                     </div>

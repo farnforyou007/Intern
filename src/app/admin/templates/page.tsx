@@ -1,6 +1,5 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import AdminLayout from '@/components/AdminLayout'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -38,13 +37,18 @@ export default function TemplatesPage() {
     const [editingItem, setEditingItem] = useState<any>(null)
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-
     const fetchData = async () => {
         setLoading(true)
-        const { data } = await supabase.from('eval_templates').select('*').order('id', { ascending: true })
-        if (data) setTemplates(data)
-        setLoading(false)
+        try {
+            const res = await fetch('/api/admin/templates')
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+            setTemplates(result.data.templates || [])
+        } catch (err: any) {
+            console.error('Fetch templates error:', err.message)
+        } finally {
+            setLoading(false)
+        }
     }
 
     useEffect(() => { fetchData() }, [])
@@ -52,13 +56,24 @@ export default function TemplatesPage() {
     // จัดการ Template หลัก
     const handleSaveTemplate = async () => {
         if (!templateName) return
-        if (selectedTemplate?.id) {
-            await supabase.from('eval_templates').update({ template_name: templateName }).eq('id', selectedTemplate.id)
-        } else {
-            await supabase.from('eval_templates').insert([{ template_name: templateName }])
+        try {
+            const res = await fetch('/api/admin/templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save-template',
+                    templateId: selectedTemplate?.id || null,
+                    template_name: templateName
+                })
+            })
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+
+            setTemplateName(''); setSelectedTemplate(null); setIsModalOpen(false); fetchData()
+            Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2rem]' } })
+        } catch (error: any) {
+            Swal.fire('Error', error.message, 'error')
         }
-        setTemplateName(''); setSelectedTemplate(null); setIsModalOpen(false); fetchData()
-        Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2rem]' } })
     }
 
     const handleDeleteTemplate = async (template: any) => {
@@ -73,30 +88,62 @@ export default function TemplatesPage() {
             }
         })
         if (isConfirmed) {
-            await supabase.from('eval_templates').delete().eq('id', template.id)
-            fetchData()
+            try {
+                const res = await fetch('/api/admin/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete-template', id: template.id })
+                })
+                const result = await res.json()
+                if (!result.success) throw new Error(result.error)
+                fetchData()
+            } catch (error: any) {
+                Swal.fire('Error', error.message, 'error')
+            }
         }
     }
 
     // จัดการข้อคำถามใน Template
     const openItemsModal = async (template: any) => {
         setSelectedTemplate(template)
-        const { data } = await supabase.from('eval_template_items').select('*').eq('template_id', template.id).order('order_index', { ascending: true })
-        setItems(data || [])
+        try {
+            const res = await fetch('/api/admin/templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'fetch-items', template_id: template.id })
+            })
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+            setItems(result.data.items || [])
+        } catch (err: any) {
+            console.error('Fetch items error:', err.message)
+        }
         setIsItemModalOpen(true)
     }
 
     const handleSaveItem = async () => {
         if (!itemForm.question_text) return
-        if (editingItem) {
-            await supabase.from('eval_template_items').update(itemForm).eq('id', editingItem.id)
-        } else {
-            await supabase.from('eval_template_items').insert([{ ...itemForm, template_id: selectedTemplate.id, order_index: items.length }])
+        try {
+            const res = await fetch('/api/admin/templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save-item',
+                    itemId: editingItem?.id || null,
+                    template_id: selectedTemplate.id,
+                    itemData: itemForm,
+                    itemCount: items.length
+                })
+            })
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+
+            setEditingItem(null);
+            setItemForm({ question_text: '', description: '', allow_na: true, factor: 1.0 })
+            setItems(result.data.items || [])
+        } catch (error: any) {
+            Swal.fire('Error', error.message, 'error')
         }
-        setEditingItem(null);
-        setItemForm({ question_text: '', description: '', allow_na: true, factor: 1.0 })
-        const { data } = await supabase.from('eval_template_items').select('*').eq('template_id', selectedTemplate.id).order('order_index', { ascending: true })
-        setItems(data || [])
     }
 
     // const handleDeleteItem = async (itemId: number) => {
@@ -127,16 +174,14 @@ export default function TemplatesPage() {
 
         if (isConfirmed) {
             try {
-                const { error } = await supabase.from('eval_template_items').delete().eq('id', itemId)
-                if (error) throw error
-
-                // อัปเดต UI หลังลบสำเร็จ
-                const { data } = await supabase
-                    .from('eval_template_items')
-                    .select('*')
-                    .eq('template_id', selectedTemplate.id)
-                    .order('order_index', { ascending: true })
-                setItems(data || [])
+                const res = await fetch('/api/admin/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete-item', itemId, template_id: selectedTemplate.id })
+                })
+                const result = await res.json()
+                if (!result.success) throw new Error(result.error)
+                setItems(result.data.items || [])
 
                 Swal.fire({
                     icon: 'success',
@@ -160,7 +205,7 @@ export default function TemplatesPage() {
 
             setItems(newItems); // อัปเดต UI ทันที
 
-            // อัปเดต order_index ลง Supabase
+            // อัปเดต order_index ผ่าน API
             const updates = newItems.map((item, index) => ({
                 id: item.id,
                 order_index: index,
@@ -169,7 +214,15 @@ export default function TemplatesPage() {
                 description: item.description,
                 allow_na: item.allow_na
             }));
-            await supabase.from('eval_template_items').upsert(updates);
+            try {
+                await fetch('/api/admin/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'reorder-items', updates })
+                })
+            } catch (err) {
+                console.error('Reorder error:', err)
+            }
         }
     };
 
@@ -178,13 +231,17 @@ export default function TemplatesPage() {
             <div className="max-w-6xl mx-auto">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold flex items-center gap-3 text-slate-900">
+                        <h1 className="text-3xl font-black flex items-center gap-3 text-slate-900 tracking-tight">
                             <LayoutTemplate className="text-blue-600" size={32} /> เทมเพลตมาตรฐาน
                         </h1>
-                        <p className="text-slate-500 mt-1">สร้างชุดข้อคำถามกลางเพื่อนำไปใช้ในวิชาต่างๆ</p>
+                        <p className="text-slate-500 mt-1 font-medium text-sm">สร้างชุดข้อคำถามกลางเพื่อนำไปใช้ในเกณฑ์การประเมินวิชาต่างๆ</p>
                     </div>
-                    <Button onClick={() => { setSelectedTemplate(null); setTemplateName(''); setIsModalOpen(true); }} className="bg-blue-600 rounded-xl h-12 px-6 shadow-lg">
-                        <Plus size={20} className="mr-2" /> สร้างเทมเพลตใหม่
+                    <Button
+                        onClick={() => { setSelectedTemplate(null); setTemplateName(''); setIsModalOpen(true); }}
+                        className="h-12 px-6 rounded-xl bg-slate-900 hover:bg-black text-white font-black shadow-lg shadow-slate-200 flex items-center gap-2 transition-all active:scale-95 whitespace-nowrap"
+                    >
+                        <Plus size={20} />
+                        สร้างเทมเพลตใหม่
                     </Button>
                 </div>
 

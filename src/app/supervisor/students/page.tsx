@@ -1,5 +1,5 @@
 
-//ver99
+//ver100 — API Routes Migration
 "use client"
 import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
@@ -231,13 +231,15 @@ const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => 
 
 // --- Main Page ---
 const SkeletonCard = () => (
-    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 animate-pulse mb-4">
-        <div className="flex items-start gap-5">
-            <div className="mt-2 w-23 h-23 rounded-[2rem] bg-slate-100 shrink-0 border-4 border-slate-50" />
+    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 animate-pulse mb-4 h-[140px]">
+        <div className="flex items-start gap-5 h-full">
+            <div className="w-23 h-23 rounded-[2rem] bg-slate-100 shrink-0 border-4 border-slate-50 mt-1" />
             <div className="flex-1 space-y-3 pt-2">
-                <div className="h-3 bg-slate-100 rounded w-16" />
-                <div className="h-5 bg-slate-100 rounded w-48" />
+                <div className="h-4 w-20 bg-slate-100 rounded-lg" />
+                <div className="h-5 w-48 bg-slate-200 rounded-xl" />
+                <div className="h-3 w-32 bg-slate-100 rounded-lg" />
             </div>
+            <div className="w-11 h-11 bg-slate-100 rounded-2xl shrink-0 mt-1" />
         </div>
     </div>
 )
@@ -254,6 +256,7 @@ export default function SupervisorStudentList() {
     const [supervisorInfo, setSupervisorInfo] = useState<any>(null)
     const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
 
+    // Supabase client — จำเป็นเฉพาะ Realtime subscriptions เท่านั้น
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -276,126 +279,15 @@ export default function SupervisorStudentList() {
     }
 
     const fetchData = async (lineUserId: string) => {
-        // setLoading(true) // 🚩 เอาออกเพื่อให้ UI ไม่กระพริบตอน Realtime Update
         try {
-            // 🔒 0. ดึงปีการศึกษาปัจจุบันจาก system_configs
-            const { data: configData } = await supabase
-                .from('system_configs')
-                .select('key_value')
-                .eq('key_name', 'current_training_year')
-                .single();
-            const currentYear = configData?.key_value || '';
-            setConfigYear(currentYear);
+            const res = await fetch(`/api/supervisor/students?lineUserId=${encodeURIComponent(lineUserId)}`)
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
 
-            // 1. ดึงข้อมูล Supervisor
-            const { data: supervisor } = await supabase.from('supervisors').select('*').eq('line_user_id', lineUserId).single()
-            if (!supervisor) return
-            setSupervisorInfo(supervisor)
-
-            // 🔒 1.5 ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
-            let yearStudentIds: Set<string> = new Set();
-            if (currentYear) {
-                const { data: yearStudents } = await supabase
-                    .from('students')
-                    .select('id')
-                    .eq('training_year', currentYear);
-                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
-            }
-
-            // 2. ดึงสิทธิ์ (Permissions)
-            const { data: permissions } = await supabase
-                .from('supervisor_subjects')
-                .select('subject_id, sub_subject_id')
-                .eq('supervisor_id', supervisor.id)
-
-            // 3. ดึงงานทีมฉัน (My Students)
-            const { data: mine } = await supabase.from('assignment_supervisors').select(`
-                id, is_evaluated,
-                student_assignments:assignment_id ( 
-                    id, rotation_id, student_id, subject_id, sub_subject_id,
-                    students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone , email ),
-                    subjects:subject_id ( id, name ), 
-                    sub_subjects:sub_subject_id ( id, name ),
-                    rotations:rotation_id ( name )
-                )
-            `).eq('supervisor_id', supervisor.id)
-
-            // 🚩 กรอง 'ทีมฉัน' ให้ตรงกับสิทธิ์ปัจจุบัน + 🔒 กรองตามปีการศึกษา
-            const filteredMine = (mine || []).filter((item: any) => {
-                const assign = item.student_assignments;
-                if (!assign) return false;
-                // 🔒 กรองตามปีการศึกษา
-                const studentId = String(assign.students?.id || assign.student_id || '');
-                if (currentYear && !yearStudentIds.has(studentId)) return false;
-                return checkPermission(assign, permissions || []);
-            });
-
-            // 3.5 ดึง evaluation_logs + จำนวน evaluation_groups เพื่อคำนวณ progress
-            const assignmentIds = filteredMine.map((item: any) => item.student_assignments?.id).filter(Boolean);
-            const subjectIds = [...new Set(filteredMine.map((item: any) => item.student_assignments?.subject_id).filter(Boolean))];
-
-            // ดึง logs ของ supervisor นี้ (นับแยกตาม assignment_id)
-            let logsMap = new Map<number, number>();
-            if (assignmentIds.length > 0) {
-                const { data: logs } = await supabase
-                    .from('evaluation_logs')
-                    .select('assignment_id')
-                    .eq('supervisor_id', supervisor.id)
-                    .in('assignment_id', assignmentIds)
-                for (const l of (logs || [])) {
-                    logsMap.set(l.assignment_id, (logsMap.get(l.assignment_id) || 0) + 1);
-                }
-            }
-
-            // ดึงจำนวน evaluation_groups ต่อ subject
-            let groupsCountMap = new Map<string, number>();
-            if (subjectIds.length > 0) {
-                const { data: groups } = await supabase
-                    .from('evaluation_groups')
-                    .select('id, subject_id')
-                    .in('subject_id', subjectIds)
-                for (const g of (groups || [])) {
-                    groupsCountMap.set(g.subject_id, (groupsCountMap.get(g.subject_id) || 0) + 1);
-                }
-            }
-
-            // แปะ progress ลงใน filteredMine
-            const mineWithProgress = filteredMine.map((item: any) => {
-                const assignId = item.student_assignments?.id;
-                const subjId = item.student_assignments?.subject_id;
-                const logsCount = logsMap.get(assignId) || 0;
-                const totalGroups = groupsCountMap.get(subjId) || 1;
-
-                // ✅ คำนวณสถานะ: 2=เสร็จ, 1=ทำอยู่บ้าง, 0=ยังไม่ทำ
-                const status = item.is_evaluated ? 2 : (logsCount > 0 ? 1 : 0);
-
-                return {
-                    ...item,
-                    has_eval_logs: logsCount > 0,
-                    eval_progress: { done: logsCount, total: totalGroups },
-                    evaluation_status: status
-                };
-            });
-            setMyStudents(mineWithProgress)
-
-            // 4. ดึงงานทั้งหมด (All Students)
-            const { data: all } = await supabase.from('student_assignments').select(`
-                id, rotation_id, student_id, subject_id, sub_subject_id,
-                students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone ,email ),
-                subjects:subject_id ( id, name ), 
-                sub_subjects:sub_subject_id (id, name ),
-                rotations:rotation_id ( name )
-            `).eq('site_id', supervisor.site_id)
-
-            // 🚩 กรอง 'ทั้งหมด' ให้โชว์เฉพาะที่มีสิทธิ์กดรับ + 🔒 กรองตามปีการศึกษา
-            const filteredAll = (all || []).filter((assign: any) => {
-                // 🔒 กรองตามปีการศึกษา
-                const studentId = String(assign.students?.id || assign.student_id || '');
-                if (currentYear && !yearStudentIds.has(studentId)) return false;
-                return checkPermission(assign, permissions || []);
-            });
-            setAllSiteStudents(filteredAll)
-
+            setSupervisorInfo(result.data.supervisor)
+            setMyStudents(result.data.myStudents || [])
+            setAllSiteStudents(result.data.allSiteStudents || [])
+            setConfigYear(result.data.configYear || '')
         } catch (error) { console.error("Fetch Error:", error) } finally { setLoading(false) }
     }
 
@@ -497,12 +389,23 @@ export default function SupervisorStudentList() {
         })
 
         if (isConfirmed && supervisorInfo) {
-            const { error } = await supabase.from('assignment_supervisors').insert([{ assignment_id: assignmentId, supervisor_id: supervisorInfo.id }])
-            if (!error) {
-                Swal.fire({ icon: 'success', title: 'เรียบร้อย!', text: 'เพิ่มรายการลงใน "ทีมฉัน" แล้ว', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem]' } })
+            try {
+                const res = await fetch('/api/supervisor/students', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'claim',
+                        assignment_id: assignmentId,
+                        supervisor_id: supervisorInfo.id
+                    })
+                })
+                const result = await res.json()
+                if (!result.success) throw new Error(result.error)
 
-                // 🚩 Update ทันที! (ไม่ต้องรอ Realtime) เพื่อ UX ที่ลื่นไหล
+                Swal.fire({ icon: 'success', title: 'เรียบร้อย!', text: 'เพิ่มรายการลงใน "ทีมฉัน" แล้ว', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem]' } })
                 fetchData(supervisorInfo.line_user_id)
+            } catch (error: any) {
+                Swal.fire('Error', error.message, 'error')
             }
         }
     }

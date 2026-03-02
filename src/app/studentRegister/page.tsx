@@ -61,50 +61,45 @@ export default function StudentRegisterPage() {
     })
 
 
-    useEffect(() => {
-        const initData = async () => {
-            setLoading(true);
-            try {
-                const { data: config } = await supabase
-                    .from('system_configs')
-                    .select('key_value')
-                    .eq('key_name', 'current_training_year')
-                    .single();
+    const initData = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/register/student?action=init')
+            const result = await res.json()
 
-                if (config) {
-                    const year = config.key_value;
-                    setTrainingYear(year);
+            if (result.success) {
+                const { trainingYear, rotations, sites, mentors } = result.data
+                setTrainingYear(trainingYear)
+                setSites(sites)
+                setMentors(mentors)
 
-                    // 🚩 แก้ไข Query: ดึง rotations พร้อม subjects ที่เกี่ยวข้อง
-                    const { data: rots } = await supabase
-                        .from('rotations')
-                        .select(`
-                        id, 
-                        name, 
-                        rotation_subjects (subject_id)
-                    `)
-                        .eq('academic_year', year)
-                        .order('name', { ascending: true });
+                if (rotations && rotations.length > 0) {
+                    const initialAssignments = rotations.map((r: any) => ({
+                        rotation_id: String(r.id),
+                        rotation_name: r.name,
+                        subject_ids: r.rotation_subjects?.map((rs: any) => rs.subject_id) || [],
+                        dates: `${r.start_date} - ${r.end_date}`,
+                        site_id: '',
+                        supervisor_ids: [],
+                        province: '',
+                        provinceSearch: ''
+                    }));
 
-                    if (rots && rots.length > 0) {
-                        const initialAssignments = rots.map((r: any) => ({
-                            rotation_id: String(r.id),
-                            rotation_name: r.name,
-                            // 🚩 เก็บรายการ ID วิชาไว้เพื่อให้ Filter พี่เลี้ยงทำงานได้
-                            subject_ids: r.rotation_subjects?.map((rs: any) => rs.subject_id) || [],
-                            site_id: '',
-                            supervisor_ids: []
-                        }));
-
-                        setForm(prev => ({ ...prev, assignments: initialAssignments }));
-                    }
+                    setForm(prev => ({ ...prev, assignments: initialAssignments }));
                 }
-            } catch (error) {
-                console.error(error);
-            } finally {
-                setLoading(false);
+
+                // Province set up
+                const uniqueProvinces = Array.from(new Set(sites.map((item: any) => item.province?.trim()).filter(Boolean))) as string[]
+                setAllProvinces(uniqueProvinces.sort())
             }
-        };
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         initData();
     }, []);
 
@@ -169,129 +164,27 @@ export default function StudentRegisterPage() {
     }, [user]);
 
     // ฟังก์ชันสำหรับดึงข้อมูล (ใช้ซ้ำได้ทั้งตอนโหลดครั้งแรกและตอน Real-time Update)
-    const fetchSites = async () => {
-        const { data } = await supabase.from('training_sites').select('*')
-        if (data) {
-            setSites(data)
-            const uniqueProvinces = Array.from(new Set(data.map(item => item.province?.trim()).filter(Boolean))) as string[]
-            setAllProvinces(uniqueProvinces.sort())
-        }
-    }
-
-    // const fetchMentors = async () => {
-    //     const { data } = await supabase.from('supervisors').select('*')
-    //     if (data) setMentors(data)
-    // }
-    const fetchMentors = async () => {
-        // ดึงข้อมูลพี่เลี้ยง พร้อมข้อมูลจากตารางกลาง (supervisor_subjects)
-        const { data, error } = await supabase
-            .from('supervisors')
-            .select(`
-            *,
-            supervisor_subjects (
-                subject_id,
-                sub_subject_id
-            )
-        `)
-
-        if (error) {
-            console.error("Error fetching mentors:", error)
-            return
-        }
-
-        if (data) {
-            setMentors(data)
-            // console.log("Mentors with subjects:", data) // 🚩 ลองเช็กใน Console ว่ามีก้อน supervisor_subjects มาไหม
-        }
-    }
-
-    // ค้นหาฟังก์ชัน fetchConfigs เดิม แล้วแก้ไขเป็นตามนี้:
-    const fetchConfigs = async () => {
-        const { data } = await supabase
-            .from('system_configs')
-            .select('key_value') // แก้จาก value เป็น key_value ให้ตรงกับ DB
-            .eq('key_name', 'allowed_student_batch') // แก้จาก key เป็น key_name ให้ตรงกับ DB
-            .maybeSingle();
-
-        if (data) {
-            // setAllowedBatch(data.key_value);
-            console.log("Allowed Batch loaded:", data.key_value); // เช็คใน Console ดูได้เลยว่าเลข 65 มาหรือยัง
-        } else {
-            console.warn("Could not find configuration for allowed_student_batch");
-        }
-    }
-
+    // Fetching handled by initData now
     useEffect(() => {
-        // โหลดข้อมูลครั้งแรก
-        fetchConfigs()
-        fetchSites()
-        fetchMentors()
-
-        //  ดึงข้อมูลผลัด (ครั้งเดียว)
-        const fetchRotations = async () => {
-            // 🚩 ปรับให้ดึงข้อมูลวิชาจาก rotation_subjects มาด้วย
-            const { data: r } = await supabase
-                .from('rotations')
-                .select(`
-            *,
-            rotation_subjects (
-                subject_id
-            )
-        `)
-                .eq('academic_year', trainingYear)
-                .order('round_number', { ascending: true })
-            // .limit(3)
-
-            if (r) {
-                setForm((prev: any) => ({
-                    ...prev,
-                    assignments: r.map((rot: any) => ({
-                        rotation_id: String(rot.id),
-                        rotation_name: rot.name,
-                        // 🚩 เก็บ ID วิชาไว้ใน item เพื่อเอาไปกรองพี่เลี้ยง
-                        subject_id: rot.rotation_subjects?.[0]?.subject_id || null,
-                        dates: `${rot.start_date} - ${rot.end_date}`,
-                        site_id: "",
-                        province: "",
-                        supervisor_ids: [],
-                        provinceSearch: ""
-                    }))
-                }))
-            }
-        }
-        fetchRotations()
-
         // --- ระบบ REAL-TIME SUBSCRIPTION ---
-
-        // ติดตามการเปลี่ยนแปลงตารางสถานที่ฝึก (จังหวัด/รพ.)
+        // (Keeping realtime for sites and mentors to reflect changes dynamically if needed)
         const siteChannel = supabase
             .channel('realtime-sites')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, () => {
-                fetchSites()
+                initData()
             })
             .subscribe()
 
-        // ติดตามการเปลี่ยนแปลงตารางพี่เลี้ยง
         const mentorChannel = supabase
             .channel('realtime-mentors')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, () => {
-                fetchMentors()
+                initData()
             })
             .subscribe()
 
-        // ติดตามการเปลี่ยนแปลงตาราง Config (ปีที่อนุญาต)
-        const configChannel = supabase
-            .channel('realtime-configs')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'system_configs' }, () => {
-                fetchConfigs()
-            })
-            .subscribe()
-
-        // Clean up เมื่อปิดหน้าจอ
         return () => {
             supabase.removeChannel(siteChannel)
             supabase.removeChannel(mentorChannel)
-            supabase.removeChannel(configChannel)
         }
     }, [])
 
@@ -359,7 +252,6 @@ export default function StudentRegisterPage() {
     const handleRegister = async () => {
         if (!validate()) return;
 
-        // 1. เช็คว่าเลือกรูปภาพหรือยัง
         if (!avatarFile) {
             return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษาเพื่อลงทะเบียน', 'warning');
         }
@@ -377,8 +269,8 @@ export default function StudentRegisterPage() {
         `,
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#1e293b', // Slate-900
-            cancelButtonColor: '#cbd5e1', // Slate-300
+            confirmButtonColor: '#1e293b',
+            cancelButtonColor: '#cbd5e1',
             confirmButtonText: 'ยืนยันข้อมูลถูกต้อง',
             cancelButtonText: 'กลับไปแก้ไข',
         });
@@ -387,19 +279,7 @@ export default function StudentRegisterPage() {
 
         setLoading(true);
         try {
-            // 2. เช็คข้อมูลซ้ำในระบบ
-            const { data: check } = await supabase
-                .from('students')
-                .select('id')
-                .eq('student_code', form.student_code)
-                .maybeSingle();
-
-            if (check) {
-                setLoading(false);
-                return Swal.fire('ข้อมูลซ้ำ', 'รหัสนี้ลงทะเบียนแล้ว', 'error');
-            }
-
-            // 3. จัดการอัปโหลดไฟล์รูปภาพ
+            // 1. Storage Upload
             const fileExt = avatarFile!.name.split('.').pop();
             const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
 
@@ -413,272 +293,28 @@ export default function StudentRegisterPage() {
                 .from('avatars')
                 .getPublicUrl(fileName);
 
-            // 4. บันทึกข้อมูลนักศึกษาลงตารางหลัก
-            const { data: student, error: stError } = await supabase.from('students').insert([{
-                student_code: form.student_code,
-                prefix: form.prefix,
-                first_name: form.first_name,
-                last_name: form.last_name,
-                nickname: form.nickname,
-                phone: form.phone,
-                email: form.email,
-                avatar_url: publicUrl,
-                training_year: trainingYear
-            }]).select().single();
+            // 2. API Registration
+            const res = await fetch('/api/register/student', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentCode: form.student_code,
+                    prefix: form.prefix,
+                    firstName: form.first_name,
+                    lastName: form.last_name,
+                    nickname: form.nickname,
+                    phone: form.phone,
+                    email: form.email,
+                    avatarUrl: publicUrl,
+                    trainingYear: trainingYear,
+                    assignments: form.assignments
+                })
+            })
 
-            if (stError) throw stError;
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
 
-            // 🚩 แก้ไข Logic ให้รัดกุม: กรองตามวิชาที่สอนเท่านั้น (รวมถึงเล่มรายงานด้วย)
-            // 27/2/69
-            // if (form.assignments && form.assignments.length > 0) {
-            //     for (const as of form.assignments) {
-            //         if (as.site_id) {
-            //             const { data: rotSubs } = await supabase
-            //                 .from('rotation_subjects')
-            //                 .select('subject_id')
-            //                 .eq('rotation_id', parseInt(as.rotation_id));
-
-            //             if (rotSubs && rotSubs.length > 0) {
-            //                 for (const rs of rotSubs) {
-            //                     const mainSubjectId = rs.subject_id;
-
-            //                     // 🚩 ฟังก์ชัน Helper สำหรับกรองพี่เลี้ยงที่ "สอนวิชานี้" และ "อยู่รพ. นี้"
-            //                     // const getValidMentorRecords = (assignmentId: number, targetSubjectId: number) => {
-            //                     //     return mentors
-            //                     //         .filter(m => 
-            //                     //             as.supervisor_ids.includes(String(m.id)) && 
-            //                     //             String(m.site_id) === String(as.site_id) && 
-            //                     //             m.supervisor_subjects?.some((ss: any) => Number(ss.subject_id) === Number(targetSubjectId))
-            //                     //         )
-            //                     //         .map((m: any) => ({
-            //                     //             assignment_id: assignmentId,
-            //                     //             supervisor_id: m.id
-            //                     //         }));
-            //                     // };
-
-            //                     // 🚩 ปรับปรุง Logic การบันทึกพี่เลี้ยงให้เช็คทั้งวิชาหลักและวิชาย่อย (page.tsx)
-            //                     //27/2/69
-            //                     const getValidMentorRecords = (assignmentId: number, mainSubjectId: number, subSubjectId: number | null) => {
-            //                         return mentors.filter(m => {
-            //                             // 1. ตรวจสอบว่าเป็นพี่เลี้ยงที่นักศึกษาเลือก และอยู่ รพ. เดียวกัน
-            //                             const isSelected = as.supervisor_ids.includes(String(m.id));
-            //                             const isSameSite = String(m.site_id) === String(as.site_id);
-
-            //                             if (!isSelected || !isSameSite) return false;
-
-            //                             // 2. ตรวจสอบความรับผิดชอบในวิชา
-            //                             return m.supervisor_subjects?.some((ss: any) => {
-            //                                 const matchMain = Number(ss.subject_id) === Number(mainSubjectId);
-
-            //                                 // กรณีเป็นวิชาย่อย (เช่น PP): ต้องเช็คว่า ss.sub_subject_id ตรงกันด้วย
-            //                                 if (subSubjectId !== null) {
-            //                                     return matchMain && Number(ss.sub_subject_id) === Number(subSubjectId);
-            //                                 }
-
-            //                                 // กรณีเป็นวิชาหลัก/เล่มรายงาน: เช็คแค่ subject_id และ sub_subject_id ใน DB ต้องเป็น NULL
-            //                                 return matchMain && (ss.sub_subject_id === null);
-            //                             });
-            //                         }).map((m: any) => ({
-            //                             assignment_id: assignmentId,
-            //                             supervisor_id: m.id
-            //                         }));
-            //                     };
-
-            //                     // --- ตอนเรียกใช้งานในลูป ---
-
-            //                     // 🟢 สำหรับวิชาย่อย (ANC, LR, PP)
-            //                     const mentorRecords = getValidMentorRecords(assignment.id, mainSubjectId, sub.id); // ส่ง sub.id เข้าไปด้วย
-            //                     if (mentorRecords.length > 0) {
-            //                         await supabase.from('assignment_supervisors').insert(mentorRecords);
-            //                     }
-
-            //                     // 🔵 สำหรับวิชาทั่วไป หรือ เล่มรายงาน
-            //                     const mainMentorRecords = getValidMentorRecords(mainAssign.id, mainSubjectId, null); // ส่ง null สำหรับวิชาหลัก
-            //                     if (mainMentorRecords.length > 0) {
-            //                         await supabase.from('assignment_supervisors').insert(mainMentorRecords);
-            //                     }
-
-            //                     const { data: subSubjects } = await supabase
-            //                         .from('sub_subjects')
-            //                         .select('id')
-            //                         .eq('parent_subject_id', mainSubjectId);
-
-            //                     if (subSubjects && subSubjects.length > 0) {
-            //                         // 🟢 CASE 1: มีวิชาย่อย (เช่น ผดุงครรภ์)
-            //                         for (const sub of subSubjects) {
-            //                             const { data: assignment, error: asError } = await supabase
-            //                                 .from('student_assignments')
-            //                                 .insert([{
-            //                                     student_id: student.id,
-            //                                     rotation_id: parseInt(as.rotation_id),
-            //                                     subject_id: mainSubjectId,
-            //                                     sub_subject_id: sub.id,
-            //                                     site_id: parseInt(as.site_id),
-            //                                     status: 'active'
-            //                                 }]).select().single();
-
-            //                             if (asError) throw asError;
-
-            //                             // ✅ ใส่เฉพาะพี่เลี้ยงที่สอนวิชานี้ (เช่น อิฟฟานที่สอน ANC/LR จะไม่ติดมาใน PP)
-            //                             const mentorRecords = getValidMentorRecords(assignment.id, mainSubjectId);
-            //                             if (mentorRecords.length > 0) {
-            //                                 await supabase.from('assignment_supervisors').insert(mentorRecords);
-            //                             }
-            //                         }
-
-            //                         // 1.2 เล่มรายงาน (Portfolio) ของวิชานี้
-            //                         const { data: mainAssign, error: mainErr } = await supabase
-            //                             .from('student_assignments')
-            //                             .insert([{
-            //                                 student_id: student.id,
-            //                                 rotation_id: parseInt(as.rotation_id),
-            //                                 subject_id: mainSubjectId,
-            //                                 sub_subject_id: null, // เล่มรายงาน
-            //                                 site_id: parseInt(as.site_id),
-            //                                 status: 'active'
-            //                             }]).select().single();
-
-            //                         if (mainErr) throw mainErr;
-
-            //                         // ✅ แก้ไข: เล่มรายงานก็ต้องกรอง! 
-            //                         // ปาณิที่สอนแค่นวดไทย จะไม่ถูกดึงมาใส่ในเล่มรายงานผดุงครรภ์
-            //                         const mainMentorRecords = getValidMentorRecords(mainAssign.id, mainSubjectId);
-            //                         if (mainMentorRecords.length > 0) {
-            //                             await supabase.from('assignment_supervisors').insert(mainMentorRecords);
-            //                         }
-
-            //                     } else {
-            //                         // 🔵 CASE 2: วิชาทั่วไป (เช่น นวดไทย)
-            //                         const { data: assignment, error: asError } = await supabase
-            //                             .from('student_assignments')
-            //                             .insert([{
-            //                                 student_id: student.id,
-            //                                 rotation_id: parseInt(as.rotation_id),
-            //                                 subject_id: mainSubjectId,
-            //                                 sub_subject_id: null,
-            //                                 site_id: parseInt(as.site_id),
-            //                                 status: 'active'
-            //                             }]).select().single();
-
-            //                         if (asError) throw asError;
-
-            //                         const mentorRecords = getValidMentorRecords(assignment.id, mainSubjectId);
-            //                         if (mentorRecords.length > 0) {
-            //                             await supabase.from('assignment_supervisors').insert(mentorRecords);
-            //                         }
-            //                     }
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
-
-
-            if (form.assignments && form.assignments.length > 0) {
-                for (const as of form.assignments) {
-                    if (as.site_id) {
-                        // STEP 1: ดึงรายชื่อวิชาทั้งหมดในผลัดนั้น
-                        const { data: rotSubs } = await supabase
-                            .from('rotation_subjects')
-                            .select('subject_id')
-                            .eq('rotation_id', parseInt(as.rotation_id));
-
-                        if (rotSubs && rotSubs.length > 0) {
-                            for (const rs of rotSubs) {
-                                const mainSubjectId = rs.subject_id;
-
-                                // 🚩 ฟังก์ชัน Helper สำหรับบันทึกพี่เลี้ยง (ย้ายมาไว้ตรงนี้เพื่อให้เรียกใช้ได้ทุก Case)
-                                // 🚩 ฟังก์ชัน Helper ที่ปรับปรุงใหม่เพื่อให้พี่เลี้ยงเข้าเล่มรายงานได้
-                                const saveMentorsForAssignment = async (targetAssignmentId: number, targetMainSub: number, targetSubSub: number | null) => {
-                                    const validMentorRecords = mentors.filter(m => {
-                                        const isSelected = as.supervisor_ids.includes(String(m.id));
-                                        const isSameSite = String(m.site_id) === String(as.site_id);
-                                        if (!isSelected || !isSameSite) return false;
-
-                                        return m.supervisor_subjects?.some((ss: any) => {
-                                            const matchMain = Number(ss.subject_id) === Number(targetMainSub);
-
-                                            // 🟢 Case 1: ถ้าเป็นวิชาย่อย (ANC, LR, PP)
-                                            // ต้องตรงทั้งวิชาหลัก และวิชาย่อยเป๊ะๆ (อิฟฟานเลยไม่ติด PP)
-                                            if (targetSubSub !== null) {
-                                                return matchMain && Number(ss.sub_subject_id) === Number(targetSubSub);
-                                            }
-
-                                            // 🔵 Case 2: ถ้าเป็นเล่มรายงาน (Portfolio) หรือวิชาที่ไม่มีวิชาย่อย
-                                            // ให้ยอมรับถ้าพี่เลี้ยงสอนวิชาหลักนั้น (null) หรือ สอนวิชาย่อยใดๆ ของวิชานั้น
-                                            return matchMain;
-                                        });
-                                    }).map((m: any) => ({
-                                        assignment_id: targetAssignmentId,
-                                        supervisor_id: m.id
-                                    }));
-
-                                    if (validMentorRecords.length > 0) {
-                                        await supabase.from('assignment_supervisors').insert(validMentorRecords);
-                                    }
-                                };
-
-                                // STEP 2: ตรวจสอบวิชาย่อย (ANC, LR, PP)
-                                const { data: subSubjects } = await supabase
-                                    .from('sub_subjects')
-                                    .select('id')
-                                    .eq('parent_subject_id', mainSubjectId);
-
-                                if (subSubjects && subSubjects.length > 0) {
-                                    // 🟢 CASE 1: มีวิชาย่อย
-                                    for (const sub of subSubjects) {
-                                        const { data: subAssign, error: asError } = await supabase
-                                            .from('student_assignments')
-                                            .insert([{
-                                                student_id: student.id,
-                                                rotation_id: parseInt(as.rotation_id),
-                                                subject_id: mainSubjectId,
-                                                sub_subject_id: sub.id,
-                                                site_id: parseInt(as.site_id),
-                                                status: 'active'
-                                            }]).select().single();
-
-                                        if (asError) throw asError;
-                                        if (subAssign) await saveMentorsForAssignment(subAssign.id, mainSubjectId, sub.id);
-                                    }
-
-                                    // 1.2 สร้างเล่มรายงาน (Portfolio)
-                                    const { data: mainAssign, error: mainErr } = await supabase
-                                        .from('student_assignments')
-                                        .insert([{
-                                            student_id: student.id,
-                                            rotation_id: parseInt(as.rotation_id),
-                                            subject_id: mainSubjectId,
-                                            sub_subject_id: null,
-                                            site_id: parseInt(as.site_id),
-                                            status: 'active'
-                                        }]).select().single();
-
-                                    if (mainErr) throw mainErr;
-                                    if (mainAssign) await saveMentorsForAssignment(mainAssign.id, mainSubjectId, null);
-
-                                } else {
-                                    // 🔵 CASE 2: วิชาทั่วไป (ไม่มีวิชาย่อย)
-                                    const { data: singleAssign, error: asError } = await supabase
-                                        .from('student_assignments')
-                                        .insert([{
-                                            student_id: student.id,
-                                            rotation_id: parseInt(as.rotation_id),
-                                            subject_id: mainSubjectId,
-                                            sub_subject_id: null,
-                                            site_id: parseInt(as.site_id),
-                                            status: 'active'
-                                        }]).select().single();
-
-                                    if (asError) throw asError;
-                                    if (singleAssign) await saveMentorsForAssignment(singleAssign.id, mainSubjectId, null);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // --- 7. ส่วนการ RESET FORM เมื่อสำเร็จ ---
+            // 3. Reset Form
             Swal.fire({
                 icon: 'success',
                 title: 'ลงทะเบียนสำเร็จ',
@@ -687,7 +323,6 @@ export default function StudentRegisterPage() {
                 showConfirmButton: false
             });
 
-            // รีเซ็ตค่าใน State ทั้งหมด
             setForm({
                 student_code: '',
                 prefix: '',
@@ -703,9 +338,8 @@ export default function StudentRegisterPage() {
                 }))
             });
 
-            // ล้างรูปภาพที่เลือกไว้
             setAvatarFile(null);
-            setAvatarPreview(null); // ถ้าคุณมี State สำหรับแสดงตัวอย่างรูป (Preview) อย่าลืมล้างตัวนี้ด้วย
+            setAvatarPreview(null);
 
         } catch (error: any) {
             console.error('Registration Error:', error);

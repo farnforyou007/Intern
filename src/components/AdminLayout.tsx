@@ -396,6 +396,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     useEffect(() => {
         const initAuth = async () => {
+            // 🚀 เช็ค Cache ก่อนเพื่อความเร็ว
+            const cachedAuth = sessionStorage.getItem('admin_auth_status')
+            if (cachedAuth === 'authorized') {
+                setIsLoading(false)
+                resetTimer()
+                return
+            }
+
             const { data: { session } } = await supabase.auth.getSession()
 
             if (!session) {
@@ -403,6 +411,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 return
             }
 
+            // ✅ บันทึก Cache เมื่อผ่านการตรวจสอบจริง
+            sessionStorage.setItem('admin_auth_status', 'authorized')
             setIsLoading(false)
             resetTimer() // เริ่มนับเวลาถอยหลัง
 

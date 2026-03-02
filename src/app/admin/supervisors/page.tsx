@@ -1,13 +1,13 @@
-//version 0099
+//version 0100 — API Routes Migration
 "use client"
 import { useState, useEffect } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
+import { createBrowserClient } from '@supabase/ssr' // เก็บไว้สำหรับ Realtime เท่านั้น
 import {
     UserCheck, ShieldAlert, MapPin, Phone, Trash2,
     Check, Search, Users, Loader2, RefreshCw,
     MessageCircle, Calendar, User, X, Edit2,
     Save, BookOpen, Building2, Layers, Hospital, Plus,
-    ChevronLeft, ChevronRight, Download, Bell, Send
+    ChevronLeft, ChevronRight, Download, Bell, Send, Mail
 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import Swal from 'sweetalert2'
 import AdminLayout from '@/components/AdminLayout'
 import * as XLSX from 'xlsx'
-import { flexAccountApproved, flexEvaluationReminder } from '@/lib/lineFlex';
 // --- Component เสริม: Skeleton Loading ---
 function PersonnelSkeleton({ viewType }: { viewType: 'card' | 'table' }) {
     if (viewType === 'card') {
@@ -165,7 +164,7 @@ function PaginationFooter({ currentPage, totalItems, itemsPerPage, onPageChange,
 }
 
 // --- 1. Component: PersonnelDetailModal ---
-function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUpdate, subjects, sites, subSubjects, supabase, fetchData }: any) {
+function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUpdate, subjects, sites, subSubjects, fetchData }: any) {
     const [isEditing, setIsEditing] = useState(false)
     const [editForm, setEditForm] = useState<any>({})
     const [currentSubjects, setCurrentSubjects] = useState<any[]>([])
@@ -203,22 +202,20 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
 
     const handleSave = async () => {
         try {
-            await supabase.from('supervisor_subjects').delete().eq('supervisor_id', data.id);
-            if (currentSubjects.length > 0) {
-                const records = currentSubjects.map(s => ({ supervisor_id: data.id, subject_id: s.subject_id, sub_subject_id: s.sub_subject_id }));
-                await supabase.from('supervisor_subjects').insert(records);
-            }
-            const { data: currentAssignments } = await supabase.from('assignment_supervisors').select(`id, student_assignments:assignment_id(subject_id, sub_subject_id)`).eq('supervisor_id', data.id);
-            if (currentAssignments && currentAssignments.length > 0) {
-                const idsToDelete: any[] = [];
-                currentAssignments.forEach((assign: any) => {
-                    const taskSubj = assign.student_assignments?.subject_id;
-                    const taskSubSubj = assign.student_assignments?.sub_subject_id;
-                    const isValid = currentSubjects.some(s => s.subject_id === taskSubj && (s.sub_subject_id === taskSubSubj || (!s.sub_subject_id && !taskSubSubj)));
-                    if (!isValid) idsToDelete.push(assign.id);
-                });
-                if (idsToDelete.length > 0) await supabase.from('assignment_supervisors').delete().in('id', idsToDelete);
-            }
+            const res = await fetch('/api/admin/supervisors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save-subjects',
+                    supervisorId: data.id,
+                    subjects: currentSubjects.map(s => ({
+                        subject_id: s.subject_id,
+                        sub_subject_id: s.sub_subject_id
+                    }))
+                })
+            })
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
             setIsEditing(false); onClose();
             Swal.fire({ icon: 'success', title: 'บันทึกและอัปเดตงานเรียบร้อย', timer: 1500, showConfirmButton: false, position: 'center', customClass: { popup: 'rounded-[2.5rem] font-sans p-10' } });
             fetchData();
@@ -247,10 +244,86 @@ function PersonnelDetailModal({ data, isOpen, onClose, onApprove, onDelete, onUp
                             <Button variant="ghost" onClick={() => setIsEditing(!isEditing)} className={`rounded-2xl px-6 h-12 transition-all text-xs font-black tracking-[0.1em] ${isEditing ? "text-red-500 bg-red-50" : "text-blue-600 bg-blue-50 hover:bg-blue-100"}`}>{isEditing ? <X size={18} className="mr-2" /> : <Edit2 size={18} className="mr-2" />}{isEditing ? "ยกเลิก" : "แก้ไขข้อมูล"}</Button>
                         </div>
                         <div className="flex-1 p-6 md:p-12 overflow-y-auto custom-scrollbar space-y-8 md:space-y-12">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                <div className="space-y-3"><label className="text-[12px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Phone size={14} className="text-blue-500" /> เบอร์โทรศัพท์</label>{isEditing ? <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="h-14 rounded-2xl bg-slate-50 border-none text-base font-bold shadow-inner" /> : <p className="text-xl font-black text-slate-800 tracking-tight">{data.phone || '-'}</p>}</div>
-                                <div className="space-y-3"><label className="text-[12px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MapPin size={14} className="text-orange-500" /> จังหวัด</label><p className="text-xl font-black text-slate-800 tracking-tight">{isTeacher ? 'สงขลา' : (data.training_sites?.province || data.province || '-')}</p></div>
-                                <div className="space-y-3"><label className="text-[12px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Building2 size={14} className="text-indigo-500 " /> ชื่อโรงพยาบาล/หน่วยงาน</label><div className="min-h-[3.5rem] flex items-center px-5 bg-slate-50 rounded-xl border border-slate-100 shadow-sm"><p className="text-xl lg:text-base font-bold text-slate-700 leading-tight">{isTeacher ? 'คณะการแพทย์แผนไทย มหาวิทยาลัยสงขลานครินทร์' : (data.training_sites?.site_name || '-')}</p></div></div>
+                            <div className="space-y-5">
+                                {/* Row 1: Contact Information */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-12">
+                                    <div className="space-y-1 group">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2.5">
+                                            <div className="p-2 bg-blue-50 text-blue-500 rounded-xl transition-transform group-hover:scale-110">
+                                                <Phone size={14} strokeWidth={3} />
+                                            </div>
+                                            เบอร์โทรศัพท์
+                                        </label>
+                                        <div className="relative">
+                                            {isEditing ? (
+                                                <Input
+                                                    value={editForm.phone || ''}
+                                                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                                    className="h-16 w-[300px] rounded-[1.5rem] bg-slate-50 border-none px-6 text-xl  font-black text-slate-800 shadow-inner focus:bg-white transition-all ring-offset-0 focus:ring-4 focus:ring-blue-500/10"
+                                                    placeholder="08X-XXX-XXXX"
+                                                />
+                                            ) : (
+                                                <div className="px-1">
+                                                    <p className="text-xl font-black text-slate-900 tracking-tight">{data.phone || '-'}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1 group">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2.5">
+                                            <div className="p-2 bg-rose-50 text-rose-500 rounded-xl transition-transform group-hover:scale-110">
+                                                <Mail size={14} strokeWidth={3} />
+                                            </div>
+                                            อีเมล
+                                        </label>
+                                        <div className="relative">
+                                            {isEditing ? (
+                                                <Input
+                                                    value={editForm.email || ''}
+                                                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                                                    className="h-16 w-[300px] rounded-[1.5rem] bg-slate-50 border-none px-6 text-xl font-black text-slate-800 shadow-inner focus:bg-white transition-all ring-offset-0 focus:ring-4 focus:ring-rose-500/10"
+                                                    placeholder="example@email.com"
+                                                />
+                                            ) : (
+                                                <div className="px-1">
+                                                    <p className="text-xl font-black text-slate-900 tracking-tight">{data.email || '-'}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Row 2: Location Information */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-12">
+                                    <div className="space-y-1 group">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2.5">
+                                            <div className="p-2 bg-orange-50 text-orange-500 rounded-xl transition-transform group-hover:scale-110">
+                                                <MapPin size={14} strokeWidth={3} />
+                                            </div>
+                                            จังหวัด
+                                        </label>
+                                        <div className="px-1">
+                                            <p className="text-xl font-black text-slate-900 tracking-tight">
+                                                {isTeacher ? 'สงขลา' : (data.training_sites?.province || data.province || '-')}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1 group">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2.5">
+                                            <div className="p-2 bg-indigo-50 text-indigo-500 rounded-xl transition-transform group-hover:scale-110">
+                                                <Building2 size={14} strokeWidth={3} />
+                                            </div>
+                                            โรงพยาบาล / หน่วยงาน
+                                        </label>
+                                        <div className="px-1">
+                                            <p className="text-xl font-black text-slate-900 leading-tight">
+                                                {isTeacher ? 'คณะการแพทย์แผนไทย' : (data.training_sites?.site_name || '-')}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div className="space-y-6 pt-10 border-t border-slate-100">
                                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-3"><div className="p-2 bg-emerald-50 rounded-xl"><BookOpen size={16} className="text-emerald-500" /></div> รายวิชาที่รับผิดชอบ</label>
@@ -319,7 +392,18 @@ function SupervisorCard({ data, onClick }: any) {
                 </div>
             </div>
             <div className="space-y-2 mb-6">
-                <div className="flex items-center gap-3 text-xs font-bold text-slate-600 bg-slate-50/50 p-3 rounded-xl border border-slate-100/50"><Phone size={14} className="text-blue-500" /> {data.phone || '-'}</div>
+                <div className="flex items-center gap-3 text-xs font-bold text-slate-600 bg-slate-50/50 p-3 rounded-xl border border-slate-100/50">
+                    <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                            <Phone size={14} className="text-blue-500 shrink-0" />
+                            <span className="truncate">{data.phone || '-'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Mail size={14} className="text-rose-500 shrink-0" />
+                            <span className="truncate text-[10px] text-slate-400 font-medium">{data.email || '-'}</span>
+                        </div>
+                    </div>
+                </div>
                 <div className="flex items-center gap-3 text-xs font-bold text-slate-600 bg-slate-50/50 p-3 rounded-xl border border-slate-100/50"><Hospital size={14} className="text-purple-500" /> {isTeacher ? '-' : (data.training_sites?.site_name || data.site_name || '-')}</div>
                 <div className="flex items-center gap-3 text-xs font-bold text-slate-600 bg-slate-50/50 p-3 rounded-xl border border-slate-100/50"><MapPin size={14} className="text-amber-500" /> {isTeacher ? 'สงขลา' : (data.training_sites?.province || data.province || '-')}</div>
             </div>
@@ -339,7 +423,7 @@ function PersonnelTable({ list, totalItems, itemsPerPage, currentPage, onPageCha
                             <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">บุคลากร</th>
                             <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">วิชาที่รับผิดชอบ</th>
                             <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">จังหวัด / หน่วยงาน</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">ความคืบหน้า</th>
+                            {list[0]?.role !== 'teacher' && <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">ความคืบหน้า</th>}
                             <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">การติดต่อ</th>
                             <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">จัดการ</th>
                         </tr>
@@ -353,10 +437,23 @@ function PersonnelTable({ list, totalItems, itemsPerPage, currentPage, onPageCha
                                     <td className="px-8 py-5"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-[1.2rem] bg-slate-100 overflow-hidden border-2 border-white shadow-sm shrink-0">{item.avatar_url ? <img src={item.avatar_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><User size={20} /></div>}</div><div><div className="font-black text-slate-800 text-sm leading-tight">{item.full_name}</div><div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{item.role === 'teacher' ? 'อาจารย์' : 'พี่เลี้ยง'}</div></div></div></td>
                                     <td className="px-6 py-5"><div className="flex flex-wrap gap-1.5 max-w-[250px]">{item.supervisor_subjects && item.supervisor_subjects.length > 0 ? item.supervisor_subjects.map((ss: any, i: number) => (<div key={i} className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black border border-blue-100/50 flex items-center gap-1"><Layers size={10} strokeWidth={3} />{ss.subjects?.name} {ss.sub_subjects ? `(${ss.sub_subjects.name})` : ''}</div>)) : <span className="text-[10px] font-bold text-slate-300 italic">ไม่ได้ระบุวิชา</span>}</div></td>
                                     <td className="px-6 py-5"><div className="text-sm font-bold text-slate-700 leading-tight">{item.training_sites?.site_name || 'คณะการแพทย์แผนไทย'}</div><div className="text-[10px] font-bold text-slate-400 truncate max-w-[180px] mt-0.5">{item.training_sites?.province || item.province || 'สงขลา'}</div></td>
+                                    {item.role !== 'teacher' && (
+                                        <td className="px-6 py-5">
+                                            <EvaluationProgressBar evaluated={progress.evaluated} total={progress.total} />
+                                        </td>
+                                    )}
                                     <td className="px-6 py-5">
-                                        <EvaluationProgressBar evaluated={progress.evaluated} total={progress.total} />
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2 text-slate-600">
+                                                <Phone size={12} className="text-blue-400 shrink-0" />
+                                                <span className="text-xs font-bold font-mono">{item.phone || '-'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-slate-400">
+                                                <Mail size={12} className="text-rose-400 shrink-0" />
+                                                <span className="text-[10px] font-bold truncate max-w-[150px]">{item.email || '-'}</span>
+                                            </div>
+                                        </div>
                                     </td>
-                                    <td className="px-6 py-5"><div className="flex items-center gap-2 text-slate-600"><Phone size={12} className="text-blue-400" /><span className="text-xs font-bold font-mono">{item.phone || '-'}</span></div></td>
                                     <td className="px-8 py-5 text-right">
                                         <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                             <TooltipProvider delayDuration={200}>
@@ -441,6 +538,7 @@ export default function AdminManagement() {
     const [activeTab, setActiveTab] = useState('pending')
     const [itemsPerPage, setItemsPerPage] = useState(10)
 
+    // เก็บ supabase client ไว้สำหรับ Realtime subscription เท่านั้น
     const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
     useEffect(() => {
@@ -457,51 +555,39 @@ export default function AdminManagement() {
     const fetchData = async () => {
         setLoading(true)
         try {
-            const { data: supervisors } = await supabase.from('supervisors').select(`*,line_user_id, training_sites:site_id(site_name, province), supervisor_subjects(subject_id, sub_subject_id, subjects:subject_id(name), sub_subjects:sub_subject_id(name))`).order('created_at', { ascending: false })
-            const { data: subs } = await supabase.from('subjects').select('*').order('name')
-            const { data: sSubs } = await supabase.from('sub_subjects').select('*').order('name')
-            const { data: sits } = await supabase.from('training_sites').select('*').order('site_name')
+            const res = await fetch('/api/admin/supervisors')
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+
+            const { supervisors, subjects: subs, subSubjects: sSubs, sites: sits, evalProgressMap: progressMap } = result.data
 
             setAllSupervisors(supervisors || [])
             setSubjects(subs || [])
             setSubSubjects(sSubs || [])
             setSites(sits || [])
-
-            // ดึงข้อมูลความคืบหน้าการประเมินของแต่ละ supervisor
-            const { data: evalData } = await supabase
-                .from('assignment_supervisors')
-                .select('supervisor_id, is_evaluated, evaluation_status')
-
-            if (evalData) {
-                const progressMap: Record<string, { total: number; evaluated: number }> = {}
-                evalData.forEach((item: any) => {
-                    const sid = item.supervisor_id
-                    if (!progressMap[sid]) progressMap[sid] = { total: 0, evaluated: 0 }
-                    progressMap[sid].total += 1
-                    if (Number(item.evaluation_status) === 2) progressMap[sid].evaluated += 1
-                })
-                setEvalProgressMap(progressMap)
-            }
+            setEvalProgressMap(progressMap || {})
         } catch (error: any) {
-            Swal.fire('Error', error.message, 'error')
+            Swal.fire('Error', error.message || 'ไม่สามารถดึงข้อมูลได้', 'error')
         } finally {
             setLoading(false)
         }
     }
 
     const handleUpdate = async (updatedData: any) => {
-        const { error } = await supabase.from('supervisors').update({ full_name: updatedData.full_name, phone: updatedData.phone, province: updatedData.province, site_id: updatedData.site_id, group_type: updatedData.group_type }).eq('id', updatedData.id)
-        if (error) Swal.fire('Error', error.message, 'error'); else { Swal.fire({ icon: 'success', title: 'อัปเดตข้อมูลแล้ว', timer: 1500, showConfirmButton: false }); fetchData(); setSelectedPersonnel(null); }
+        try {
+            const res = await fetch('/api/admin/supervisors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'update', id: updatedData.id, full_name: updatedData.full_name, phone: updatedData.phone, email: updatedData.email, province: updatedData.province, site_id: updatedData.site_id, group_type: updatedData.group_type })
+            })
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+            Swal.fire({ icon: 'success', title: 'อัปเดตข้อมูลแล้ว', timer: 1500, showConfirmButton: false }); fetchData(); setSelectedPersonnel(null);
+        } catch (error: any) { Swal.fire('Error', error.message || 'ไม่สามารถอัปเดตได้', 'error') }
     }
 
-    // const handleApprove = async (id: string, name: string) => {
-    //     const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการอนุมัติสิทธิ์?', html: `คุณกำลังจะอนุมัติสิทธิ์การเข้าใช้งานให้คุณ <b>"${name}"</b>`, icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981', cancelButtonColor: '#94a3b8', confirmButtonText: 'ยืนยันการอนุมัติ', cancelButtonText: 'ยกเลิก', customClass: { popup: 'rounded-[2.5rem] font-sans p-10', confirmButton: 'rounded-full px-10 py-3 font-bold order-1', cancelButton: 'rounded-full px-10 py-3 font-bold order-2' } })
-    //     if (isConfirmed) { const { error } = await supabase.from('supervisors').update({ is_verified: true }).eq('id', id); if (!error) { fetchData(); Swal.fire({ icon: 'success', title: 'อนุมัติเรียบร้อย', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem]' } }) } }
-    // }
-    // 2. ปรับฟังก์ชันให้รับ lineUserId เพิ่มเข้ามา
     const handleApprove = async (id: string, name: string) => {
         const lineUserId = selectedPersonnel?.line_user_id;
-        console.log("Checking Data before API call:", { id, name, lineUserId });
         const { isConfirmed } = await Swal.fire({
             title: 'ยืนยันการอนุมัติสิทธิ์?',
             html: `คุณกำลังจะอนุมัติสิทธิ์การเข้าใช้งานให้คุณ <b>"${name}"</b>`,
@@ -519,52 +605,40 @@ export default function AdminManagement() {
         })
 
         if (isConfirmed) {
-            // อัปเดตสถานะใน Database
-            const { error } = await supabase
-                .from('supervisors')
-                .update({ is_verified: true })
-                .eq('id', id);
-
-            if (!error && lineUserId) {
-                console.log("Attempting to send LINE to:", lineUserId);
-                // 🚩 เพิ่มส่วนส่ง LINE ตรงนี้
-                if (lineUserId) {
-                    try {
-                        const res = await fetch('/api/line/push', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                lineUserId: lineUserId,
-                                flexMessage: flexAccountApproved(name) // 👈 ส่งค่าจากฟังก์ชันไป "ตรงๆ" ไม่ต้องครอบ {} ซ้ำ
-                            })
-
-                        });
-                        const debugResult = await res.json();
-                        console.log("API Response:", debugResult);
-                    } catch (err) {
-                        console.error("Line Notification Error:", err);
-                    }
-                }
+            try {
+                const res = await fetch('/api/admin/supervisors', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'approve', id, name, lineUserId })
+                })
+                const result = await res.json()
+                if (!result.success) throw new Error(result.error)
 
                 fetchData();
-                Swal.fire({
-                    icon: 'success',
-                    title: 'อนุมัติเรียบร้อย',
-                    timer: 1500,
-                    showConfirmButton: false,
-                    customClass: { popup: 'rounded-[2.5rem]' }
-                })
-
+                Swal.fire({ icon: 'success', title: 'อนุมัติเรียบร้อย', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem]' } })
+            } catch (error: any) {
+                Swal.fire('Error', error.message || 'ไม่สามารถอนุมัติได้', 'error')
             }
         }
     }
 
     const handleDelete = async (id: string, name: string) => {
         const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการลบ?', html: `คุณกำลังจะลบ <b>"${name}"</b> ออกจากระบบ`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#94a3b8', confirmButtonText: 'ยืนยันการลบ', cancelButtonText: 'ยกเลิก', customClass: { popup: 'rounded-[2.5rem] font-sans p-10', confirmButton: 'rounded-full px-10 py-3 font-bold order-1', cancelButton: 'rounded-full px-10 py-3 font-bold order-2' } })
-        if (isConfirmed) { const { error } = await supabase.from('supervisors').delete().eq('id', id); if (!error) { fetchData(); Swal.fire({ icon: 'success', title: 'ลบข้อมูลสำเร็จ', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem] font-sans' } }) } }
+        if (isConfirmed) {
+            try {
+                const res = await fetch('/api/admin/supervisors', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', id })
+                })
+                const result = await res.json()
+                if (!result.success) throw new Error(result.error)
+                fetchData(); Swal.fire({ icon: 'success', title: 'ลบข้อมูลสำเร็จ', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem] font-sans' } })
+            } catch (error: any) { Swal.fire('Error', error.message || 'ไม่สามารถลบได้', 'error') }
+        }
     }
 
-    // --- ส่ง LINE แจ้งเตือนการประเมินค้าง ---
+    // --- ส่ง LINE แจ้งเตือนการประเมินค้าง (ผ่าน API Route) ---
     const handleSendReminder = async (supervisor: any) => {
         const progress = evalProgressMap[supervisor.id]
         if (!progress || progress.evaluated >= progress.total) return
@@ -581,9 +655,10 @@ export default function AdminManagement() {
             return
         }
 
+        const pending = progress.total - progress.evaluated
         const { isConfirmed } = await Swal.fire({
             title: 'ส่งแจ้งเตือนผ่าน LINE?',
-            html: `ส่งการแจ้งเตือนไปยัง <b>"${supervisor.full_name}"</b><br/>ค้างประเมินอีก <b>${progress.total - progress.evaluated}</b> รายการ`,
+            html: `ส่งการแจ้งเตือนไปยัง <b>"${supervisor.full_name}"</b><br/>ค้างประเมินอีก <b>${pending}</b> รายการ`,
             icon: 'question',
             showCancelButton: true,
             confirmButtonColor: '#d97706',
@@ -600,23 +675,18 @@ export default function AdminManagement() {
         if (isConfirmed) {
             setSendingReminder(supervisor.id)
             try {
-                const pending = progress.total - progress.evaluated
-                const flexMessage = flexEvaluationReminder({
-                    name: supervisor.full_name,
-                    evaluated: progress.evaluated,
-                    total: progress.total,
-                    pending
-                })
-
-                const res = await fetch('/api/line/push', {
+                const res = await fetch('/api/admin/supervisors', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        action: 'send-reminder',
                         lineUserId: supervisor.line_user_id,
-                        flexMessage
+                        name: supervisor.full_name,
+                        evaluated: progress.evaluated,
+                        total: progress.total,
+                        pending
                     })
                 })
-
                 const result = await res.json()
 
                 if (result.success) {
@@ -629,7 +699,6 @@ export default function AdminManagement() {
                         customClass: { popup: 'rounded-[2.5rem] font-sans p-8' }
                     })
                 } else {
-                    console.error('LINE API Error:', result)
                     Swal.fire({
                         icon: 'error',
                         title: 'ส่งไม่สำเร็จ',
@@ -711,32 +780,36 @@ export default function AdminManagement() {
     return (
         <AdminLayout>
             <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 space-y-6 md:space-y-8 overflow-x-hidden">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-8">
-                    <div className="space-y-1">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100"><Users size={12} /> Personnel Management</div>
-                        <h1 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">จัดการบุคลากร</h1>
-                        <p className="text-slate-400 text-sm font-medium">จัดการสิทธิ์และแก้ไขข้อมูลอาจารย์และพี่เลี้ยง</p>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
+                    <div>
+                        <h1 className="text-3xl font-black flex items-center gap-3 text-slate-900">
+                            <div className="p-2 bg-blue-50 rounded-xl text-blue-600"><Users size={24} /></div>
+                            จัดการบุคลากร
+                        </h1>
+                        <p className="text-slate-500 mt-1 font-medium text-sm">จัดการสิทธิ์และแก้ไขข้อมูลอาจารย์และพี่เลี้ยง</p>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <div className="relative group">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
-                            <Input placeholder="ค้นหาชื่อ, จังหวัด, เบอร์โทร..." className="w-full md:w-64 h-11 pl-11 pr-4 rounded-xl bg-white border-slate-200 shadow-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">
+                        <div className="relative group flex-1 sm:flex-none">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+                            <Input placeholder="ค้นหาชื่อ, จังหวัด, เบอร์โทร..." className="w-full sm:w-64 h-12 pl-11 pr-4 rounded-xl bg-white border-slate-200 shadow-sm font-medium text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                         </div>
                         <Button
                             onClick={handleExport}
                             variant="outline"
-                            className="h-11 px-4 rounded-xl shadow-sm bg-white border-slate-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 font-bold gap-2"
+                            className="h-12 px-5 rounded-xl shadow-sm bg-white border-slate-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 font-black gap-2 transition-all active:scale-95 whitespace-nowrap"
                         >
-                            <Download size={18} />
-                            <span className="hidden sm:inline">Export</span>
+                            <Download size={20} />
+                            <span>Export</span>
                         </Button>
 
-                        <Button onClick={fetchData} variant="outline" className="h-11 w-11 rounded-xl shadow-sm bg-white"><RefreshCw className={loading ? 'animate-spin' : ''} size={18} /></Button>
+                        <Button onClick={fetchData} variant="outline" className="h-12 w-12 p-0 rounded-xl shadow-sm bg-white border-slate-200 text-slate-500 hover:text-blue-600 transition-all active:scale-95 flex items-center justify-center shrink-0">
+                            <RefreshCw className={loading ? 'animate-spin' : ''} size={20} />
+                        </Button>
                     </div>
                 </div>
 
                 <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="bg-slate-100/50 p-1 rounded-2xl h-auto mb-6 md:mb-8 border border-slate-100 flex w-full md:w-auto md:inline-flex shadow-sm overflow-x-auto">
+                    <TabsList className="bg-slate-100/50 p-1 rounded-2xl h-auto mb-6 md:mb-8 border border-slate-100 flex w-fit ml-auto shadow-sm overflow-x-auto">
                         <TabsTrigger value="pending" className="rounded-xl px-3 md:px-6 py-2 md:py-2.5 data-[state=active]:bg-white font-bold text-xs md:text-sm gap-1 md:gap-2 transition-all whitespace-nowrap flex-1 md:flex-none">รออนุมัติ <span className="bg-orange-500 text-white px-2 py-0.5 rounded-md text-[10px]">{pendingList.length}</span></TabsTrigger>
                         <TabsTrigger value="teachers" className="rounded-xl px-3 md:px-6 py-2 md:py-2.5 data-[state=active]:bg-white font-bold text-xs md:text-sm transition-all whitespace-nowrap flex-1 md:flex-none">อาจารย์คณะ</TabsTrigger>
                         <TabsTrigger value="supervisors" className="rounded-xl px-3 md:px-6 py-2 md:py-2.5 data-[state=active]:bg-white font-bold text-xs md:text-sm transition-all whitespace-nowrap flex-1 md:flex-none">พี่เลี้ยงแหล่งฝึก</TabsTrigger>
@@ -803,10 +876,9 @@ export default function AdminManagement() {
                     onDelete={handleDelete}
                     onUpdate={handleUpdate}
                     subjects={subjects}
+                    fetchData={fetchData}
                     sites={sites}
                     subSubjects={subSubjects}
-                    supabase={supabase}
-                    fetchData={fetchData}
                 />
             </div>
         </AdminLayout>

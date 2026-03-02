@@ -1,6 +1,5 @@
 "use client"
 import { useState, useEffect, useMemo } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 import {
     Search, Users, User, ChevronLeft, ChevronRight, ChevronDown,
     X, Maximize2, Mail, Phone, GraduationCap, CalendarDays, Filter
@@ -20,45 +19,28 @@ export default function StudentListPage() {
     const [selectedTrainingYear, setSelectedTrainingYear] = useState<string>('')
     const [trainingYearOptions, setTrainingYearOptions] = useState<string[]>([])
 
-    const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
     useEffect(() => {
         const fetchStudents = async () => {
             setLoading(true)
+            const yearParam = selectedTrainingYear ? `?selectedTrainingYear=${encodeURIComponent(selectedTrainingYear)}` : ''
+            try {
+                const res = await fetch(`/api/teacher/students${yearParam}`)
+                const result = await res.json()
+                if (!result.success) throw new Error(result.error)
 
-            // 🔒 ดึงปี default + options
-            if (!selectedTrainingYear) {
-                const { data: config } = await supabase
-                    .from('system_configs')
-                    .select('key_value')
-                    .eq('key_name', 'current_training_year')
-                    .single();
-                if (config?.key_value) {
-                    setSelectedTrainingYear(config.key_value);
-                    setLoading(false);
-                    return; // จะ re-fetch อีกรอบเมื่อ state เปลี่ยน
+                const d = result.data
+                if (!selectedTrainingYear && d.defaultYear) {
+                    setSelectedTrainingYear(d.defaultYear)
+                    setLoading(false)
+                    return // จะ re-fetch เมื่อ state เปลี่ยน
                 }
+                setTrainingYearOptions(d.trainingYearOptions || [])
+                setStudents(d.students || [])
+            } catch (error) {
+                console.error('Students fetch error:', error)
+            } finally {
+                setLoading(false)
             }
-
-            const { data: yearsData } = await supabase
-                .from('students')
-                .select('training_year')
-                .not('training_year', 'is', null);
-            if (yearsData) {
-                const unique = Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a));
-                setTrainingYearOptions(unique as string[]);
-            }
-
-            // 🔒 ดึงนักศึกษาตามปีที่เลือก
-            let query = supabase.from('students').select('*').order('student_code', { ascending: true });
-            if (selectedTrainingYear) query = query.eq('training_year', selectedTrainingYear);
-
-            const { data } = await query;
-            if (data) setStudents(data)
-            setLoading(false)
         }
         fetchStudents()
     }, [selectedTrainingYear])
@@ -95,13 +77,11 @@ export default function StudentListPage() {
             {/* Admin-style Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
                 <div>
-                    <h1 className="text-4xl font-black text-slate-900 flex items-center gap-4">
-                        <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200">
-                            <Users size={32} className="text-white" />
-                        </div>
-                        <span>STUDENTS <span className="text-indigo-600">List</span></span>
+                    <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
+                        <Users size={28} className="text-blue-600" />
+                        <span>STUDENTS <span className="text-blue-600">List</span></span>
                     </h1>
-                    <p className="text-slate-400 font-bold mt-2 ml-1 text-xs uppercase tracking-[0.2em]">รายชื่อนักศึกษาในความดูแล</p>
+                    <p className="text-slate-400 font-bold mt-2 ml-1 text-[11px] uppercase tracking-[0.2em]">รายชื่อนักศึกษาในความดูแล</p>
                 </div>
             </div>
 
@@ -110,12 +90,13 @@ export default function StudentListPage() {
                 <div className="flex flex-col xl:flex-row items-center gap-4">
                     {/* 🔒 Training Year Filter (server-side) */}
                     <div className="flex items-center gap-2 bg-white px-4 h-14 rounded-[1.5rem] border-2 border-slate-50 shadow-sm shrink-0">
-                        <CalendarDays size={16} className="text-indigo-500" />
+                        <CalendarDays size={16} className="text-blue-500" />
                         <select
                             value={selectedTrainingYear}
                             onChange={(e) => { setSelectedTrainingYear(e.target.value); setSelectedBatch('all'); setCurrentPage(1); }}
-                            className="text-sm font-black text-indigo-600 bg-transparent outline-none cursor-pointer"
+                            className="text-sm font-black text-blue-600 bg-transparent outline-none cursor-pointer"
                         >
+                            <option value="">ปีการศึกษาทั้งหมด</option>
                             {trainingYearOptions.map(year => (
                                 <option key={year} value={year}>ปีการศึกษา {year}</option>
                             ))}
@@ -286,11 +267,50 @@ export default function StudentListPage() {
 function SkeletonLoader() {
     return (
         <div className="max-w-7xl mx-auto pb-20 px-4 animate-pulse">
-            <div className="h-16 bg-white rounded-2xl mb-8" />
-            <div className="h-20 bg-white rounded-[2.5rem] mb-8" />
-            <div className="bg-white rounded-[2.5rem] overflow-hidden">
-                <div className="h-16 bg-slate-50" />
-                {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-20 border-t border-slate-50" />)}
+            {/* Header skeleton */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
+                <div>
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-indigo-200 rounded-2xl" />
+                        <div className="h-10 w-52 bg-slate-200 rounded-2xl" />
+                    </div>
+                    <div className="h-3 w-44 bg-slate-100 rounded mt-4 ml-1" />
+                </div>
+            </div>
+
+            {/* Filter bar skeleton */}
+            <div className="bg-white/50 p-4 rounded-[2.5rem] border border-slate-100 mb-8">
+                <div className="flex flex-col xl:flex-row items-center gap-4">
+                    <div className="w-44 h-14 bg-slate-100 rounded-[1.5rem]" />
+                    <div className="w-52 h-14 bg-slate-100 rounded-[1.5rem]" />
+                    <div className="flex-1 h-14 bg-slate-100 rounded-[1.5rem] w-full" />
+                </div>
+            </div>
+
+            {/* Student cards skeleton */}
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                <div className="h-14 bg-slate-50/50 border-b border-slate-100" />
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                    <div key={i} className="flex items-center gap-5 px-6 py-4 border-b border-slate-50">
+                        <div className="w-8 h-4 bg-slate-100 rounded" />
+                        <div className="w-11 h-11 bg-slate-100 rounded-2xl shrink-0" />
+                        <div className="flex-1 space-y-2">
+                            <div className="h-4 w-36 bg-slate-200 rounded" />
+                            <div className="flex gap-2">
+                                <div className="h-2 w-16 bg-slate-100 rounded" />
+                                <div className="h-2 w-20 bg-indigo-50 rounded" />
+                            </div>
+                        </div>
+                        <div className="h-6 w-16 bg-slate-100 rounded-lg hidden md:block" />
+                        <div className="h-6 w-16 bg-slate-100 rounded-lg hidden lg:block" />
+                        <div className="h-8 w-8 bg-indigo-50 rounded-xl" />
+                    </div>
+                ))}
+            </div>
+
+            {/* Pagination skeleton */}
+            <div className="flex justify-center items-center gap-2 mt-6">
+                {[1, 2, 3].map(i => <div key={i} className="w-10 h-10 bg-slate-100 rounded-xl" />)}
             </div>
         </div>
     )

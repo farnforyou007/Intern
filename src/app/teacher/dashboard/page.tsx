@@ -1,4 +1,4 @@
-// ver7 — Desktop Dashboard with Analytics (กราฟ + KPI จาก analytics รวมอยู่ที่นี่)
+// ver8 — API Routes Migration (Dashboard + Analytics)
 "use client"
 import { useState, useEffect, useMemo } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
@@ -14,7 +14,7 @@ import {
 } from 'recharts'
 import liff from '@line/liff'
 import { getLineUserId } from '@/utils/auth';
-const COLORS_EVAL = ['#6366f1', '#06b6d4', '#f59e0b', '#ec4899']
+const COLORS_EVAL = ['#2563eb', '#06b6d4', '#f59e0b', '#ec4899']
 
 export default function TeacherDashboard() {
     const router = useRouter()
@@ -62,171 +62,30 @@ export default function TeacherDashboard() {
         try {
             const urlParams = new URLSearchParams(window.location.search);
             const lineUserId = await getLineUserId(urlParams);
-
             if (!lineUserId) return;
 
-            // 🔒 ดึงปีการศึกษา default + options
-            if (!selectedYear) {
-                const { data: configData } = await supabase
-                    .from('system_configs')
-                    .select('key_value')
-                    .eq('key_name', 'current_training_year')
-                    .single();
-                if (configData?.key_value) setSelectedYear(configData.key_value);
-            }
-            const { data: yearsData } = await supabase
-                .from('students')
-                .select('training_year')
-                .not('training_year', 'is', null);
-            if (yearsData) {
-                const unique = Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a));
-                setYearOptions(unique as string[]);
-            }
+            const yearParam = selectedYear ? `&selectedYear=${encodeURIComponent(selectedYear)}` : ''
+            const res = await fetch(`/api/teacher/dashboard?lineUserId=${encodeURIComponent(lineUserId)}${yearParam}`)
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
 
-            // 🔒 ดึง student IDs ในปีที่เลือก
-            let yearStudentIds: Set<string> | null = null;
-            if (selectedYear) {
-                const { data: yearStudents } = await supabase
-                    .from('students')
-                    .select('id, student_code')
-                    .eq('training_year', selectedYear);
-                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
-            }
-            // console.log("User Profile:", profile); // เช็คค่าได้ตรงนี้
-            const { data: user } = await supabase
-                .from('supervisors')
-                .select('id, full_name, avatar_url, role, supervisor_subjects(id)')
-                .eq('line_user_id', lineUserId)
-                .single()
+            const d = result.data
+            if (!selectedYear && d.defaultYear) setSelectedYear(d.defaultYear)
+            setYearOptions(d.yearOptions || [])
+            setTeacherData(d.teacherData)
+            setHasDoubleRole(d.hasDoubleRole)
+            setSubjects(d.subjects || [])
 
-            if (user) {
-                setTeacherData(user)
-                setHasDoubleRole(user.role === 'supervisor' || user.role === 'both')
+            const assignments = d.assignments || []
+            setAllAssignments(assignments)
 
-                const { data: subData } = await supabase
-                    .from('supervisor_subjects')
-                    .select('subject_id, subjects(name, id)')
-                    .eq('supervisor_id', user.id)
+            // KPI calculation — use first subject if 'all'
+            const firstSubjectId = d.subjects?.[0]?.subject_id
+            if (selectedSubject === 'all' && firstSubjectId) setSelectedSubject(firstSubjectId)
+            const activeSubjectId = selectedSubject === 'all' ? firstSubjectId : selectedSubject
+            calculateKPI(assignments, activeSubjectId)
 
-                const subjectList = subData || []
-                setSubjects(subjectList)
-
-                const subjectIds = subjectList.map((s: any) => s.subject_id)
-                if (subjectIds.length > 0) {
-                    // ตั้งค่าเริ่มต้นให้เป็นวิชาแรก เมื่อยังไม่มีวิชาที่เลือก
-                    const firstSubjectId = subjectList[0].subject_id
-                    if (selectedSubject === 'all') {
-                        setSelectedSubject(firstSubjectId)
-                    }
-
-                    const { data: rawAssignments } = await supabase
-                        .from('student_assignments')
-                        .select(`
-                            id, subject_id, student_id,
-                            students (first_name, last_name, student_code),
-                            subjects (name),
-                            training_sites (site_name, province),
-                            assignment_supervisors(is_evaluated, evaluation_status),
-                            evaluation_logs(id)
-                        `)
-                        .in('subject_id', subjectIds)
-
-                    // 🔒 กรองเฉพาะ student ในปีที่เลือก
-                    const assignments = yearStudentIds
-                        ? (rawAssignments || []).filter((a: any) => yearStudentIds!.has(String(a.student_id)))
-                        : rawAssignments
-
-                    if (assignments) {
-                        setAllAssignments(assignments)
-
-                        // ใช้วิชาปัจจุบัน (หรือวิชาแรก ถ้าเพิ่งเข้าใหม่) ในการคำนวณ KPI
-                        const activeSubjectId = selectedSubject === 'all' ? subjectList[0].subject_id : selectedSubject
-                        calculateKPI(assignments, activeSubjectId)
-
-                        // Fetch evaluation logs for summary
-                        /* The above code is attempting to extract the `id` values from an array of `assignments` using the `map` method and store them in the `assignmentIds` array. However, the code is currently commented out after extracting the `assignmentIds`. It seems like the intention was to then check if the `assignmentIds` array has a length greater than 0, and if so, fetch evaluation logs data from a database using Supabase based on the `assignment_id` values in the `assignmentIds` array. The fetched data includes the `assignment_id`, `score`, and ` */
-                        // const assignmentIds = assignments.map(a => a.id)
-                        // if (assignmentIds.length > 0) {
-                        //     const { data: evalLogs } = await supabase
-                        //         .from('evaluation_logs')
-                        //         .select('assignment_id, score, max_score')
-                        //         .in('assignment_id', assignmentIds)
-                        //     setEvaluationData(evalLogs || [])
-                        // }
-
-                        // โหลดข้อมูลสำหรับกราฟ/KPI แบบ analytics (evaluation_groups, evaluation_answers)
-                        const { data: rawAnalyticsRes } = await supabase
-                            .from('student_assignments')
-                            .select(`
-                                id, subject_id, student_id,
-                                students (id, first_name, last_name, student_code),
-                                subjects (name, id),
-                                training_sites (site_name, province),
-                                evaluation_logs (
-                                    id, total_score, supervisor_id,
-                                    supervisors (id, full_name),
-                                    evaluation_groups (id, group_name, weight),
-                                    evaluation_answers (score, item_id)
-                                )
-                            `)
-                            .in('subject_id', subjectIds)
-
-                        // 🔒 กรองเฉพาะปี
-                        const analyticsRes = yearStudentIds
-                            ? (rawAnalyticsRes || []).filter((a: any) => yearStudentIds!.has(String(a.student_id)))
-                            : rawAnalyticsRes
-
-                        const processed = (analyticsRes || []).map((item: any) => {
-                            const logs = item.evaluation_logs || []
-                            const supervisorMap: { [key: string]: { supervisorId: string; supervisorName: string; logs: any[] } } = {}
-                            logs.forEach((log: any) => {
-                                const svId = log.supervisor_id || 'unknown'
-                                if (!supervisorMap[svId]) supervisorMap[svId] = { supervisorId: svId, supervisorName: log.supervisors?.full_name || 'ไม่ระบุ', logs: [] }
-                                supervisorMap[svId].logs.push(log)
-                            })
-                            const supervisorEvaluations = Object.values(supervisorMap).map(sv => ({
-                                ...sv,
-                                evaluations: sv.logs.map((log: any) => ({
-                                    groupId: log.evaluation_groups?.id,
-                                    title: log.evaluation_groups?.group_name,
-                                    rawScore: log.total_score || 0,
-                                    weight: log.evaluation_groups?.weight || 1,
-                                    answers: log.evaluation_answers || []
-                                }))
-                            }))
-                            const mentorCount = supervisorEvaluations.length
-                            let evaluations: any[] = []
-                            if (mentorCount === 1) evaluations = supervisorEvaluations[0].evaluations
-                            else if (mentorCount > 1) {
-                                const groupMap: { [groupId: string]: any[] } = {}
-                                supervisorEvaluations.forEach(sv => {
-                                    sv.evaluations.forEach((ev: any) => {
-                                        if (!groupMap[ev.groupId]) groupMap[ev.groupId] = []
-                                        groupMap[ev.groupId].push(ev)
-                                    })
-                                })
-                                evaluations = Object.values(groupMap).map(evs => ({
-                                    groupId: evs[0].groupId,
-                                    title: evs[0].title,
-                                    rawScore: Math.round(evs.reduce((s: number, e: any) => s + e.rawScore, 0) / evs.length * 100) / 100,
-                                    weight: evs[0].weight,
-                                    answers: evs[0].answers
-                                }))
-                            }
-                            return {
-                                id: item.id,
-                                student: item.students,
-                                place: item.training_sites,
-                                subjectName: item.subjects?.name,
-                                subject_id: item.subject_id,
-                                evaluations,
-                                mentorCount
-                            }
-                        })
-                        setAnalyticsData(processed)
-                    }
-                }
-            }
+            setAnalyticsData(d.analyticsData || [])
         } catch (error) {
             console.error("Dashboard error:", error)
         } finally {
@@ -513,7 +372,7 @@ export default function TeacherDashboard() {
             return (
                 <div className="bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-slate-100">
                     <p className="font-black text-slate-800 text-sm mb-1">{payload[0]?.payload?.fullName || label}</p>
-                    <p className="text-indigo-600 font-bold text-sm">{payload[0]?.value}%</p>
+                    <p className="text-blue-600 font-bold text-sm">{payload[0]?.value}%</p>
                 </div>
             )
         }
@@ -521,12 +380,77 @@ export default function TeacherDashboard() {
     }
 
     if (loading) return (
-        <div className="space-y-6 animate-pulse max-w-7xl mx-auto">
-            <div className="h-32 bg-white rounded-[2rem]" />
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-white rounded-[2rem]" />)}
+        <div className="space-y-6 max-w-7xl mx-auto animate-pulse">
+            {/* Header with avatar and name */}
+            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-blue-100 rounded-2xl" />
+                    <div className="space-y-3 flex-1">
+                        <div className="h-8 w-56 bg-slate-200 rounded-xl" />
+                        <div className="h-3 w-40 bg-slate-100 rounded" />
+                    </div>
+                    <div className="hidden md:flex items-center gap-2">
+                        <div className="w-28 h-10 bg-slate-100 rounded-2xl" />
+                        <div className="w-28 h-10 bg-blue-100 rounded-2xl" />
+                    </div>
+                </div>
             </div>
-            <div className="h-48 bg-white rounded-[2rem]" />
+
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                    { color: 'bg-blue-50', iconBg: 'bg-blue-200' },
+                    { color: 'bg-emerald-50', iconBg: 'bg-emerald-200' },
+                    { color: 'bg-amber-50', iconBg: 'bg-amber-200' },
+                    { color: 'bg-rose-50', iconBg: 'bg-rose-200' }
+                ].map((c, i) => (
+                    <div key={i} className={`${c.color} p-6 rounded-[2rem] border border-slate-100`}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className={`w-10 h-10 ${c.iconBg} rounded-xl`} />
+                            <div className="h-3 w-20 bg-white/60 rounded" />
+                        </div>
+                        <div className="h-10 w-16 bg-white/60 rounded-xl" />
+                    </div>
+                ))}
+            </div>
+
+            {/* Charts row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 h-72">
+                    <div className="h-4 w-40 bg-slate-200 rounded mb-6" />
+                    <div className="flex items-end gap-3 h-48 px-4">
+                        {[60, 80, 45, 70, 55, 90].map((h, i) => (
+                            <div key={i} className="flex-1 bg-blue-100 rounded-t-xl" style={{ height: `${h}%` }} />
+                        ))}
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 h-72">
+                    <div className="h-4 w-40 bg-slate-200 rounded mb-6" />
+                    <div className="flex items-center justify-center h-48">
+                        <div className="w-40 h-40 bg-slate-100 rounded-full" />
+                    </div>
+                </div>
+            </div>
+
+            {/* Table skeleton */}
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                <div className="h-4 w-48 bg-slate-200 rounded m-6" />
+                <div className="h-14 bg-slate-50/50 border-b border-slate-100" />
+                {[1, 2, 3, 4, 5].map(i => (
+                    <div key={i} className="flex items-center gap-6 px-6 py-4 border-b border-slate-50">
+                        <div className="w-8 h-4 bg-slate-100 rounded" />
+                        <div className="flex items-center gap-3 flex-1">
+                            <div className="w-9 h-9 bg-slate-100 rounded-xl" />
+                            <div className="space-y-2">
+                                <div className="h-4 w-32 bg-slate-100 rounded" />
+                                <div className="h-2 w-20 bg-slate-50 rounded" />
+                            </div>
+                        </div>
+                        <div className="h-6 w-24 bg-blue-50 rounded-lg hidden md:block" />
+                        <div className="h-6 w-20 bg-emerald-50 rounded-full hidden lg:block" />
+                    </div>
+                ))}
+            </div>
         </div>
     )
 
@@ -535,22 +459,20 @@ export default function TeacherDashboard() {
             {/* Admin-style Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
                 <div>
-                    <h1 className="text-4xl font-black text-slate-900 flex items-center gap-4">
-                        <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200">
-                            <LayoutDashboard size={32} className="text-white" />
-                        </div>
-                        <span>TEACHER <span className="text-indigo-600">Dashboard</span></span>
+                    <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
+                        <LayoutDashboard size={28} className="text-blue-600" />
+                        <span>TEACHER <span className="text-blue-600">Dashboard</span></span>
                     </h1>
-                    <p className="text-slate-400 font-bold mt-2 ml-1 text-xs uppercase tracking-[0.2em]">ภาพรวม KPI สถิติ และข้อมูลอาจารย์</p>
+                    <p className="text-slate-400 font-bold mt-2 ml-1 text-[11px] uppercase tracking-[0.2em]">ภาพรวม KPI สถิติ และข้อมูลอาจารย์</p>
                 </div>
                 {/* 🔒 Year & Batch Filter */}
                 <div className="flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-2 bg-white px-4 h-12 rounded-xl border border-slate-200 shadow-sm">
-                        <CalendarDays size={16} className="text-indigo-500" />
+                        <CalendarDays size={16} className="text-blue-500" />
                         <select
                             value={selectedYear}
                             onChange={(e) => { setSelectedYear(e.target.value); setSelectedBatch('all'); }}
-                            className="text-sm font-black text-indigo-600 bg-transparent outline-none cursor-pointer"
+                            className="text-sm font-black text-blue-600 bg-transparent outline-none cursor-pointer"
                         >
                             {yearOptions.map(year => (
                                 <option key={year} value={year}>ปีการศึกษา {year}</option>

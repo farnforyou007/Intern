@@ -13,7 +13,7 @@
 //     const [allowedBatch, setAllowedBatch] = useState('') // เพิ่ม state สำหรับรหัสที่ลงทะเบียนได้
 //     const [loading, setLoading] = useState(false)
 //     const [fetchLoading, setFetchLoading] = useState(true)
-    
+
 //     const supabase = createBrowserClient(
 //         process.env.NEXT_PUBLIC_SUPABASE_URL!,
 //         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -26,7 +26,7 @@
 //                 .from('system_configs')
 //                 .select('key_name, key_value')
 //                 .in('key_name', ['teacher_invite_code', 'allowed_student_batch'])
-            
+
 //             if (data) {
 //                 const tCode = data.find(c => c.key_name === 'teacher_invite_code')
 //                 const aBatch = data.find(c => c.key_name === 'allowed_student_batch')
@@ -180,10 +180,9 @@
 // }
 
 
-// // ver2
+// ver3 — API Routes Migration
 "use client"
 import { useState, useEffect } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 import { Save, RefreshCw, Settings, GraduationCap, Hash, Loader2, Calendar } from 'lucide-react'
 import Swal from 'sweetalert2'
 import AdminLayout from '@/components/AdminLayout'
@@ -194,28 +193,25 @@ export default function AdminSettings() {
     const [trainingYear, setTrainingYear] = useState('')
     const [loading, setLoading] = useState(false)
     const [fetchLoading, setFetchLoading] = useState(true)
-    
-    const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
 
     useEffect(() => {
         async function fetchConfigs() {
             setFetchLoading(true)
-            const { data } = await supabase
-                .from('system_configs')
-                .select('key_name, key_value')
-                .eq('key_name', 'current_training_year')
-                .single()
-            
-            if (data) {
-                setTrainingYear(data.key_value)
+            try {
+                const res = await fetch('/api/admin/settings')
+                const result = await res.json()
+                if (!result.success) throw new Error(result.error)
+                if (result.data.config) {
+                    setTrainingYear(result.data.config.key_value)
+                }
+            } catch (err: any) {
+                console.error('Fetch settings error:', err.message)
+            } finally {
+                setFetchLoading(false)
             }
-            setFetchLoading(false)
         }
         fetchConfigs()
-    }, [supabase])
+    }, [])
 
     const handleUpdateConfig = async () => {
         if (!trainingYear) {
@@ -224,37 +220,50 @@ export default function AdminSettings() {
         }
 
         setLoading(true)
-        const { error } = await supabase
-            .from('system_configs')
-            .update({ key_value: trainingYear })
-            .eq('key_name', 'current_training_year')
+        try {
+            const res = await fetch('/api/admin/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update-config',
+                    key_name: 'current_training_year',
+                    key_value: trainingYear
+                })
+            })
+            const result = await res.json()
 
-        if (error) {
-            Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: error.message })
-        } else {
-            Swal.fire({ 
-                icon: 'success', 
-                title: 'บันทึกสำเร็จ', 
+            if (!result.success) throw new Error(result.error)
+
+            Swal.fire({
+                icon: 'success',
+                title: 'บันทึกสำเร็จ',
                 text: 'อัปเดตปีการศึกษาเรียบร้อยแล้ว',
                 customClass: { popup: 'rounded-[2rem]' },
                 timer: 1500,
                 showConfirmButton: false
             })
+        } catch (error: any) {
+            Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: error.message })
+        } finally {
+            setLoading(false)
         }
-        setLoading(false)
     }
 
     return (
         <AdminLayout>
             <div className="max-w-4xl mx-auto">
-                <div className="mb-8">
-                    <h1 className="text-3xl font-black text-slate-800">ตั้งค่าระบบ</h1>
-                    <p className="text-slate-500">จัดการข้อมูลพื้นฐานของระบบ</p>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
+                    <div>
+                        <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
+                            <Settings className="text-blue-600" size={32} /> ตั้งค่าระบบ
+                        </h1>
+                        <p className="text-slate-500 mt-1 font-medium text-sm">จัดการข้อมูลการตั้งค่าพื้นฐานและพารามิเตอร์ของระบบ</p>
+                    </div>
                 </div>
 
                 {/* Tab Navigation - เหลือแค่แท็บเดียวตามโครงสร้างเดิม */}
                 <div className="flex gap-2 mb-6 bg-slate-100 p-1.5 rounded-2xl w-fit">
-                    <button 
+                    <button
                         className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all bg-white text-blue-600 shadow-sm"
                     >
                         <Settings size={18} />
@@ -286,7 +295,7 @@ export default function AdminSettings() {
                                     <label className="text-sm font-black text-slate-700 ml-1 flex items-center gap-2">
                                         ปีการศึกษาที่ออกฝึก (Current Training Year)
                                     </label>
-                                    <input 
+                                    <input
                                         type="text"
                                         className="w-full md:w-64 h-16 px-8 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-blue-500 focus:bg-white outline-none transition-all text-3xl font-black tracking-widest text-blue-600"
                                         value={trainingYear}
@@ -296,7 +305,7 @@ export default function AdminSettings() {
                                     <p className="text-xs font-medium text-slate-400 ml-1 italic">* ระบุเป็นเลขปี พ.ศ. 4 หลัก</p>
                                 </div>
 
-                                <button 
+                                <button
                                     onClick={handleUpdateConfig}
                                     disabled={loading}
                                     className="w-full h-16 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-blue-600 transition-all active:scale-95 disabled:bg-slate-300 shadow-lg shadow-slate-200"

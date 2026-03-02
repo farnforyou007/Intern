@@ -1,8 +1,7 @@
-// ver6
+// ver7 — API Routes Migration
 "use client"
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { createBrowserClient } from '@supabase/ssr'
 import { ArrowLeft, Save, Loader2, Info, MessageSquare, CheckCircle2, User, Cloud, Check } from 'lucide-react'
 import Swal from 'sweetalert2'
 import { useSearchParams } from 'next/navigation'
@@ -42,10 +41,7 @@ export default function EvaluationPage() {
     const timerRef = useRef<NodeJS.Timeout | null>(null)
     const isLocked = assignment?.is_evaluated && !isEditMode
 
-    const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
+
 
     useEffect(() => {
         fetchData()
@@ -59,82 +55,26 @@ export default function EvaluationPage() {
 
     const fetchData = async () => {
         setLoading(true)
-
         try {
-
-            // 1. ดึงข้อมูล Assignment
-            const { data: assign, error: assignErr } = await supabase
-                .from('assignment_supervisors')
-                .select(`
-                    *, 
-                    student_assignments:assignment_id(
-                        id, 
-                        sub_subject_id,
-                        students:student_id(*), 
-                        subjects:subject_id(*)
-                    )
-                `)
-                .eq('id', id)
-                .single()
-
-            if (assignErr || !assign) {
-                Swal.fire('Error', 'ไม่พบรายการประเมิน', 'error')
+            const res = await fetch(`/api/supervisor/evaluate?id=${id}`)
+            const result = await res.json()
+            if (!result.success) {
+                Swal.fire('Error', result.error || 'ไม่พบรายการประเมิน', 'error')
                 router.replace('/supervisor/students')
                 return
             }
+
+            const assign = result.data.assignment
             setAssignment(assign)
 
-            // 2. ดึงกลุ่มการประเมิน
-            const subjectId = assign.student_assignments.subjects.id
-            const subSubjectId = assign.student_assignments.sub_subject_id
-
-            // let query = supabase
-            //     .from('evaluation_groups')
-            //     .select(`*, evaluation_items(*)`)
-            //     .eq('subject_id', subjectId)
-
-
-            // if (subSubjectId) {
-            //     query = query.eq('sub_subject_id', subSubjectId)
-            // } else {
-            //     query = query.is('sub_subject_id', null)
-            // }
-            let query = supabase
-                .from('evaluation_groups')
-                .select(`
-                    *, 
-                    evaluation_items (*)
-                `)
-                .eq('subject_id', subjectId)
-
-            if (subSubjectId) {
-                query = query.eq('sub_subject_id', subSubjectId)
-            } else {
-                query = query.is('sub_subject_id', null)
-            }
-
-            // const { data: evalGroups } = await query.order('order_index', { ascending: true })
-            const { data: evalGroups, error: groupsErr } = await query
-                .order('group_name', { ascending: true }) // 🚩 เรียง Tab ตามชื่อกลุ่ม (เพราะไม่มี order_index)
-                .order('order_index', { foreignTable: 'evaluation_items', ascending: true }); // 🚩 เรียงข้อ 1,2,3 ตาม order_index
-            if (groupsErr) {
-                console.error("Groups Error:", groupsErr.message);
-                return;
-            }
-            const validGroups = evalGroups || []
+            const validGroups = result.data.groups || []
             setGroups(validGroups)
 
-            // 3. ดึงคะแนนเก่า
-            const { data: logs } = await supabase
-                .from('evaluation_logs')
-                .select(`*, evaluation_answers(*)`)
-                .eq('assignment_id', assign.student_assignments.id)
-                .eq('supervisor_id', assign.supervisor_id)
-
+            // 3. Restore คะแนนเก่า
+            const logs = result.data.logs || []
             const restoredScores: any = {}
             const restoredRemarks: any = {}
-
-            if (logs && logs.length > 0) {
+            if (logs.length > 0) {
                 logs.forEach((log: any) => {
                     restoredRemarks[log.group_id] = log.comment || ''
                     log.evaluation_answers?.forEach((ans: any) => {
@@ -145,24 +85,16 @@ export default function EvaluationPage() {
                 setRemarks(restoredRemarks)
             }
 
-            // 🎯 Smart Resume: หา Tab แรกที่ยังทำไม่เสร็จ แล้วเด้งไปหน้านั้นเลย
+            // Smart Resume
             let firstIncompleteIndex = 0
             for (let i = 0; i < validGroups.length; i++) {
                 const g = validGroups[i]
                 const totalItems = g.evaluation_items?.length || 0
                 const answeredItems = g.evaluation_items?.filter((item: any) => restoredScores[item.id] !== undefined).length
-
-                if (answeredItems < totalItems) {
-                    firstIncompleteIndex = i
-                    break // เจออันแรกที่ไม่เสร็จ หยุดเลย
-                }
-                // ถ้าวนลูปจนจบแล้วยังไม่ break แสดงว่าเสร็จหมดแล้ว จะอยู่ที่ tab สุดท้าย หรือ tab 0 ก็ได้
-                if (i === validGroups.length - 1 && answeredItems === totalItems) {
-                    firstIncompleteIndex = i
-                }
+                if (answeredItems < totalItems) { firstIncompleteIndex = i; break }
+                if (i === validGroups.length - 1 && answeredItems === totalItems) firstIncompleteIndex = i
             }
             setActiveTab(firstIncompleteIndex)
-
         } catch (error) {
             console.error("Fetch Error:", error)
         } finally {
@@ -203,43 +135,31 @@ export default function EvaluationPage() {
         if (!currentGroup || !assignment) return
 
         try {
-            // 1. Upsert Log
-            const { data: log, error: logErr } = await supabase
-                .from('evaluation_logs')
-                .upsert({
-                    assignment_id: assignment.student_assignments.id,
-                    group_id: currentGroup.id,
-                    supervisor_id: assignment.supervisor_id,
-                    comment: remarksRef.current[currentGroup.id] || '',
-                }, { onConflict: 'assignment_id, group_id, supervisor_id' })
-                .select().single()
-
-            if (logErr) throw logErr
-            // ✅ เพิ่มการอัปเดตสถานะเป็น 1 (กำลังประเมิน) เมื่อมีการบันทึกคะแนน
-            if (assignment.evaluation_status !== 2) {
-                await supabase
-                    .from('assignment_supervisors')
-                    .update({ evaluation_status: 1 })
-                    .eq('id', id);
-            }
-
-            // 2. Upsert Answers (เฉพาะหมวดปัจจุบัน)
             const currentScores = scoresRef.current
-            const answerData = currentGroup.evaluation_items
+            const answers = currentGroup.evaluation_items
                 .filter((item: any) => currentScores[item.id] !== undefined)
                 .map((item: any) => ({
-                    log_id: log.id,
                     item_id: item.id,
                     score: currentScores[item.id] === 'N/A' ? null : currentScores[item.id],
                     is_na: currentScores[item.id] === 'N/A'
                 }))
 
-            if (answerData.length > 0) {
-                await supabase.from('evaluation_answers').upsert(answerData, { onConflict: 'log_id, item_id' })
-            }
+            await fetch('/api/supervisor/evaluate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save-scores',
+                    assignment_id: assignment.student_assignments.id,
+                    group_id: currentGroup.id,
+                    supervisor_id: assignment.supervisor_id,
+                    comment: remarksRef.current[currentGroup.id] || '',
+                    answers,
+                    evalId: id
+                })
+            })
         } catch (err) {
             console.error('Auto-save failed:', err)
-            setAutoSaveStatus('idle') // Reset status on error
+            setAutoSaveStatus('idle')
         }
     }
 
@@ -274,7 +194,11 @@ export default function EvaluationPage() {
                 }
             }
 
-            await supabase.from('assignment_supervisors').update({ is_evaluated: true, evaluation_status: 2 }).eq('id', id)
+            await fetch('/api/supervisor/evaluate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'finish', evalId: id })
+            })
             Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: 'ส่งผลการประเมินเรียบร้อยแล้ว', timer: 2000, showConfirmButton: false })
             router.back()
         } else {
@@ -539,7 +463,7 @@ export default function EvaluationPage() {
                                     'ถัดไป (Next)'
                                 )}
                             </button>
-                            
+
                         </>
 
                     ) : (

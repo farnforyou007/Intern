@@ -1,7 +1,6 @@
-//ver7
+//ver8 — API Routes Migration
 "use client"
 import { useState, useEffect, useCallback } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 import {
     ChevronLeft, User, Phone, Mail, MapPin,
     UserCircle2, PhoneCall, Building2, Calendar,
@@ -21,72 +20,21 @@ export default function StudentDetailPage() {
     const [student, setStudent] = useState<any>(null)
     const [expandedImage, setExpandedImage] = useState<string | null>(null)
 
-    const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
     const fetchStudentData = useCallback(async () => {
         if (!studentId) return;
         setLoading(true);
         try {
-            // ดึงข้อมูล Join ตามโครงสร้างจริง: Students -> Assignments -> Rotations/Subjects/Sites/Mentors
-            const { data, error } = await supabase
-                .from('students')
-                .select(`
-                    *,
-                    student_assignments (
-                        id,
-                        rotation_id,
-                        rotations (id, name),
-                        subjects (id, name),
-                        sub_subjects (id, name),
-                        training_sites (site_name, province),
-                        assignment_supervisors (
-                            supervisor_id,
-                            supervisors (full_name, phone)
-                        )
-                    )
-                `)
-                .eq('id', studentId)
-                .single();
-
-            if (error) throw error;
-
-            if (data) {
-                // 🚩 จัดกลุ่มข้อมูล: 1 ผลัด (Rotation) แสดงรายวิชาที่มีทั้งหมดในผลัดนั้น
-                const grouped = data.student_assignments.reduce((acc: any, curr: any) => {
-                    const rId = curr.rotation_id || 'unassigned';
-                    if (!acc[rId]) {
-                        acc[rId] = {
-                            rotationName: curr.rotations?.name || 'ไม่ได้ระบุผลัด',
-                            site: curr.training_sites,
-                            subjects: [] // เก็บวิชาและพี่เลี้ยงแยกตามวิชา
-                        };
-                    }
-
-                    // สร้างก้อนข้อมูลวิชา พร้อมรายชื่อพี่เลี้ยงของวิชานั้นๆ
-                    acc[rId].subjects.push({
-                        id: curr.id,
-                        displayName: curr.sub_subjects?.name || curr.subjects?.name || 'ไม่ระบุวิชา',
-                        mentors: curr.assignment_supervisors?.map((sv: any) => ({
-                            name: sv.supervisors?.full_name,
-                            phone: sv.supervisors?.phone
-                        })) || []
-                    });
-
-                    return acc;
-                }, {});
-
-                setStudent({ ...data, rotationsGrouped: Object.values(grouped) });
-            }
+            const res = await fetch(`/api/teacher/students/${studentId}`)
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+            setStudent(result.data)
         } catch (err: any) {
             console.error("Fetch Error:", err.message);
             setStudent(null);
         } finally {
             setLoading(false);
         }
-    }, [studentId, supabase]);
+    }, [studentId]);
 
     useEffect(() => {
         fetchStudentData();
@@ -271,15 +219,47 @@ export default function StudentDetailPage() {
 
 function DetailSkeleton() {
     return (
-        <div className="min-h-screen bg-[#F0F7FF] p-6 space-y-6">
-            <div className="max-w-3xl mx-auto space-y-6 animate-pulse">
-                <div className="h-16 bg-white rounded-2xl" />
-                <div className="h-64 bg-white rounded-[3rem]" />
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="h-24 bg-white rounded-[2.5rem]" />
-                    <div className="h-24 bg-white rounded-[2.5rem]" />
+        <div className="min-h-screen bg-[#F8FAFC] pb-12 font-sans animate-pulse">
+            <div className="max-w-3xl mx-auto px-4 pt-2 pb-4">
+                <div className="flex justify-between items-center mb-4 gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-indigo-200 rounded-2xl" />
+                        <div className="h-10 w-48 bg-slate-200 rounded-2xl" />
+                    </div>
+                    <div className="w-24 h-11 bg-slate-900/10 rounded-2xl" />
                 </div>
-                <div className="h-80 bg-white rounded-[3rem]" />
+            </div>
+
+            <div className="max-w-3xl mx-auto px-4 mt-8 space-y-6">
+                {/* Profile Card Skeleton */}
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <div className="w-28 h-28 rounded-[2.5rem] bg-slate-100 mx-auto mb-6" />
+                    <div className="h-8 w-48 bg-slate-200 rounded-xl mx-auto mb-3" />
+                    <div className="h-3 w-32 bg-slate-100 rounded mx-auto" />
+                </div>
+
+                {/* Contact Cards Skeleton */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 h-24" />
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 h-24" />
+                </div>
+
+                {/* Placement History Skeleton */}
+                <div className="space-y-4 pt-4">
+                    <div className="h-3 w-40 bg-slate-200 rounded ml-4 mb-4" />
+                    {[1, 2].map(i => (
+                        <div key={i} className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
+                            <div className="bg-slate-100 h-16" />
+                            <div className="p-8 space-y-6">
+                                <div className="h-20 bg-slate-50 rounded-[2rem]" />
+                                <div className="space-y-3">
+                                    <div className="h-14 bg-slate-50 rounded-[1.5rem]" />
+                                    <div className="h-14 bg-slate-50 rounded-[1.5rem]" />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     )

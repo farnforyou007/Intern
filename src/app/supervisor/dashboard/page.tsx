@@ -1,8 +1,7 @@
-// ver2
-// ver2
+// ver3 — API Routes Migration
 "use client"
 import { useState, useEffect } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
+import { createBrowserClient } from '@supabase/ssr' // เก็บไว้สำหรับ Realtime เท่านั้น
 import {
     Users, ClipboardCheck, Clock,
     Bell, ChevronRight, CheckCircle,
@@ -32,9 +31,12 @@ export default function SupervisorDashboard() {
     const [stats, setStats] = useState({ total: 0, evaluated: 0, pending: 0, partial: 0 })
     const [daysLeft, setDaysLeft] = useState<number | null>(null)
     const [pendingStudentsCount, setPendingStudentsCount] = useState(0)
-    const [alertStatus, setAlertStatus] = useState<'normal' | 'overdue'>('normal') // เพิ่มบรรทัดนี้
+    const [alertStatus, setAlertStatus] = useState<'normal' | 'overdue'>('normal')
     const [urgentRotationName, setUrgentRotationName] = useState<string>("")
-    const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
+    const [configYear, setConfigYear] = useState<string>('')
+    const [subjectNames, setSubjectNames] = useState<string[]>([])
+
+    // เก็บ supabase client ไว้สำหรับ Realtime subscription เท่านั้น
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -42,7 +44,6 @@ export default function SupervisorDashboard() {
 
     useEffect(() => {
         if (isMockup) {
-            // จำลองการโหลดข้อมูล Mockup
             setTimeout(() => {
                 setSupervisor({
                     full_name: "อ.สมชาย สายชล (Mockup)",
@@ -60,233 +61,32 @@ export default function SupervisorDashboard() {
     const fetchRealData = async () => {
         setLoading(true);
         try {
-            // 🔒 0. ดึงปีการศึกษาปัจจุบันจาก system_configs
-            const { data: configData } = await supabase
-                .from('system_configs')
-                .select('key_value')
-                .eq('key_name', 'current_training_year')
-                .single();
-            const currentYear = configData?.key_value || '';
-            setConfigYear(currentYear);
-
-            // ✅ ใช้ฟังก์ชันกลางดึง ID (ส่ง URL Search Params เข้าไป)
+            // ดึง lineUserId จาก LIFF / debug mode
             const urlParams = new URLSearchParams(window.location.search);
             const lineUserId = await getLineUserId(urlParams);
-
             if (!lineUserId) return;
 
-            // 2. ดึงข้อมูลพี่เลี้ยง และข้อมูลหน่วยงาน
-            const { data: svData, error: svError } = await supabase
-                .from('supervisors')
-                .select('*, training_sites(site_name)')
-                .eq('line_user_id', lineUserId)
-                .single();
+            // เรียก API Route แทน Supabase โดยตรง
+            const res = await fetch('/api/supervisor/dashboard', {
+                headers: { 'X-Line-User-Id': lineUserId }
+            })
+            const result = await res.json()
 
-            if (svError || !svData) {
-                console.error("User not found in DB");
-                return;
+            if (!result.success) {
+                console.error('Dashboard API Error:', result.error)
+                return
             }
 
-            // จัดการเรื่องรูปภาพโปรไฟล์ (Logic เดิม)
-            const imgPath = svData.avatar_url || svData.image;
-            const publicUrl = imgPath?.startsWith('http')
-                ? imgPath
-                : `https://vvxsfibqlpkpzqyjwmuw.supabase.co/storage/v1/object/public/avatars/${imgPath}`;
+            const { supervisor: svData, stats: apiStats, daysLeft: apiDaysLeft, alertStatus: apiAlertStatus, urgentRotationName: apiRotName, pendingStudentsCount: apiPendingCount, configYear: apiYear } = result.data
 
-            setSupervisor({ ...svData, avatar_url: publicUrl });
-
-            // 🔒 2.5 ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
-            let yearStudentIds: Set<string> = new Set();
-            if (currentYear) {
-                const { data: yearStudents } = await supabase
-                    .from('students')
-                    .select('id')
-                    .eq('training_year', currentYear);
-                yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)));
-            }
-
-            // 3. ดึงข้อมูลงานที่ได้รับมอบหมายทั้งหมด (Assignments)
-            const { data: rawAssignments, error: assignError } = await supabase
-                .from('assignment_supervisors')
-                .select(`
-                    evaluation_status,
-                    is_evaluated,
-                    student_assignments:assignment_id (
-                        id,
-                        student_id,
-                        students:student_id ( id ), 
-                        sub_subjects ( name ),
-                        rotations ( end_date ,name)
-                    )
-                `)
-                .eq('supervisor_id', svData.id);
-
-            // 🔒 กรองเฉพาะนักศึกษาในปีปัจจุบัน
-            const assignments = (rawAssignments || []).filter((a: any) => {
-                const studentId = String(a.student_assignments?.students?.id || a.student_assignments?.student_id || '');
-                return yearStudentIds.has(studentId);
-            });
-
-            if (assignError) throw assignError;
-            // (assignments ถูกกรองตามปีแล้วจากด้านบน)
-
-            if (assignments && assignments.length > 0) {
-                // --- ส่วนคำนวณ Stats (เหมือนเดิมเป๊ะ) ---
-                // const pendingTasksData = assignments.filter((a: any) => !a.is_evaluated);
-
-                // const pendingDates = pendingTasksData
-                //     .filter((a: any) => a.student_assignments?.rotations?.end_date)
-                //     .map((a: any) => new Date(a.student_assignments.rotations.end_date));
-
-                // if (pendingDates.length > 0) {
-                //     const nearestEnd = new Date(Math.min(...pendingDates.map(d => d.getTime())));
-                //     const today = new Date();
-                //     const diffTime = nearestEnd.getTime() - today.getTime();
-                //     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                //     setDaysLeft(diffDays);
-                // } else {
-                //     setDaysLeft(null);
-                // }
-
-                // กรองเฉพาะงานที่ยังไม่ตรวจ และมีข้อมูลวันสิ้นสุด
-                const pendingTasksData = assignments.filter((a: any) =>
-                    !a.is_evaluated && a.student_assignments?.rotations?.end_date
-                );
-
-                if (pendingTasksData.length > 0) {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // เคลียร์เวลาให้เป็นเที่ยงคืน เพื่อเทียบแค่วันที่
-
-                    // แยกงานออกเป็น 2 กอง: "งานที่เลยกำหนดแล้ว" กับ "งานที่ยังไม่ถึงกำหนด"
-                    const overdueTasks = [];
-                    const upcomingTasks = [];
-
-                    for (const task of pendingTasksData) {
-                        // const endDate = new Date(task.student_assignments?.[0]?.rotations?.[0]?.end_date);
-                        // endDate.setHours(0, 0, 0, 0); // เคลียร์เวลาเช่นกัน
-
-                        // if (endDate < today) {
-                        //     overdueTasks.push({ ...task, endDate });
-                        // } else {
-                        //     upcomingTasks.push({ ...task, endDate });
-                        // }
-
-                        //25/2/69
-                        // const rotationData = task.student_assignments?.rotations?;
-                        const rotationData = (task.student_assignments as any)?.rotations;
-
-                        if (rotationData?.end_date) {
-                            const endDate = new Date(rotationData.end_date);
-                            endDate.setHours(0, 0, 0, 0);
-
-                            if (endDate < today) {
-                                overdueTasks.push({ ...task, endDate, rotationName: rotationData.name });
-                            } else {
-                                upcomingTasks.push({ ...task, endDate, rotationName: rotationData.name });
-                            }
-                        }
-                    }
-
-                    // 🚩 Logic การเลือกแสดงผล:
-                    if (overdueTasks.length > 0) {
-                        // กรณี A: มีงานค้างที่เลยกำหนดแล้ว -> ให้เตือนงานค้างก่อน!
-                        // เรียงเอาวันที่เก่าที่สุดขึ้นก่อน (ยิ่งเก่ายิ่งด่วน)
-                        // overdueTasks.sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
-                        // const urgentTask = overdueTasks[0];
-
-                        // const diffTime = today.getTime() - urgentTask.endDate.getTime();
-                        // const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // คำนวณว่าเลยมา กี่วัน
-
-                        // setDaysLeft(diffDays);
-                        // setUrgentRotationName(`งานค้าง ${urgentTask.student_assignments?.[0]?.rotations?.[0]?.name}`); // เช่น "งานค้าง ผลัด 1"
-                        // setAlertStatus('overdue'); // *ต้องเพิ่ม state นี้ (ดูวิธีเพิ่มด้านล่าง)
-
-                        //25/2/69 - ปรับให้แสดงชื่อผลัดที่ค้างแทน
-                        // กรณีมีงานค้าง
-                        overdueTasks.sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
-                        const urgentTask = overdueTasks[0];
-                        const diffTime = today.getTime() - urgentTask.endDate.getTime();
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                        setDaysLeft(diffDays);
-                        setUrgentRotationName(`งานค้าง ${urgentTask.rotationName || ''}`);
-                        setAlertStatus('overdue');
-
-                    } else if (upcomingTasks.length > 0) {
-                        // กรณี B: ไม่มีงานค้าง -> นับถอยหลังผลัดปัจจุบัน/อนาคต
-                        // upcomingTasks.sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
-                        // const nextTask = upcomingTasks[0];
-
-                        // const diffTime = nextTask.endDate.getTime() - today.getTime();
-                        // const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // อีกกี่วันจะถึง
-
-                        // setDaysLeft(diffDays);
-                        // setUrgentRotationName(nextTask.student_assignments?.[0]?.rotations?.[0]?.name); // เช่น "ผลัด 2"
-                        // setAlertStatus('normal');
-
-                        //25/2/69 - ปรับให้แสดงชื่อผลัดที่ใกล้จะถึงแทน
-                        // กรณีรอนับถอยหลัง
-                        upcomingTasks.sort((a, b) => a.endDate.getTime() - b.endDate.getTime());
-                        const nextTask = upcomingTasks[0];
-                        const diffTime = nextTask.endDate.getTime() - today.getTime();
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                        setDaysLeft(diffDays);
-                        setUrgentRotationName(nextTask.rotationName || '');
-                        setAlertStatus('normal');
-                    }
-                } else {
-                    setDaysLeft(null);
-                    setUrgentRotationName("");
-                    setAlertStatus('normal');
-                }
-
-                const uniqueStudentIds = assignments
-                    .map((a: any) => a.student_assignments?.students?.id)
-                    .filter(Boolean);
-
-                const totalMyStudentsCount = new Set(uniqueStudentIds).size;
-                const evaluatedCount = assignments.filter((a: any) => a.evaluation_status === 2).length;
-                const partialCount = assignments.filter((a: any) => a.evaluation_status === 1).length;
-                const pendingTasksCount = assignments.filter((a: any) => a.evaluation_status === 0).length;
-
-                // const evaluatedCount = assignments.filter((a: any) => a.is_evaluated).length;
-                // 🟡 ดึง evaluation_logs แยก เพื่อหาว่า assignment ไหน "ประเมินบางส่วน"
-                // const notEvaluatedAssignments = assignments.filter((a: any) => !a.is_evaluated);
-                // const notEvalAssignmentIds = notEvaluatedAssignments
-                //     .map((a: any) => a.student_assignments?.id)
-                //     .filter(Boolean);
-
-                // let partialCount = 0;
-                // if (notEvalAssignmentIds.length > 0) {
-                //     const { data: logs } = await supabase
-                //         .from('evaluation_logs')
-                //         .select('assignment_id')
-                //         .eq('supervisor_id', svData.id)
-                //         .in('assignment_id', notEvalAssignmentIds);
-                //     const logsSet = new Set((logs || []).map((l: any) => l.assignment_id));
-                //     partialCount = notEvaluatedAssignments.filter((a: any) =>
-                //         logsSet.has(a.student_assignments?.id)
-                //     ).length;
-                // }
-
-                // const pendingTasksCount = assignments.length - evaluatedCount - partialCount;
-                // ✅ ใช้ค่าจาก evaluation_status โดยตรง (ต้องมั่นใจว่า select evaluation_status มาแล้ว)
-
-                const pendingPeopleCount = new Set(
-                    pendingTasksData
-                        .map((a: any) => a.student_assignments?.student_id)
-                        .filter(Boolean)
-                ).size;
-
-                setPendingStudentsCount(pendingPeopleCount);
-                setStats({
-                    total: totalMyStudentsCount,
-                    evaluated: evaluatedCount,
-                    pending: pendingTasksCount,
-                    partial: partialCount
-                });
-            }
+            setSupervisor(svData)
+            setStats(apiStats)
+            setDaysLeft(apiDaysLeft)
+            setAlertStatus(apiAlertStatus)
+            setUrgentRotationName(apiRotName)
+            setPendingStudentsCount(apiPendingCount)
+            setConfigYear(apiYear)
+            setSubjectNames(result.data.subjectNames || [])
         } catch (error) {
             console.error("Dashboard Fetch Error:", error);
         } finally {
@@ -406,6 +206,16 @@ export default function SupervisorDashboard() {
                         </div>
                         <h1 className="text-2xl font-black text-white">{supervisor?.full_name}</h1>
                         <p className="text-emerald-100/70 text-sm font-medium">{supervisor?.training_sites?.site_name}</p>
+                        {/* วิชาที่รับผิดชอบ */}
+                        {subjectNames.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                                {subjectNames.map((name, i) => (
+                                    <span key={i} className="bg-white/10 backdrop-blur-sm text-emerald-100 text-[9px] font-bold px-2.5 py-1 rounded-full border border-white/10">
+                                        {name}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                         {/* 🔒 Badge ปีการศึกษา */}
                         {configYear && (
                             <span className="inline-flex items-center gap-1.5 mt-2 bg-white/15 backdrop-blur-sm text-emerald-100 text-[10px] font-black px-3 py-1 rounded-full border border-white/10">

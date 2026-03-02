@@ -1,7 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { createClient } from '@supabase/supabase-js'
 import AdminLayout from '@/components/AdminLayout'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -22,17 +21,18 @@ export default function SubjectsPage() {
     const [subSubjectInput, setSubSubjectInput] = useState('')
     const [subSubjects, setSubSubjects] = useState<any[]>([])
 
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-
-    // ดึงข้อมูลวิชาหลักพร้อมวิชาย่อย
     const fetchData = async () => {
         setLoading(true)
-        const { data } = await supabase
-            .from('subjects')
-            .select('*, sub_subjects(*)')
-            .order('id', { ascending: true })
-        if (data) setSubjects(data)
-        setLoading(false)
+        try {
+            const res = await fetch('/api/admin/subjects')
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+            setSubjects(result.data.subjects || [])
+        } catch (err: any) {
+            console.error('Fetch subjects error:', err.message)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const openModal = (subject: any = null) => {
@@ -52,25 +52,18 @@ export default function SubjectsPage() {
         if (!subjectName) return
 
         try {
-            let subjectId = selectedSubject?.id;
-
-            // 1. บันทึกวิชาหลัก
-            if (subjectId) {
-                await supabase.from('subjects').update({ name: subjectName }).eq('id', subjectId)
-            } else {
-                const { data } = await supabase.from('subjects').insert([{ name: subjectName }]).select().single()
-                subjectId = data.id
-            }
-
-            // 2. ลบวิชาย่อยเดิมแล้วบันทึกใหม่ตาม List ปัจจุบัน
-            await supabase.from('sub_subjects').delete().eq('parent_subject_id', subjectId)
-            if (subSubjects.length > 0) {
-                const inserts = subSubjects.map(ss => ({
-                    name: ss.name,
-                    parent_subject_id: subjectId
-                }))
-                await supabase.from('sub_subjects').insert(inserts)
-            }
+            const res = await fetch('/api/admin/subjects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save',
+                    subjectId: selectedSubject?.id || null,
+                    name: subjectName,
+                    subSubjects
+                })
+            })
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
 
             Swal.fire({
                 icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false,
@@ -100,8 +93,18 @@ export default function SubjectsPage() {
             }
         }).then(async (result) => {
             if (result.isConfirmed) {
-                await supabase.from('subjects').delete().eq('id', subject.id)
-                fetchData()
+                try {
+                    const res = await fetch('/api/admin/subjects', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'delete', id: subject.id })
+                    })
+                    const delResult = await res.json()
+                    if (!delResult.success) throw new Error(delResult.error)
+                    fetchData()
+                } catch (error: any) {
+                    Swal.fire('Error', error.message, 'error')
+                }
             }
         })
     }
@@ -113,13 +116,17 @@ export default function SubjectsPage() {
             <div className="max-w-6xl mx-auto">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold flex items-center gap-3 text-slate-900">
+                        <h1 className="text-3xl font-black flex items-center gap-3 text-slate-900 tracking-tight">
                             <BookOpen className="text-blue-600" size={32} /> จัดการรายวิชา
                         </h1>
-                        <p className="text-slate-500 mt-1">กำหนดวิชาหลัก วิชาย่อย และแบบประเมิน</p>
+                        <p className="text-slate-500 mt-1 font-medium text-sm">กำหนดรายวิชาหลัก วิชาย่อย และเกณฑ์การประเมินมาตรฐาน</p>
                     </div>
-                    <Button onClick={() => openModal()} className="w-full sm:w-auto bg-blue-600 rounded-xl h-12 px-6 shadow-lg">
-                        <Plus size={20} className="mr-2" /> เพิ่มวิชาใหม่
+                    <Button
+                        onClick={() => openModal()}
+                        className="h-12 px-6 rounded-xl bg-slate-900 hover:bg-black text-white font-black shadow-lg shadow-slate-200 flex items-center gap-2 transition-all active:scale-95 whitespace-nowrap"
+                    >
+                        <Plus size={20} />
+                        เพิ่มวิชาใหม่
                     </Button>
                 </div>
 

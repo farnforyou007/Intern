@@ -102,6 +102,7 @@ export default function AdminDashboard() {
     // 🔒 Year filter
     const [selectedYear, setSelectedYear] = useState<string>('')
     const [yearOptions, setYearOptions] = useState<string[]>([])
+    // เก็บ supabase client ไว้สำหรับ Realtime subscription เท่านั้น
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -122,315 +123,56 @@ export default function AdminDashboard() {
     }, [selectedYear])
 
     const fetchData = async () => {
-        // ไม่ set loading true ตรงนี้เพื่อให้ UI ไม่กระพริบตอน Realtime update
         try {
-            // 🔒 ดึงปี default + options
-            if (!selectedYear) {
-                const { data: configData } = await supabase
-                    .from('system_configs')
-                    .select('key_value')
-                    .eq('key_name', 'current_training_year')
-                    .single();
-                if (configData?.key_value) {
-                    setSelectedYear(configData.key_value);
-                    return; // จะ re-fetch อีกรอบ
-                }
+            const yearParam = selectedYear ? `?year=${selectedYear}` : ''
+            const res = await fetch(`/api/admin/dashboard${yearParam}`)
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+
+            const { stats: apiStats, evalStats: apiEvalStats, activities, chartData: apiChartData, summaryData: apiSummaryData, subjectRatioData: apiRatioData, selectedYear: apiYear, yearOptions: apiYearOptions } = result.data
+
+            setStats(apiStats)
+            setEvalStats(apiEvalStats)
+            setChartData(apiChartData)
+            setSummaryData(apiSummaryData)
+            setSubjectRatioData(apiRatioData)
+
+            // ถ้ายังไม่ได้ตั้งปี → ใช้ค่า default จาก server
+            if (!selectedYear && apiYear) {
+                setSelectedYear(apiYear)
             }
-            const { data: yearsData } = await supabase
-                .from('students')
-                .select('training_year')
-                .not('training_year', 'is', null);
-            if (yearsData) {
-                const unique = Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a));
-                setYearOptions(unique as string[]);
-            }
+            setYearOptions(apiYearOptions)
 
-            // 🔒 ดึง student IDs ในปีที่เลือก
-            let yearStudentIds: string[] | null = null;
-            if (selectedYear) {
-                const { data: yearStudents } = await supabase
-                    .from('students')
-                    .select('id')
-                    .eq('training_year', selectedYear);
-                yearStudentIds = (yearStudents || []).map((s: any) => String(s.id));
-            }
-
-            // 1. ดึง KPI Stats (กรองตามปี)
-            let studentCountQuery = supabase.from('students').select('*', { count: 'exact', head: true });
-            if (selectedYear) studentCountQuery = studentCountQuery.eq('training_year', selectedYear);
-
-            const [
-                { count: studentCount },
-                { count: siteCount },
-                { count: svCount },
-                { count: pendingSvCount },
-                { count: subjectCount }
-            ] = await Promise.all([
-                studentCountQuery,
-                supabase.from('training_sites').select('*', { count: 'exact', head: true }),
-                supabase.from('supervisors').select('*', { count: 'exact', head: true }),
-                supabase.from('supervisors').select('*', { count: 'exact', head: true }).eq('is_verified', false),
-                supabase.from('subjects').select('*', { count: 'exact', head: true })
-            ]);
-
-            setStats({
-                students: studentCount || 0,
-                sites: siteCount || 0,
-                supervisors: svCount || 0,
-                pendingSupervisors: pendingSvCount || 0,
-                subjects: subjectCount || 0
-            })
-
-            // 🔒 ดึงข้อมูลการประเมิน (กรองตามปี) แท้จริงผ่าน inner join
-            let evalQuery = supabase
-                .from('assignment_supervisors')
-                .select(`
-                    evaluation_status,
-                    assignment_id,
-                    student_assignments!inner (
-                        students!inner (training_year)
-                    )
-                `);
-
-            if (selectedYear) {
-                evalQuery = evalQuery.eq('student_assignments.students.training_year', selectedYear);
-            }
-
-            const { data: evalData } = await evalQuery;
-
-            // const completed = evalData?.filter(item => item.is_evaluated).length || 0;
-            // const pending = (totalCount || 0) - completed;
-            const completed = evalData?.filter(item => item.evaluation_status === 2).length || 0;
-            const inProgress = evalData?.filter(item => item.evaluation_status === 1).length || 0;
-            const pending = evalData?.filter(item => item.evaluation_status === 0).length || 0;
-            const evalTotal = evalData?.length || 0;
-
-            // const percent = totalCount ? Math.round((completed / totalCount) * 100) : 0;
-
-            setEvalStats({
-                total: evalTotal,
-                completed,
-                pending,
-                inProgress,
-                percent: evalTotal ? Math.round((completed / evalTotal) * 100) : 0
-            });
-
-
-            // 2. ดึง Recent Activities (อย่างละ 5)
-            let studentsActivityQuery = supabase.from('students').select('id, first_name, last_name, created_at').order('created_at', { ascending: false }).limit(5);
-            if (selectedYear) studentsActivityQuery = studentsActivityQuery.eq('training_year', selectedYear);
-
-            const [newSupervisors, newSites, newStudents] = await Promise.all([
-                supabase.from('supervisors').select('id, full_name, created_at, is_verified').order('created_at', { ascending: false }).limit(5),
-                supabase.from('training_sites').select('id, site_name, created_at').order('created_at', { ascending: false }).limit(5),
-                studentsActivityQuery
-            ]);
-
+            // Reconstruct activities (เพิ่ม icon/color ฝั่ง client เพราะ JSX serialize ไม่ได้)
             setRawActivities({
-                supervisors: (newSupervisors.data || []).map((item: any) => ({
-                    id: `sv-${item.id}`, type: 'supervisor',
-                    text: item.is_verified ? `อนุมัติ: คุณ${item.full_name}` : `สมัครใหม่: คุณ${item.full_name}`,
-                    rawTime: item.created_at, time: timeAgo(item.created_at),
+                supervisors: (activities.supervisors || []).map((item: any) => ({
+                    id: item.id,
+                    type: 'supervisor',
+                    text: item.is_verified ? `อนุมัติ: คุณ${item.name}` : `สมัครใหม่: คุณ${item.name}`,
+                    rawTime: item.created_at,
+                    time: timeAgo(item.created_at),
                     icon: item.is_verified ? <CheckCircle2 size={14} /> : <Users size={14} />,
                     color: item.is_verified ? "bg-emerald-100 text-emerald-600" : "bg-orange-100 text-orange-600"
                 })) as never[],
-                sites: (newSites.data || []).map((item: any) => ({
-                    id: `st-${item.id}`, type: 'site',
-                    text: `เพิ่มแหล่งฝึก: ${item.site_name}`,
-                    rawTime: item.created_at, time: timeAgo(item.created_at),
-                    icon: <Hospital size={14} />, color: "bg-blue-100 text-blue-600"
+                sites: (activities.sites || []).map((item: any) => ({
+                    id: item.id,
+                    type: 'site',
+                    text: `เพิ่มแหล่งฝึก: ${item.name}`,
+                    rawTime: item.created_at,
+                    time: timeAgo(item.created_at),
+                    icon: <Hospital size={14} />,
+                    color: "bg-blue-100 text-blue-600"
                 })) as never[],
-                students: (newStudents.data || []).map((item: any) => ({
-                    id: `std-${item.id}`, type: 'student',
-                    text: `นศ. ใหม่: ${item.first_name} ${item.last_name}`,
-                    rawTime: item.created_at, time: timeAgo(item.created_at),
-                    icon: <UserPlus size={14} />, color: "bg-purple-100 text-purple-600"
+                students: (activities.students || []).map((item: any) => ({
+                    id: item.id,
+                    type: 'student',
+                    text: `นศ. ใหม่: ${item.name}`,
+                    rawTime: item.created_at,
+                    time: timeAgo(item.created_at),
+                    icon: <UserPlus size={14} />,
+                    color: "bg-purple-100 text-purple-600"
                 })) as never[]
-
-            });
-
-            // 3.กราฟ 📊 ดึงข้อมูลเพื่อทำกราฟประเมินแยกตามรายวิชา
-            // กราฟ 3 ver2 แยกตามรายววิชา วิชาย่อยเอามารวม
-            // 1. ดึงข้อมูล Master Data ของวิชาหลักและวิชาย่อย
-            const [subjectsRes, subSubjectsRes] = await Promise.all([
-                supabase.from('subjects').select('id, name'),
-                supabase.from('sub_subjects').select('id, name, parent_subject_id')
-            ]);
-
-            const subjectsList = subjectsRes.data || [];
-            const subSubjectsList = subSubjectsRes.data || [];
-
-            // 2. ดึงข้อมูลการประเมินพร้อมความสัมพันธ์ และกรองตามปีแท้จริงด้วย inner join
-            let assignmentQuery = supabase
-                .from('assignment_supervisors')
-                .select(`
-                is_evaluated,
-                evaluation_status,
-                assignment_id,
-                student_assignments!inner (
-                    subject_id,
-                    sub_subject_id,
-                    student_id,
-                    students!inner(training_year)
-                )
-            `);
-
-            if (selectedYear) {
-                assignmentQuery = assignmentQuery.eq('student_assignments.students.training_year', selectedYear);
-            }
-
-            const { data: assignments } = await assignmentQuery;
-            // console.log("Assignments with Relation:", assignments);
-
-            // const { data: evalData2 } = await supabase
-            //     .from('assignment_supervisors')
-            //     .select('is_evaluated');
-
-            // console.log("Raw Eval Data:", evalData2);
-
-            // if (assignments) {
-            //     // --- ประมวลผลสำหรับ "วิชาหลัก" (Main Subjects) ---
-            //     const mainMap: any = {};
-            //     subjectsList.forEach(s => {
-            //         mainMap[s.id] = { name: s.name, completed: 0, pending: 0, total: 0 };
-            //     });
-
-            //     // --- ประมวลผลสำหรับ "วิชาย่อย" (Sub Subjects) ---
-            //     const subMap: any = {};
-            //     subSubjectsList.forEach(ss => {
-            //         subMap[ss.id] = { name: ss.name, completed: 0, pending: 0, total: 0 };
-            //     });
-
-            //     assignments.forEach((item: any) => {
-            //         const sa = item.student_assignments;
-
-            //         // การนับเข้าวิชาหลัก (ใช้ subject_id ตรงๆ หรือหาจาก parent ของ sub_subject)
-            //         let effectiveMainId = sa?.subject_id;
-            //         if (!effectiveMainId && sa?.sub_subject_id) {
-            //             effectiveMainId = subSubjectsList.find(ss => ss.id === sa.sub_subject_id)?.parent_subject_id;
-            //         }
-
-            //         if (effectiveMainId && mainMap[effectiveMainId]) {
-            //             mainMap[effectiveMainId].total += 1;
-            //             item.is_evaluated ? mainMap[effectiveMainId].completed += 1 : mainMap[effectiveMainId].pending += 1;
-            //         }
-
-            //         // การนับเข้าวิชาย่อย
-            //         if (sa?.sub_subject_id && subMap[sa.sub_subject_id]) {
-            //             subMap[sa.sub_subject_id].total += 1;
-            //             item.is_evaluated ? subMap[sa.sub_subject_id].completed += 1 : subMap[sa.sub_subject_id].pending += 1;
-            //         }
-            //     });
-
-            //     // บันทึกข้อมูลลง State (เก็บทั้งสองแบบเพื่อความเร็วในการสลับ View)
-            //     setChartData({
-            //         main: Object.values(mainMap).sort((a: any, b: any) => b.total - a.total),
-            //         sub: Object.values(subMap).filter((s: any) => s.total > 0).sort((a: any, b: any) => b.total - a.total)
-            //     });
-
-            //     // สรุปสถิติวงกลม
-            //     const totalComp = assignments.filter(a => a.is_evaluated).length;
-            //     setSummaryData([
-            //         { name: 'ประเมินแล้ว', value: totalComp, color: '#10b981' },
-            //         { name: 'ค้างประเมิน', value: assignments.length - totalComp, color: '#f59e0b' }
-            //     ]);
-
-            //     const ratioMap: any = {};
-            //     assignments.forEach((item: any) => {
-            //         const subjectName = item.student_assignments?.subjects?.name || 'อื่นๆ';
-            //         ratioMap[subjectName] = (ratioMap[subjectName] || 0) + 1;
-            //     });
-
-            //     // กำหนดสีประจำวิชา (Emerald, Blue, Purple, Amber, Rose)
-            //     const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#f43f5e'];
-            //     const formattedRatio = Object.entries(ratioMap).map(([name, value], index) => ({
-            //         name,
-            //         value,
-            //         color: colors[index % colors.length]
-            //     }));
-
-            //     setSubjectRatioData(formattedRatio);
-            // }
-
-            if (assignments) {
-                const mainMap: any = {};
-                subjectsList.forEach(s => {
-                    mainMap[s.id] = { name: s.name, completed: 0, inProgress: 0, pending: 0, total: 0 };
-                });
-
-                const subMap: any = {};
-                subSubjectsList.forEach(ss => {
-                    subMap[ss.id] = { name: ss.name, completed: 0, inProgress: 0, pending: 0, total: 0 };
-                });
-
-                // 🚩 แก้ไขส่วนนี้เพื่อทำ Ratio Map
-                const ratioMap: any = {};
-
-                assignments.forEach((item: any) => {
-                    const sa = item.student_assignments;
-
-                    // หา ID วิชาหลัก (Aggregation Logic)
-                    let effectiveMainId = sa?.subject_id;
-                    if (!effectiveMainId && sa?.sub_subject_id) {
-                        effectiveMainId = subSubjectsList.find(ss => ss.id === sa.sub_subject_id)?.parent_subject_id;
-                    }
-
-                    // เก็บชื่อวิชาหลักสำหรับกราฟวงกลม
-                    const subjectName = subjectsList.find(s => s.id === effectiveMainId)?.name || 'อื่นๆ';
-                    ratioMap[subjectName] = (ratioMap[subjectName] || 0) + 1;
-
-                    if (effectiveMainId && mainMap[effectiveMainId]) {
-                        mainMap[effectiveMainId].total += 1;
-                        if (item.evaluation_status === 2) {
-                            mainMap[effectiveMainId].completed += 1;
-                        } else if (item.evaluation_status === 1) {
-                            mainMap[effectiveMainId].inProgress += 1;
-                        } else {
-                            mainMap[effectiveMainId].pending += 1;
-                        }
-                    }
-
-                    if (sa?.sub_subject_id && subMap[sa.sub_subject_id]) {
-                        subMap[sa.sub_subject_id].total += 1;
-                        if (item.evaluation_status === 2) {
-                            subMap[sa.sub_subject_id].completed += 1;
-                        } else if (item.evaluation_status === 1) {
-                            subMap[sa.sub_subject_id].inProgress += 1;
-                        } else {
-                            subMap[sa.sub_subject_id].pending += 1;
-                        }
-                    }
-                });
-
-                setChartData({
-                    main: Object.values(mainMap).sort((a: any, b: any) => b.total - a.total).map((m: any) => ({ ...m, name: `${m.name} (${m.total} รายการ)` })),
-                    sub: Object.values(subMap).filter((s: any) => s.total > 0).sort((a: any, b: any) => b.total - a.total).map((s: any) => ({ ...s, name: `${s.name} (${s.total} รายการ)` }))
-                });
-
-                // 🚩 เตรียมข้อมูล Ratio Pie Chart
-                const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#f43f5e', '#ec4899'];
-                const totalInChart = Object.values(ratioMap).reduce((a: any, b: any) => a + b, 0) as number;
-                const formattedRatio = Object.entries(ratioMap).map(([name, value], index) => ({
-                    name,
-                    value,
-                    totalInChart,
-                    color: colors[index % colors.length]
-                }));
-                setSubjectRatioData(formattedRatio);
-
-                const totalComp = assignments.filter(a => a.is_evaluated).length;
-                // setSummaryData([
-                //     { name: 'ประเมินแล้ว', value: totalComp, color: '#10b981' },
-                //     { name: 'ค้างประเมิน', value: assignments.length - totalComp, color: '#f59e0b' }
-                // ]);
-                setSummaryData([
-                    { name: 'ประเมินแล้ว', value: completed, color: '#10b981' }, // เขียว
-                    { name: 'ประเมินแล้วบางส่วน', value: inProgress, color: '#f59e0b' }, // น้ำเงิน
-                    { name: 'ยังไม่ประเมิน', value: pending, color: '#ef4444' }    // ส้ม
-                ]);
-            }
-
-
+            })
         } catch (error) {
             console.error("Error:", error)
         } finally {
@@ -479,18 +221,21 @@ export default function AdminDashboard() {
             <div className="max-w-7xl mx-auto space-y-8 font-sans">
 
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
                             <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                             <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Real-time Dashboard</span>
                         </div>
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">ภาพรวมระบบ</h1>
+                        <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
+                            <Activity className="text-blue-600" size={24} /> ภาพรวมระบบ
+                        </h1>
+                        <p className="text-slate-500 mt-1 font-medium text-sm">ข้อมูลสรุปและสถานะการดำเนินงานของระบบฝึกงาน</p>
                     </div>
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">
                         {/* 🔒 Year Filter */}
-                        <div className="flex items-center gap-2 bg-white px-4 h-10 rounded-xl border border-slate-200 shadow-sm">
-                            <CalendarDays size={16} className="text-emerald-500" />
+                        <div className="flex items-center gap-2 bg-white px-4 h-12 rounded-xl border border-slate-200 shadow-sm grow sm:grow-0">
+                            <CalendarDays size={18} className="text-emerald-500" />
                             <select
                                 value={selectedYear}
                                 onChange={(e) => setSelectedYear(e.target.value)}
@@ -501,8 +246,8 @@ export default function AdminDashboard() {
                                 ))}
                             </select>
                         </div>
-                        <div className="flex items-center gap-2 text-sm font-bold text-slate-400 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">
-                            <Clock size={16} />
+                        <div className="flex items-center gap-2 text-sm font-bold text-slate-500 bg-white px-4 h-12 rounded-xl shadow-sm border border-slate-100 whitespace-nowrap">
+                            <Clock size={18} className="text-slate-400" />
                             {new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}
                         </div>
                     </div>

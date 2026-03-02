@@ -1,6 +1,5 @@
 "use client"
 import { useState, useEffect } from 'react'
-import { createBrowserClient } from '@supabase/ssr'
 import {
     Search, ArrowLeft, Calendar, User,
     Lock, Edit3, Clock, History,
@@ -18,74 +17,27 @@ export default function EvaluationHistory() {
     const [searchTerm, setSearchTerm] = useState('')
     const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
 
-    const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
     useEffect(() => {
         const init = async () => {
             const urlParams = new URLSearchParams(window.location.search);
             const lineUserId = await getLineUserId(urlParams);
-
             if (!lineUserId) return;
 
-            // 🔒 ดึงปีการศึกษาปัจจุบัน
-            const { data: configData } = await supabase
-                .from('system_configs')
-                .select('key_value')
-                .eq('key_name', 'current_training_year')
-                .single();
-            const currentYear = configData?.key_value || '';
-            setConfigYear(currentYear);
-
-            // ดึงข้อมูลพี่เลี้ยง
-            const { data: sv } = await supabase.from('supervisors').select('id').eq('line_user_id', lineUserId).single()
-
-            if (sv) {
-                fetchHistory(sv.id, currentYear)
+            setLoading(true)
+            try {
+                const res = await fetch(`/api/supervisor/history?lineUserId=${encodeURIComponent(lineUserId)}`)
+                const result = await res.json()
+                if (!result.success) throw new Error(result.error)
+                setConfigYear(result.data.configYear || '')
+                setHistoryList(result.data.historyList || [])
+            } catch (error) {
+                console.error('Error fetching history:', error)
+            } finally {
+                setLoading(false)
             }
         }
         init()
     }, [])
-
-    const fetchHistory = async (svId: string, currentYear: string = '') => {
-        setLoading(true)
-        try {
-            // ดึงงานที่ "ตรวจแล้ว" (is_evaluated = true)
-            const { data, error } = await supabase
-                .from('assignment_supervisors')
-                .select(`
-                    id, updated_at,
-                    student_assignments:assignment_id (
-                        id,
-                        student_id,
-                        students:student_id ( id, first_name, last_name, student_code, avatar_url, nickname, training_year ),
-                        subjects:subject_id ( name ),
-                        sub_subjects:sub_subject_id ( name ),
-                        rotations:rotation_id ( name, end_date )
-                    )
-                `)
-                .eq('supervisor_id', svId)
-                .eq('is_evaluated', true)
-                .order('updated_at', { ascending: false })
-
-            if (error) throw error
-
-            // 🔒 กรองเฉพาะนักศึกษาในปีปัจจุบัน
-            const filtered = currentYear
-                ? (data || []).filter((item: any) => {
-                    const trainingYear = item.student_assignments?.students?.training_year;
-                    return trainingYear === currentYear;
-                })
-                : (data || []);
-            setHistoryList(filtered)
-        } catch (error) {
-            console.error("Error fetching history:", error)
-        } finally {
-            setLoading(false)
-        }
-    }
 
     // ฟังก์ชันตรวจสอบว่า "หมดเขตหรือยัง"
     const checkIsEditable = (endDateStr: string) => {
