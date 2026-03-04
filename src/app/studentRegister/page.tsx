@@ -1,6 +1,6 @@
 // //ver4
 "use client"
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -33,6 +33,7 @@ interface RegistrationForm {
     nickname: string;
     phone: string;
     email: string;
+    track: string;
     assignments: any[]; // หรือระบุ Type ของ assignment ให้ละเอียด
 }
 
@@ -51,39 +52,93 @@ export default function StudentRegisterPage() {
     // const [trainingYear, setTrainingYear] = useState('');
     const [trainingYear, setTrainingYear] = useState<string>('');
     const [rotations, setRotations] = useState<any[]>([]);
+    const [availableTracks, setAvailableTracks] = useState<string[]>(['A']);
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null)
     const [form, setForm] = useState<RegistrationForm>({
         student_code: '', prefix: '',
         first_name: '', last_name: '',
         nickname: '', phone: '',
         email: '',
-        // class_year: '4',
+        track: 'A',
         assignments: []
     })
 
 
-    const initData = async () => {
-        setLoading(true);
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('th-TH', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+    };
+
+    const initData = async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
-            const res = await fetch('/api/register/student?action=init')
+            const res = await fetch(`/api/register/student?action=init&track=${form.track}`)
             const result = await res.json()
 
             if (result.success) {
-                const { trainingYear, rotations, sites, mentors } = result.data
+                const { trainingYear, rotations, sites, mentors, availableTracks: tracks } = result.data
                 setTrainingYear(trainingYear)
                 setSites(sites)
                 setMentors(mentors)
+                setAvailableTracks(tracks || ['A'])
+
+                if (tracks && tracks.length > 0 && !tracks.includes(form.track)) {
+                    setForm(prev => ({ ...prev, track: tracks[0] }));
+                }
 
                 if (rotations && rotations.length > 0) {
-                    const initialAssignments = rotations.map((r: any) => ({
-                        rotation_id: String(r.id),
-                        rotation_name: r.name,
-                        subject_ids: r.rotation_subjects?.map((rs: any) => rs.subject_id) || [],
-                        dates: `${r.start_date} - ${r.end_date}`,
-                        site_id: '',
-                        supervisor_ids: [],
-                        province: '',
-                        provinceSearch: ''
-                    }));
+                    const initialAssignments = rotations.map((r: any) => {
+                        const expandedSubjects: any[] = [];
+                        (r.rotation_subjects || []).forEach((rs: any) => {
+                            const subSubs = rs.subjects?.sub_subjects || [];
+                            if (subSubs.length > 0) {
+                                // Add Portfolio (Main Subject) - Admin calls it "ประเมินเล่ม"
+                                expandedSubjects.push({
+                                    subject_id: rs.subject_id,
+                                    sub_subject_id: null,
+                                    displayName: `${rs.subjects.name} (ประเมินเล่ม)`,
+                                    supervisor_ids: [],
+                                    isPortfolio: true,
+                                    parentName: rs.subjects.name
+                                });
+                                // Add Sub-subjects
+                                subSubs.forEach((ss: any) => {
+                                    expandedSubjects.push({
+                                        subject_id: rs.subject_id,
+                                        sub_subject_id: ss.id,
+                                        displayName: ss.name,
+                                        supervisor_ids: [],
+                                        isPortfolio: false,
+                                        parentName: rs.subjects.name
+                                    });
+                                });
+                            } else {
+                                expandedSubjects.push({
+                                    subject_id: rs.subject_id,
+                                    sub_subject_id: null,
+                                    displayName: rs.subjects?.name || 'ไม่ระบุวิชา',
+                                    supervisor_ids: [],
+                                    isPortfolio: false,
+                                    parentName: rs.subjects?.name
+                                });
+                            }
+                        });
+
+                        return {
+                            rotation_id: String(r.id),
+                            rotation_name: r.name,
+                            dates: `${formatDate(r.start_date)} - ${formatDate(r.end_date)}`,
+                            site_id: '',
+                            province: '',
+                            provinceSearch: '',
+                            subjects: expandedSubjects
+                        };
+                    });
 
                     setForm(prev => ({ ...prev, assignments: initialAssignments }));
                 }
@@ -101,7 +156,7 @@ export default function StudentRegisterPage() {
 
     useEffect(() => {
         initData();
-    }, []);
+    }, [form.track]);
 
     const handleAuth = useCallback(async () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -167,31 +222,34 @@ export default function StudentRegisterPage() {
     // Fetching handled by initData now
     useEffect(() => {
         // --- ระบบ REAL-TIME SUBSCRIPTION ---
-        // (Keeping realtime for sites and mentors to reflect changes dynamically if needed)
+        const handleRealtime = () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+            debounceTimer.current = setTimeout(() => {
+                initData(true) // Silent update
+            }, 1500)
+        }
+
         const siteChannel = supabase
             .channel('realtime-sites')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, () => {
-                initData()
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, handleRealtime)
             .subscribe()
 
         const mentorChannel = supabase
             .channel('realtime-mentors')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, () => {
-                initData()
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, handleRealtime)
             .subscribe()
 
         return () => {
             supabase.removeChannel(siteChannel)
             supabase.removeChannel(mentorChannel)
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
         }
     }, [])
 
     const validate = () => {
         let tempErrors: any = {}
 
-        if (!form.prefix) tempErrors.prefix = "กรุณาเลือกคำนำหน้า" // เช็คคำนำหน้า
+        if (!form.prefix) tempErrors.prefix = "กรุณาเลือกคำนำหน้า"
 
         if (!form.student_code) {
             tempErrors.student_code = "กรุณากรอกรหัสนักศึกษา"
@@ -199,8 +257,14 @@ export default function StudentRegisterPage() {
         if (!form.first_name || !form.last_name) tempErrors.name = "กรุณากรอกชื่อ-นามสกุล"
         if (!avatarFile) tempErrors.avatar = "กรุณาแนบรูปโปรไฟล์"
         if (!form.phone || form.phone.length < 10) tempErrors.phone = "กรุณากรอกเบอร์โทร 10 หลัก"
-        const mentorMissing = form.assignments.some((as: any) => as.supervisor_ids.length === 0)
-        if (mentorMissing) tempErrors.rotation = "กรุณาเลือกพี่เลี้ยงอย่างน้อย 1 คนในทุกผลัด"
+
+        // กรองการเลือกพี่เลี้ยงว่าครบทุกวิชา (ยกเว้น Portfolio ผดุงครรภ์ที่ระบบจะออโต้)
+        const mentorMissing = form.assignments.some((as: any) =>
+            as.subjects.some((sub: any) =>
+                !sub.isPortfolio && sub.supervisor_ids.length === 0
+            )
+        )
+        if (mentorMissing) tempErrors.rotation = "กรุณาเลือกพี่เลี้ยงให้ครบทุกรายวิชาในทุกผลัด"
 
         setErrors(tempErrors)
 
@@ -224,30 +288,61 @@ export default function StudentRegisterPage() {
             newAssignments[idx] = { ...newAssignments[idx], [field]: value }
             if (field === 'province') {
                 newAssignments[idx].site_id = "";
-                newAssignments[idx].supervisor_ids = [];
                 newAssignments[idx].provinceSearch = value;
+                // ล้างพี่เลี้ยงในทุกวิชา
+                newAssignments[idx].subjects = newAssignments[idx].subjects.map((s: any) => ({ ...s, supervisor_ids: [] }));
             }
             if (field === 'site_id') {
-                newAssignments[idx].supervisor_ids = []; // ล้างพี่เลี้ยงเมื่อเปลี่ยน รพ.
+                newAssignments[idx].subjects = newAssignments[idx].subjects.map((s: any) => ({ ...s, supervisor_ids: [] }));
             }
             return { ...prev, assignments: newAssignments }
         })
     }
 
-    // ฟังก์ชันสำหรับ เพิ่ม/ลบ พี่เลี้ยงในลิสต์
-    const addSupervisor = (idx: number, supervisorId: string) => {
-        if (!supervisorId) return;
-        const currentIds = [...form.assignments[idx].supervisor_ids];
-        if (!currentIds.includes(supervisorId)) {
-            currentIds.push(supervisorId);
-            handleAssignChange(idx, 'supervisor_ids', currentIds);
-        }
-    }
+    const handleSubjectMentorToggle = (rotationIdx: number, subjectIdx: number, mentorId: number) => {
+        setForm((prev: any) => {
+            const newAssignments = [...prev.assignments];
+            // 🚨 Fix mutation: clone assignment and subjects array
+            newAssignments[rotationIdx] = {
+                ...newAssignments[rotationIdx],
+                subjects: [...newAssignments[rotationIdx].subjects]
+            };
 
-    const removeSupervisor = (idx: number, supervisorId: string) => {
-        const currentIds = form.assignments[idx].supervisor_ids.filter((id: string) => id !== supervisorId);
-        handleAssignChange(idx, 'supervisor_ids', currentIds);
-    }
+            const currentSubject = { ...newAssignments[rotationIdx].subjects[subjectIdx] };
+            const currentIds = [...currentSubject.supervisor_ids];
+
+            if (currentIds.includes(mentorId)) {
+                currentSubject.supervisor_ids = currentIds.filter(id => id !== mentorId);
+            } else {
+                currentSubject.supervisor_ids = [...currentIds, mentorId];
+            }
+
+            newAssignments[rotationIdx].subjects[subjectIdx] = currentSubject;
+
+            // Logic สำหรับ "ผดุงครรภ์" - Auto Sync Portfolio
+            if (currentSubject.parentName?.includes('ผดุงครรภ์')) {
+                const portfolioIdx = newAssignments[rotationIdx].subjects.findIndex((s: any) =>
+                    s.parentName === currentSubject.parentName && s.isPortfolio
+                );
+
+                if (portfolioIdx !== -1) {
+                    const allMidwiferyMentors = new Set<number>();
+                    newAssignments[rotationIdx].subjects.forEach((s: any) => {
+                        if (s.parentName === currentSubject.parentName && !s.isPortfolio) {
+                            s.supervisor_ids.forEach((id: any) => allMidwiferyMentors.add(id));
+                        }
+                    });
+                    newAssignments[rotationIdx].subjects[portfolioIdx] = {
+                        ...newAssignments[rotationIdx].subjects[portfolioIdx],
+                        supervisor_ids: Array.from(allMidwiferyMentors)
+                    };
+                }
+            }
+
+            return { ...prev, assignments: newAssignments };
+        });
+    };
+
 
     const handleRegister = async () => {
         if (!validate()) return;
@@ -307,6 +402,7 @@ export default function StudentRegisterPage() {
                     email: form.email,
                     avatarUrl: publicUrl,
                     trainingYear: trainingYear,
+                    track: form.track,
                     assignments: form.assignments
                 })
             })
@@ -331,6 +427,7 @@ export default function StudentRegisterPage() {
                 nickname: '',
                 phone: '',
                 email: '',
+                track: 'A',
                 assignments: form.assignments.map((as: any) => ({
                     ...as,
                     site_id: '',
@@ -408,31 +505,7 @@ export default function StudentRegisterPage() {
     }
     return (
         <div className="min-h-screen bg-[#F8FAFC] pb-24 text-slate-900 font-sans antialiased">
-            {/* <div className="bg-white border-b border-slate-100 py-8 text-center mb-10 shadow-sm">
-                <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
-                    <GraduationCap className="text-white" size={36} />
-                </div>
-                <h1 className="text-3xl font-black uppercase tracking-tight text-slate-800">Student Registry</h1>
-                <p className="text-slate-400 text-[11px] font-bold uppercase tracking-[0.2em] mt-1">ระบบลงทะเบียนฝึกปฏิบัติงาน</p>
 
-            </div>
-
-            {trainingYear && (
-                <div className="bg-blue-50 border border-blue-100 p-2 rounded-[2rem] mb-4 flex items-center justify-between px-8">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-blue-600 p-2 rounded-xl text-white">
-                            <CalendarDays size={20} />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">รอบปีการศึกษาที่เปิดรับ</p>
-                            <p className="text-lg font-black text-blue-700">ปีการศึกษา {trainingYear}</p>
-                        </div>
-                    </div>
-                    <div className="hidden sm:block">
-                        <span className="bg-blue-100 text-blue-600 text-[10px] font-black px-3 py-1 rounded-full">ACTIVE NOW</span>
-                    </div>
-                </div>
-            )} */}
 
             <div className="bg-white border-b border-slate-100 py-10 text-center mb-10 shadow-sm relative overflow-hidden">
                 {/* ส่วนตกแต่ง Background เบาๆ */}
@@ -474,13 +547,43 @@ export default function StudentRegisterPage() {
                     {errors.avatar && <span className="text-red-500 text-[11px] font-bold italic animate-bounce">*{errors.avatar}</span>}
                 </div>
 
-                <Card className="p-8 rounded-[3rem] border-none shadow-2xl shadow-blue-100/50 -space-y-2">
-                    <div className="grid grid-cols-12 gap-3">
-                        <div className="col-span-5 space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">คำนำหน้า</label>
+                <Card className="p-7 rounded-[3rem] border-none shadow-2xl shadow-blue-100/50 space-y-2.5">
+                    {/* Track Selection Section */}
+                    <div className="space-y-3 pb-3 border-b border-slate-50">
+                        <div className="flex items-center gap-2 ml-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                            <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">สายการฝึก (TRACK)</label>
+                        </div>
+                        <div className={`grid gap-2 ${availableTracks.length === 1 ? 'grid-cols-1' :
+                            availableTracks.length === 2 ? 'grid-cols-2' :
+                                'grid-cols-3'
+                            }`}>
+                            {availableTracks.map(t => (
+                                <button
+                                    key={t}
+                                    type="button"
+                                    onClick={() => setForm(prev => ({ ...prev, track: t }))}
+                                    className={`h-11 rounded-2xl font-black text-sm transition-all border-2 flex items-center justify-center ${form.track === t
+                                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-100 active:scale-95 text-xs'
+                                        : 'bg-slate-50 border-slate-50 text-slate-400 hover:border-emerald-200 hover:bg-white text-xs'
+                                        }`}
+                                >
+                                    สาย {t}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-[8px] text-slate-400 font-bold ml-1 italic leading-relaxed">
+                            * ระบบจะเปลี่ยนชุดวิชาและวันที่ในผลัดฝึกตามสายที่เลือกอัตโนมัติ
+                        </p>
+                    </div>
+
+                    {/* Student Info - Row 1 (Prefix & ID) */}
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex-[4] min-w-[120px] space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">คำนำหน้า (title)</label>
                             <div className="relative">
                                 <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <select className="w-full h-14 rounded-2xl bg-slate-50 pl-11 pr-4 font-bold border-none appearance-none focus:ring-2 ring-blue-500 transition-all"
+                                <select className="w-full h-12 rounded-2xl bg-slate-50 pl-11 pr-4 font-bold border-none appearance-none focus:ring-2 ring-blue-500 transition-all text-sm outline-none"
                                     value={form.prefix}
                                     onChange={e => setForm({ ...form, prefix: e.target.value })}>
                                     <option value="" disabled>เลือก...</option>
@@ -488,91 +591,94 @@ export default function StudentRegisterPage() {
                                     <option value="นางสาว">นางสาว</option>
                                 </select>
                             </div>
-                            {errors.prefix && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.prefix}</span>}
                         </div>
-                        <div className="col-span-7 space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                                รหัสนักศึกษา
-                            </label>
+                        <div className="flex-[8] space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสนักศึกษา (studentid)</label>
                             <div className="relative">
                                 <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <Input
-                                    className={`h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none focus:ring-2 ${errors.student_code ? 'ring-red-500' : 'ring-blue-500'}`}
-                                    placeholder="67xxxxxxxxx"
+                                    className={`h-12 pl-11 rounded-2xl bg-slate-50 font-bold border-none focus:ring-2 ${errors.student_code ? 'ring-red-500' : 'ring-blue-500'} cursor-not-allowed`}
+                                    placeholder="รหัส นศ."
                                     value={form.student_code}
                                     readOnly
-                                    onChange={e => setForm({ ...form, student_code: e.target.value })}
                                 />
                             </div>
-                            {errors.student_code && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.student_code}</span>}
                         </div>
                     </div>
 
+                    {/* Row 2 (Name) */}
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อจริง</label>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อ (firstname)</label>
                             <div className="relative">
                                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none"
-                                    placeholder="ชื่อ" value={form.first_name}
-                                    readOnly
-                                    onChange={e => setForm({ ...form, first_name: e.target.value })} />
+                                <Input className="h-12 rounded-2xl bg-slate-50 pl-11 font-bold border-none cursor-not-allowed text-sm"
+                                    placeholder="ชื่อ" value={form.first_name} readOnly />
                             </div>
-                            {errors.first_name && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.first_name}</span>}
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">นามสกุล</label>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">นามสกุล (Lastname)</label>
                             <div className="relative">
                                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none"
-                                    placeholder="นามสกุล"
-                                    readOnly
-                                    value={form.last_name} onChange={e => setForm({ ...form, last_name: e.target.value })} />
+                                <Input className="h-12 rounded-2xl bg-slate-50 pl-11 font-bold border-none cursor-not-allowed text-sm"
+                                    placeholder="นามสกุล" value={form.last_name} readOnly />
                             </div>
-                            {errors.last_name && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.last_name}</span>}
                         </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 text-blue-500">ชื่อเล่น (NICKNAME)</label>
+                    {/* Other Info Sections (Unified spacing) */}
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest ml-1">ชื่อเล่น (NICKNAME)</label>
                         <div className="relative">
                             <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-300" size={18} />
-                            <Input className="h-14 pl-11 rounded-2xl bg-blue-50/50 font-bold border-none text-blue-600 placeholder:text-blue-300" placeholder="ชื่อเล่น" value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} />
+                            <Input className="h-12 pl-11 rounded-2xl bg-blue-50/30 font-extrabold border-none text-blue-700 placeholder:text-blue-200 outline-none focus:ring-2 ring-blue-100 transition-all text-sm" placeholder="ระบุชื่อเล่น..." value={form.nickname} onChange={e => setForm({ ...form, nickname: e.target.value })} />
                         </div>
                         {errors.nickname && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.nickname}</span>}
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">อีเมลติดต่อ</label>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">อีเมลติดต่อ (E-mail)</label>
                         <div className="relative">
                             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                            <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none" placeholder="example@psu.ac.th" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                            <Input className="h-12 pl-11 rounded-2xl bg-slate-50 font-bold border-none outline-none focus:ring-2 ring-blue-50 transition-all text-sm" placeholder="example@psu.ac.th" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
                         </div>
                         {errors.email && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.email}</span>}
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">เบอร์โทรศัพท์ (10 หลัก)</label>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">เบอร์โทรศัพท์ (Phone)</label>
                         <div className="relative">
                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                            <Input className="h-14 pl-11 rounded-2xl bg-slate-50 font-bold border-none" placeholder="0XXXXXXXXX" value={form.phone} maxLength={10} onChange={e => setForm({ ...form, phone: e.target.value.replace(/[^0-9]/g, '') })} />
+                            <Input className="h-12 pl-11 rounded-2xl bg-slate-50 font-bold border-none outline-none focus:ring-2 ring-blue-50 transition-all text-sm" placeholder="0XXXXXXXXX" value={form.phone} maxLength={10} onChange={e => setForm({ ...form, phone: e.target.value.replace(/[^0-9]/g, '') })} />
                         </div>
                         {errors.phone && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.phone}</span>}
                     </div>
                 </Card>
 
-                <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3 px-2 pt-6">
-                    <CalendarDays className="text-blue-600" size={28} /> Internship Plan
-                </h3>
+                <div className="px-2 pt-6">
+                    <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3">
+                        <CalendarDays className="text-blue-600" size={28} /> Internship Plan
+                    </h3>
+                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 italic mt-2 inline-block">
+                        * หากมีพี่เลี้ยง 2 คน ให้เลือกทั้งสองคน
+                    </p>
+                </div>
                 {errors.rotation && <p className="bg-red-50 text-red-500 text-[11px] font-bold italic p-3 rounded-xl animate-pulse">*{errors.rotation}</p>}
 
                 {form.assignments.map((item: any, idx: number) => (
-                    <Card key={idx} className="p-8 rounded-[3rem] border-none shadow-2xl space-y-6 relative group hover:ring-2 ring-blue-500 transition-all">
+                    <Card key={idx} className="p-8 rounded-[3rem] border-none shadow-2xl space-y-1 relative group hover:ring-2 ring-blue-500 transition-all">
                         <div className="flex items-center gap-4">
                             <div className="bg-blue-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-black italic shadow-lg shadow-blue-100">0{idx + 1}</div>
                             <div>
                                 <span className="font-black text-sm uppercase tracking-tight block">{item.rotation_name}</span>
-                                <span className="text-[10px] font-bold text-slate-400 italic">{item.dates}</span>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                    {item.subject_names?.map((subName: string, sIdx: number) => (
+                                        <span key={sIdx} className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-md border border-blue-100">
+                                            {subName}
+                                        </span>
+                                    ))}
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400 italic block mt-1">{item.dates}</span>
                             </div>
                         </div>
 
@@ -597,64 +703,74 @@ export default function StudentRegisterPage() {
                                 {sites.filter((s: any) => String(s.province || "").trim() === String(item.province || "").trim()).map(s => (<option key={s.id} value={String(s.id)}>{s.site_name}</option>))}
                             </select>
 
-                            {/* ปรับปรุงส่วนเลือกพี่เลี้ยงแบบเพิ่มทีละคน */}
-                            <div className="bg-blue-50/50 p-5 rounded-3xl border border-blue-100 space-y-3">
-                                <label className="text-[9px] font-black text-blue-400 uppercase tracking-widest ml-1 block italic">รายชื่อพี่เลี้ยงที่เลือก (SUPERVISORS)</label>
-
-
-                                {/* แสดงรายชื่อที่เลือกแล้ว */}
-                                <div className="space-y-2">
-                                    {item.supervisor_ids.map((sId: string) => {
-                                        const mentor = mentors.find((m: any) => String(m.id) === String(sId));
+                            {/* Granular Subject & Mentor Selection */}
+                            <div className="space-y-4 pt-2">
+                                {item.subjects
+                                    .filter((sub: any) => !(sub.parentName?.includes('ผดุงครรภ์') && sub.isPortfolio)) // ซ่อนประเมินเล่มผดุงครรภ์
+                                    .map((sub: any, sIdx: number) => {
+                                        const actualSubjectIdx = item.subjects.findIndex((s: any) => s === sub);
                                         return (
-                                            <div key={sId} className="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-blue-100">
-                                                <span className="text-xs font-bold text-blue-700">{mentor?.full_name || 'ไม่พบข้อมูล'}</span>
-                                                <button onClick={() => removeSupervisor(idx, sId)} className="text-red-400 hover:text-red-600 transition-colors">
-                                                    <Trash2 size={16} />
-                                                </button>
+                                            <div key={sIdx} className="bg-white p-6 rounded-[2.5rem] border border-blue-100 shadow-sm relative group/sub transition-all hover:shadow-md hover:border-blue-200">
+                                                <div className="text-[13px] font-black text-blue-600 mb-4 flex items-center gap-2">
+                                                    <div className="w-1.5 h-4 rounded-full bg-blue-600 shadow-sm" />
+                                                    {sub.displayName.toUpperCase()}
+                                                </div>
+                                                <div className="grid grid-cols-1 gap-2.5">
+                                                    {mentors.filter((m: any) => {
+                                                        const isSameSite = String(m.site_id) === String(item.site_id);
+                                                        const isResponsible = m.supervisor_subjects?.some((ss: any) => {
+                                                            const matchMain = String(ss.subject_id) === String(sub.subject_id);
+                                                            if (sub.sub_subject_id) {
+                                                                return matchMain && String(ss.sub_subject_id) === String(sub.sub_subject_id);
+                                                            }
+                                                            return matchMain;
+                                                        });
+                                                        return isSameSite && isResponsible;
+                                                    }).map((m: any) => {
+                                                        const isSelected = sub.supervisor_ids.includes(m.id);
+                                                        return (
+                                                            <button
+                                                                key={m.id}
+                                                                type="button"
+                                                                onClick={() => handleSubjectMentorToggle(idx, actualSubjectIdx, m.id)}
+                                                                className={`px-5 py-4 rounded-2xl text-[14px] font-bold border-2 transition-all active:scale-95 flex items-center gap-4 w-full text-left ${isSelected
+                                                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-100 ring-4 ring-blue-50/50'
+                                                                    : 'bg-slate-50 text-slate-500 border-slate-100 hover:border-blue-200 hover:bg-white hover:text-blue-600'
+                                                                    }`}
+                                                            >
+                                                                <UserCircle size={20} className={`shrink-0 ${isSelected ? "text-blue-200" : "text-slate-300"}`} />
+                                                                <span className="leading-tight flex-1">{m.full_name}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+
+                                                    {item.site_id && mentors.filter((m: any) => {
+                                                        const isSameSite = String(m.site_id) === String(item.site_id);
+                                                        const isResponsible = m.supervisor_subjects?.some((ss: any) => {
+                                                            const matchMain = String(ss.subject_id) === String(sub.subject_id);
+                                                            if (sub.sub_subject_id) {
+                                                                return matchMain && String(ss.sub_subject_id) === String(sub.sub_subject_id);
+                                                            }
+                                                            return matchMain;
+                                                        });
+                                                        return isSameSite && isResponsible;
+                                                    }).length === 0 && (
+                                                            <p className="text-[12px] text-slate-300 font-bold italic py-2">ไม่มีรายชื่อพี่เลี้ยงที่รับผิดชอบส่วนนี้</p>
+                                                        )}
+
+                                                    {!item.site_id && (
+                                                        <p className="text-[12px] text-blue-300 font-bold italic py-2 opacity-50">* กรุณาเลือกโรงพยาบาลก่อน</p>
+                                                    )}
+                                                </div>
+                                                {sub.supervisor_ids.length === 0 && !sub.isPortfolio && item.site_id && (
+                                                    <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-2 border-white shadow-sm"></span>
+                                                    </span>
+                                                )}
                                             </div>
                                         );
                                     })}
-                                </div>
-
-                                {/* Dropdown สำหรับกดเพิ่มพี่เลี้ยง */}
-                                <div className="pt-2">
-                                    <select
-                                        className="w-full bg-white h-10 rounded-lg px-4 font-bold text-slate-500 text-xs border border-blue-100 outline-none disabled:opacity-30 shadow-sm"
-                                        disabled={!item.site_id}
-                                        value=""
-                                        onChange={(e) => addSupervisor(idx, e.target.value)}
-                                    >
-                                        <option value="">+ เพิ่มรายชื่อพี่เลี้ยง...</option>
-                                        {/* {mentors
-                                            .filter((m: any) => String(m.site_id) === String(item.site_id) && !item.supervisor_ids.includes(String(m.id)))
-                                            .map((m: any) => (<option key={m.id} value={String(m.id)}>{m.full_name}</option>))
-                                        } */}
-                                        {mentors
-                                            .filter((m: any) => {
-                                                // 1. เช็กโรงพยาบาล (ต้องตรงกัน)
-                                                const isSameSite = String(m.site_id) === String(item.site_id);
-
-                                                // 2. เช็กวิชา (ถ้าใน m.supervisor_subjects มี subject_id ตรงกับผลัด)
-                                                const teachesThisSubject = m.supervisor_subjects?.some((sub: any) =>
-                                                    // Number(sub.subject_id) === Number(item.subject_id)
-                                                    item.subject_ids?.includes(sub.subject_id)
-                                                );
-
-                                                // 3. ยังไม่ถูกเลือก
-                                                const isNotSelected = !item.supervisor_ids.includes(String(m.id));
-
-                                                return isSameSite && teachesThisSubject && isNotSelected;
-                                            })
-                                            .map((m: any) => (
-                                                <option key={m.id} value={String(m.id)}>
-                                                    {m.full_name}
-                                                </option>
-                                            ))
-                                        }
-                                    </select>
-                                    {!item.site_id && <p className="text-[8px] text-blue-400 mt-1 ml-1 font-bold">* กรุณาเลือกโรงพยาบาลก่อน</p>}
-                                </div>
                             </div>
                         </div>
                     </Card>

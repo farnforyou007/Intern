@@ -427,10 +427,13 @@ export default function RotationSchedule() {
         return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
     }
 
-    const filteredList = groupedSchedule.filter(g =>
-        g.rotation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        g.subjects.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase()))
-    )
+    const filteredList = groupedSchedule.map(trackGroup => ({
+        ...trackGroup,
+        rotations: trackGroup.rotations.filter((item: any) =>
+            item.rotation.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.subjects.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase()))
+        )
+    })).filter(trackGroup => trackGroup.rotations.length > 0)
 
     return (
         <div className="min-h-screen bg-[#F8FAFC] font-sans pb-24 text-slate-900">
@@ -469,72 +472,90 @@ export default function RotationSchedule() {
             </div>
 
             {/* List Content */}
-            <div className="px-5 mt-6 space-y-4">
+            <div className="px-5 mt-6 space-y-10">
                 {loading ? (
                     Array(3).fill(0).map((_, i) => <div key={i} className="bg-white h-40 rounded-[2.5rem] animate-pulse" />)
                 ) : filteredList.length > 0 ? (
-                    filteredList.map((group, idx) => {
-                        const daysLeft = getDaysRemaining(group.rotation.end_date)
-                        const isEndingSoon = daysLeft >= 0 && daysLeft <= 5
+                    filteredList.map((trackGroup, tIdx) => (
+                        <div key={tIdx} className="space-y-4">
+                            {/* Track Header */}
+                            <div className="flex items-center gap-3 px-2">
+                                <div className="w-1.5 h-6 rounded-full bg-slate-900" />
+                                <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">
+                                    สายฝึกปฏิบัติ {trackGroup.track}
+                                </h2>
+                                <span className="bg-slate-100 text-slate-400 text-[10px] font-black px-2 py-0.5 rounded-lg border border-slate-200">
+                                    {trackGroup.rotations.length} ผลัด
+                                </span>
+                            </div>
 
-                        return (
-                            <div key={idx} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-                                <div className={`absolute left-0 top-0 bottom-0 w-2 ${daysLeft < 0 ? 'bg-slate-200' : isEndingSoon ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+                            <div className="grid grid-cols-1 gap-4">
+                                {trackGroup.rotations.map((item: any, idx: number) => {
+                                    const daysLeft = getDaysRemaining(item.rotation.end_date)
+                                    const isEndingSoon = daysLeft >= 0 && daysLeft <= 5
 
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="flex-1 pr-4">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                                                {group.rotation.name}
-                                            </h2>
-                                            <div className="flex items-center gap-1 text-slate-400 text-[11px] font-black uppercase tracking-widest">
-                                                <Users size={12} />
-                                                <span>{group.studentCount} คน</span>
+                                    return (
+                                        <div key={idx} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                                            <div className={`absolute left-0 top-0 bottom-0 w-2 ${daysLeft < 0 ? 'bg-slate-200' : isEndingSoon ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex-1 pr-4">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                                                            {item.rotation.name}
+                                                        </h2>
+                                                        <div className="flex items-center gap-1 text-slate-400 text-[11px] font-black uppercase tracking-widest">
+                                                            <Users size={12} />
+                                                            <span>{item.studentCount} คน</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {item.subjects?.map((s: string) => (
+                                                            <span key={s} className="bg-slate-50 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-100">
+                                                                {s}
+                                                            </span>
+                                                        ))}
+                                                        {item.subjects?.length === 0 && (
+                                                            <span className="text-slate-300 text-[10px] font-bold italic">ไม่พบรายวิชา</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-2xl border-2 shrink-0 shadow-sm ${daysLeft < 0
+                                                    ? 'border-slate-100 bg-slate-50 text-slate-300'
+                                                    : isEndingSoon
+                                                        ? 'border-amber-100 bg-amber-50 text-amber-600'
+                                                        : 'border-emerald-50 bg-emerald-50 text-emerald-600'
+                                                    }`}>
+                                                    <span className="text-lg font-black leading-none">
+                                                        {daysLeft < 0 ? '-' : daysLeft}
+                                                    </span>
+                                                    <span className="text-[8px] font-black uppercase tracking-tighter mt-1">
+                                                        {daysLeft < 0 ? 'จบผลัด' : 'วันเหลือ'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center text-[11px] font-bold text-slate-400">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Clock size={12} />
+                                                    <span>
+                                                        {new Date(item.rotation.start_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} - {new Date(item.rotation.end_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}
+                                                    </span>
+                                                </div>
+                                                {isEndingSoon && daysLeft >= 0 && (
+                                                    <span className="text-amber-500 flex items-center gap-1 animate-pulse uppercase tracking-tighter">
+                                                        <AlertCircle size={12} /> ใกล้ปิดผลัด
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
-
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {/* ✅ แก้ไข Error .map() โดยการใส่ ?. */}
-                                            {group.subjects?.map((s: string) => (
-                                                <span key={s} className="bg-slate-50 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-lg border border-slate-100">
-                                                    {s}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* 🎯 สไตล์ Countdown แบบกล่องตัวเลขใหญ่ (ไสตล์ก่อนหน้า) */}
-                                    <div className={`flex flex-col items-center justify-center w-16 h-16 rounded-2xl border-2 shrink-0 shadow-sm ${daysLeft < 0
-                                        ? 'border-slate-100 bg-slate-50 text-slate-300'
-                                        : isEndingSoon
-                                            ? 'border-amber-100 bg-amber-50 text-amber-600'
-                                            : 'border-emerald-50 bg-emerald-50 text-emerald-600'
-                                        }`}>
-                                        <span className="text-lg font-black leading-none">
-                                            {daysLeft < 0 ? '-' : daysLeft}
-                                        </span>
-                                        <span className="text-[8px] font-black uppercase tracking-tighter mt-1">
-                                            {daysLeft < 0 ? 'จบผลัด' : 'วันเหลือ'}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center text-[11px] font-bold text-slate-400">
-                                    <div className="flex items-center gap-1.5">
-                                        <Clock size={12} />
-                                        <span>
-                                            {new Date(group.rotation.start_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} - {new Date(group.rotation.end_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}
-                                        </span>
-                                    </div>
-                                    {isEndingSoon && daysLeft >= 0 && (
-                                        <span className="text-amber-500 flex items-center gap-1 animate-pulse uppercase tracking-tighter">
-                                            <AlertCircle size={12} /> ใกล้ปิดผลัด
-                                        </span>
-                                    )}
-                                </div>
+                                    )
+                                })}
                             </div>
-                        )
-                    })
+                        </div>
+                    ))
                 ) : (
                     <div className="text-center py-16">
                         {configYear ? (

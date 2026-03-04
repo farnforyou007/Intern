@@ -887,7 +887,7 @@ export default function EvaluationSummary() {
                                                             <div className="font-black text-slate-800 text-sm leading-tight">{item.student?.first_name} {item.student?.last_name}</div>
                                                             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">รหัส {item.student?.student_code}</div>
                                                             {isMultiMentor && (
-                                                                <div className="text-[9px] font-black text-violet-500 mt-0.5 flex items-center gap-1"><Users size={10} /> {item.mentorCount} พี่เลี้ยง</div>
+                                                                <div className="text-[9px] font-black text-violet-500 mt-0.5 flex items-center gap-1"><Users size={10} />พี่เลี้ยง {item.mentorCount} คนประเมิน</div>
                                                             )}
                                                         </div>
                                                     </div>

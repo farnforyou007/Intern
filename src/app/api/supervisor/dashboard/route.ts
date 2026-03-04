@@ -44,12 +44,16 @@ export async function GET(req: Request) {
 
         const supervisorData = { ...svData, avatar_url: publicUrl }
 
-        // 2.5 ดึงวิชาที่พี่เลี้ยงรับผิดชอบ
+        // 2.5 ดึงวิชาที่พี่เลี้ยงรับผิดชอบ (รองรับวิชาย่อย)
         const { data: subjectData } = await supabase
             .from('supervisor_subjects')
-            .select('subjects(id, name)')
+            .select(`
+                id,
+                subjects(name),
+                sub_subjects(name)
+            `)
             .eq('supervisor_id', svData.id)
-        const subjectNames = (subjectData || []).map((s: any) => s.subjects?.name).filter(Boolean)
+        const subjectNames = (subjectData || []).map((s: any) => s.sub_subjects?.name || s.subjects?.name).filter(Boolean)
 
         // 2. ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
         let yearStudentIds: Set<string> = new Set()

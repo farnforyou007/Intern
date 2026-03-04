@@ -26,13 +26,22 @@ export async function GET(req: Request) {
             availableYears = Array.from(new Set(yearsData.map(item => item.academic_year)))
         }
 
-        // 2. ดึงผลัดตามปีที่เลือก
+        // 2. ดึงผลัดตามปีที่เลือก + track
         const yearToUse = selectedYear || availableYears[0] || currentYearBS
-        const { data: rotData, error: rotError } = await supabase
+        const trackFilter = searchParams.get('track') || 'all'
+
+        let rotQuery = supabase
             .from('rotations')
             .select('*, rotation_subjects(subject_id)')
             .eq('academic_year', yearToUse)
+            .order('track', { ascending: true })
             .order('round_number', { ascending: true })
+
+        if (trackFilter !== 'all') {
+            rotQuery = rotQuery.eq('track', trackFilter)
+        }
+
+        const { data: rotData, error: rotError } = await rotQuery
 
         if (rotError) throw rotError
 
@@ -75,11 +84,12 @@ export async function POST(req: Request) {
                     .select('id')
                     .eq('academic_year', payload.academic_year)
                     .eq('round_number', payload.round_number)
+                    .eq('track', payload.track || 'A')
                     .maybeSingle()
 
                 if (existing) {
                     return apiError(
-                        `มีผลัดที่ ${payload.round_number} ของปี ${payload.academic_year} อยู่ในระบบแล้ว`,
+                        `มีผลัดที่ ${payload.round_number} สาย ${payload.track || 'A'} ของปี ${payload.academic_year} อยู่ในระบบแล้ว`,
                         409
                     )
                 }

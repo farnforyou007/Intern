@@ -1,7 +1,7 @@
 
 //ver100 — API Routes Migration
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     Search, ChevronRight, ChevronDown, ChevronUp,
@@ -18,7 +18,7 @@ import { getLineUserId } from '@/utils/auth';
 
 // --- 1. Component ย่อย: SmartSubjectGroup ---
 const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
-    const [isOpen, setIsOpen] = useState(false);
+    const [isOpen, setIsOpen] = useState(true);
 
     const getTaskData = (task: any) => isMine ? task.student_assignments : task;
     const firstTaskData = getTaskData(tasks[0]);
@@ -249,12 +249,13 @@ export default function SupervisorStudentList() {
     const [activeTab, setActiveTab] = useState<'mine' | 'all'>('mine')
     const [searchTerm, setSearchTerm] = useState('')
     const [loading, setLoading] = useState(true)
-    const [expandedId, setExpandedId] = useState<string | null>(null)
+    const [expandedIds, setExpandedIds] = useState<string[]>([])
 
     const [myStudents, setMyStudents] = useState<any[]>([])
     const [allSiteStudents, setAllSiteStudents] = useState<any[]>([])
     const [supervisorInfo, setSupervisorInfo] = useState<any>(null)
     const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
     // Supabase client — จำเป็นเฉพาะ Realtime subscriptions เท่านั้น
     const supabase = createBrowserClient(
@@ -278,7 +279,8 @@ export default function SupervisorStudentList() {
         return permissions.some((p: any) => p.subject_id === assign.subject_id);
     }
 
-    const fetchData = async (lineUserId: string) => {
+    const fetchData = async (lineUserId: string, silent = false) => {
+        if (!silent) setLoading(true)
         try {
             const res = await fetch(`/api/supervisor/students?lineUserId=${encodeURIComponent(lineUserId)}`)
             const result = await res.json()
@@ -288,6 +290,11 @@ export default function SupervisorStudentList() {
             setMyStudents(result.data.myStudents || [])
             setAllSiteStudents(result.data.allSiteStudents || [])
             setConfigYear(result.data.configYear || '')
+
+            // Auto-expand all students by default
+            const studentIds = getGroupedData(result.data.myStudents || [], true).map((s: any) => s.id);
+            const allSiteIds = getGroupedData(result.data.allSiteStudents || [], false).map((s: any) => s.id);
+            setExpandedIds(Array.from(new Set([...studentIds, ...allSiteIds])));
         } catch (error) { console.error("Fetch Error:", error) } finally { setLoading(false) }
     }
 
@@ -312,17 +319,27 @@ export default function SupervisorStudentList() {
                 if (lineUserId) {
                     fetchData(lineUserId)
 
+                    const handleRealtime = () => {
+                        if (debounceTimer.current) clearTimeout(debounceTimer.current)
+                        debounceTimer.current = setTimeout(() => {
+                            fetchData(lineUserId, true) // Silent update
+                        }, 1500)
+                    }
+
                     // 🚩 Real-time: ฟัง 3 ตารางหลัก ถ้ามีอะไรเปลี่ยนให้โหลดใหม่ทันที
                     channel = supabase.channel('supervisor_realtime')
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, () => fetchData(lineUserId))
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'student_assignments' }, () => fetchData(lineUserId))
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisor_subjects' }, () => fetchData(lineUserId))
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, handleRealtime)
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'student_assignments' }, handleRealtime)
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisor_subjects' }, handleRealtime)
                         .subscribe()
                 }
             } catch (error) { console.error("Init Error:", error) }
         }
         init()
-        return () => { if (channel) supabase.removeChannel(channel) }
+        return () => {
+            if (channel) supabase.removeChannel(channel)
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+        }
     }, [])
 
     const getGroupedData = (data: any[], isMine: boolean) => {
@@ -457,10 +474,15 @@ export default function SupervisorStudentList() {
                     filteredList.map((group: any) => {
                         const isMine = activeTab === 'mine';
                         const { student, tasks, id: groupKey } = group;
-                        const isExpanded = expandedId === groupKey;
-                        const totalTasks = tasks.length;
-                        const totalCompleted = tasks.filter((t: any) => isMine ? t.is_evaluated : false).length;
-                        const totalPartial = tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length;
+                        const isExpanded = expandedIds.includes(groupKey);
+
+                        const toggleExpand = () => {
+                            if (isExpanded) {
+                                setExpandedIds(prev => prev.filter(id => id !== groupKey));
+                            } else {
+                                setExpandedIds(prev => [...prev, groupKey]);
+                            }
+                        };
 
                         const tasksBySubject: { [key: string]: any[] } = {};
                         tasks.forEach((t: any) => {
@@ -472,9 +494,9 @@ export default function SupervisorStudentList() {
 
                         return (
                             <div key={groupKey} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden transition-all">
-                                <div className="p-6">
+                                <div className="p-6 cursor-pointer" onClick={toggleExpand}>
                                     <div className="flex items-start gap-5">
-                                        <div onClick={() => student?.avatar_url && handlePreviewImage(student.avatar_url)} className="relative mt-2 w-23 h-23 rounded-[2rem] bg-slate-100 shrink-0 border-4 border-slate-50 overflow-hidden cursor-pointer">
+                                        <div onClick={(e) => { e.stopPropagation(); student?.avatar_url && handlePreviewImage(student.avatar_url); }} className="relative mt-2 w-23 h-23 rounded-[2rem] bg-slate-100 shrink-0 border-4 border-slate-50 overflow-hidden cursor-pointer">
                                             {student?.avatar_url ? <img src={student.avatar_url} className="w-full h-full object-cover" /> : <User size={28} className="m-auto mt-7 text-slate-300" />}
                                         </div>
                                         <div className="min-w-0 flex-1 space-y-1">
@@ -482,15 +504,15 @@ export default function SupervisorStudentList() {
                                             <h3 className="text-[15px] font-bold text-slate-900">{student.first_name} {student.last_name}</h3>
                                             <p className="text-slate-700 font-black text-xs flex items-center gap-1"><User size={12} />{student.nickname || '-'}</p>
                                             <p className="text-slate-700 font-black text-xs flex items-center gap-1"><Mail size={10} />{student.email || '-'}</p>
-                                            <a href={`tel:${student.phone}`} className="text-[11px] text-slate-600 font-black underline flex items-center gap-1"><PhoneCall size={10} /> {student.phone}</a>
+                                            <a href={`tel:${student.phone}`} onClick={(e) => e.stopPropagation()} className="text-[11px] text-slate-600 font-black underline flex items-center gap-1"><PhoneCall size={10} /> {student.phone}</a>
                                         </div>
-                                        <button onClick={() => setExpandedId(isExpanded ? null : groupKey)} className={`p-3 rounded-2xl transition-all shadow-lg ${isExpanded ? 'bg-slate-900 text-white rotate-180' : 'bg-[#064e3b] text-white'}`}>
+                                        <div className={`p-3 rounded-2xl transition-all shadow-lg shrink-0 ${isExpanded ? 'bg-slate-900 text-white rotate-180' : 'bg-[#064e3b] text-white'}`}>
                                             {isExpanded ? <ChevronDown size={20} /> : (isMine ? <ClipboardPenLine size={20} /> : <UserPlus size={20} />)}
-                                        </button>
+                                        </div>
                                     </div>
 
                                     {isExpanded && (
-                                        <div className="mt-6 pt-5 border-t border-slate-50">
+                                        <div className="mt-6 pt-5 border-t border-slate-50" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex justify-between items-center mb-4 px-1">
                                                 <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                                     <ClipboardCheck size={14} className="text-emerald-600" />
@@ -498,7 +520,7 @@ export default function SupervisorStudentList() {
                                                 </p>
                                                 {isMine && (
                                                     <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1">
-                                                        <CheckCircle size={10} className="text-emerald-500" />{totalCompleted}{totalPartial > 0 && <span className="text-amber-600 flex items-center gap-0.5 ml-1"><Clock size={9} />{totalPartial}</span>}/{totalTasks}
+                                                        <CheckCircle size={10} className="text-emerald-500" />{tasks.filter((t: any) => isMine ? t.is_evaluated : false).length}{tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length > 0 && <span className="text-amber-600 flex items-center gap-0.5 ml-1"><Clock size={9} />{tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length}</span>}/{tasks.length}
                                                     </span>
                                                 )}
                                             </div>

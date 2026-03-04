@@ -41,70 +41,73 @@ export async function GET(req: Request) {
             yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)))
         }
 
-        // 2. ดึง student_assignments ของ site นี้
-        const { data, error } = await supabase
+        // 2. ดึง student_assignments ของ site นี้ (เพื่อใช้นับจำนวนนักศึกษาในแต่ละผลัด)
+        const { data: assignments, error: assignError } = await supabase
             .from('student_assignments')
-            .select(`
-                student_id,
-                subjects:subject_id ( name ),
-                sub_subjects:sub_subject_id ( name ),
-                rotations:rotation_id ( id, name, start_date, end_date, academic_year )
-            `)
+            .select('rotation_id, student_id')
             .eq('site_id', sv.site_id)
 
-        if (error) throw error
+        if (assignError) throw assignError
 
-        // กรองตามปีการศึกษา
-        const filteredData = currentYear
-            ? (data || []).filter((item: any) => yearStudentIds.has(String(item.student_id)))
-            : (data || [])
+        // นับจำนวนนักศึกษาแยกตาม rotation_id
+        const studentCounts: { [key: number]: Set<string> } = {}
+        const filteredAssignments = currentYear
+            ? (assignments || []).filter((item: any) => yearStudentIds.has(String(item.student_id)))
+            : (assignments || [])
 
-        // Group by rotation
-        const groups: { [key: string]: any } = {}
-        filteredData.forEach((item: any) => {
-            const r = item.rotations
-            if (!r) return
-            if (!groups[r.id]) {
-                groups[r.id] = {
-                    rotation: r,
-                    subjects: new Set<string>(),
-                    studentIds: new Set<string>()
-                }
-            }
-            const subName = item.sub_subjects?.name || item.subjects?.name
-            if (subName) groups[r.id].subjects.add(subName)
-            groups[r.id].studentIds.add(item.student_id)
+        filteredAssignments.forEach((item: any) => {
+            if (!studentCounts[item.rotation_id]) studentCounts[item.rotation_id] = new Set()
+            studentCounts[item.rotation_id].add(String(item.student_id))
         })
 
-        // ดึง rotations ทั้งหมดของปีปัจจุบัน (รวมผลัดที่ไม่มี student)
+        // 3. ดึง rotations ทั้งหมดของปีปัจจุบัน พร้อมวิชาที่กำหนดในผลัดนั้นๆ
         let rotationQuery = supabase
             .from('rotations')
-            .select('id, name, start_date, end_date, academic_year')
-            .order('start_date')
+            .select(`
+                id, name, start_date, end_date, academic_year, track,
+                rotation_subjects (
+                    subjects ( name )
+                )
+            `)
+            .order('track', { ascending: true })
+            .order('start_date', { ascending: true })
+
         if (currentYear) {
             rotationQuery = rotationQuery.eq('academic_year', currentYear)
         }
-        const { data: allRotations } = await rotationQuery
+        const { data: allRotations, error: rotError } = await rotationQuery
+        if (rotError) throw rotError
 
-            // เพิ่ม rotation ที่ไม่มี student_assignments
+        // จัดกลุ่มตาม Track (สาย)
+        const groupedByTrack: { [key: string]: any[] } = {}
+
             ; (allRotations || []).forEach((rot: any) => {
-                if (!groups[rot.id]) {
-                    groups[rot.id] = {
-                        rotation: rot,
-                        subjects: new Set<string>(),
-                        studentIds: new Set<string>()
-                    }
-                }
+                const track = rot.track || 'A'
+                if (!groupedByTrack[track]) groupedByTrack[track] = []
+
+                // ดึงรายชื่อวิชาจาก rotation_subjects
+                const subjects = rot.rotation_subjects?.map((rs: any) => rs.subjects?.name).filter(Boolean) || []
+
+                groupedByTrack[track].push({
+                    rotation: {
+                        id: rot.id,
+                        name: rot.name,
+                        start_date: rot.start_date,
+                        end_date: rot.end_date,
+                        track: rot.track,
+                        academic_year: rot.academic_year
+                    },
+                    subjects: subjects,
+                    studentCount: studentCounts[rot.id]?.size || 0
+                })
             })
 
-        const result = Object.values(groups)
-            .filter((g: any) => !currentYear || g.rotation.academic_year === currentYear)
-            .map((g: any) => ({
-                rotation: g.rotation,
-                subjects: Array.from(g.subjects || []),
-                studentCount: g.studentIds.size
-            }))
-            .sort((a, b) => new Date(a.rotation.end_date).getTime() - new Date(b.rotation.end_date).getTime())
+        // แปลงเป็น Array ที่เรียงลำดับตาม Track
+        const sortedTracks = Object.keys(groupedByTrack).sort()
+        const result = sortedTracks.map(track => ({
+            track,
+            rotations: groupedByTrack[track]
+        }))
 
         return apiSuccess({
             groupedSchedule: result,

@@ -17,6 +17,8 @@ export async function GET(request: Request) {
 
             const trainingYear = config?.key_value
 
+            const track = searchParams.get('track') || 'A'
+
             const { data: rotations } = await supabase
                 .from('rotations')
                 .select(`
@@ -26,10 +28,15 @@ export async function GET(request: Request) {
                     end_date,
                     rotation_subjects (
                         subject_id,
-                        subjects (id, name)
+                        subjects (
+                            id, 
+                            name,
+                            sub_subjects (id, name)
+                        )
                     )
                 `)
                 .eq('academic_year', trainingYear)
+                .eq('track', track)
                 .order('round_number', { ascending: true })
 
             const { data: sites } = await supabase.from('training_sites').select('*')
@@ -47,9 +54,22 @@ export async function GET(request: Request) {
                 `)
                 .eq('is_verified', true)
 
+            const { data: trackData } = await supabase
+                .from('rotations')
+                .select('track')
+                .eq('academic_year', trainingYear)
+
+            const availableTracks = Array.from(new Set(trackData?.map(t => t.track) || [])).sort()
+
             return NextResponse.json({
                 success: true,
-                data: { trainingYear, rotations, sites, mentors }
+                data: {
+                    trainingYear,
+                    rotations,
+                    sites,
+                    mentors,
+                    availableTracks: availableTracks.length > 0 ? availableTracks : ['A']
+                }
             })
         }
 
@@ -73,6 +93,7 @@ export async function POST(request: Request) {
             email,
             avatarUrl,
             trainingYear,
+            track,
             assignments // array of { rotation_id, site_id, supervisor_ids }
         } = body
 
@@ -92,107 +113,46 @@ export async function POST(request: Request) {
             phone: phone,
             email: email,
             avatar_url: avatarUrl,
-            training_year: trainingYear
+            training_year: trainingYear,
+            track: track || 'A'
         }]).select().single()
 
         if (stError) throw stError
 
-        // 2. จัดการ Assignments และ Mentors
-        // ดึงข้อมูลพื้นฐานที่จำเป็นมาไว้ก่อน เพื่อลดการ query ใน loop
-        const { data: allRotationSubjects } = await supabase.from('rotation_subjects').select('rotation_id, subject_id')
-        const { data: allSubSubjects } = await supabase.from('sub_subjects').select('id, parent_subject_id')
-        const { data: allMentors } = await supabase
-            .from('supervisors')
-            .select(`
-                id, site_id,
-                supervisor_subjects (subject_id, sub_subject_id)
-            `)
-
+        // 3. Create Assignments & Assign Superviosrs
         for (const as of assignments) {
             if (!as.site_id) continue
 
-            const rotSubs = allRotationSubjects?.filter(rs => rs.rotation_id === parseInt(as.rotation_id)) || []
+            // วนลูปผ่านวิชาย่อย/ส่วนงานที่ส่งมาจาก Frontend (Granular)
+            for (const sub of as.subjects) {
+                // หากไม่มีพี่เลี้ยงและไม่ใช่ Portfolio ที่รออัปเดต ให้ข้าม (กันเหนียว)
+                if (sub.supervisor_ids.length === 0 && !sub.isPortfolio) continue;
 
-            for (const rs of rotSubs) {
-                const mainSubjectId = rs.subject_id
-                const subSubs = allSubSubjects?.filter(ss => ss.parent_subject_id === mainSubjectId) || []
+                const { data: assignment, error: assignErr } = await supabase
+                    .from('student_assignments')
+                    .insert([{
+                        student_id: student.id,
+                        rotation_id: parseInt(as.rotation_id),
+                        subject_id: sub.subject_id,
+                        sub_subject_id: sub.sub_subject_id,
+                        site_id: parseInt(as.site_id),
+                        status: 'active'
+                    }]).select().single()
 
-                // Helper function to filter valid mentors
-                const getValidMentorRecords = (assignmentId: number, targetMainSub: number, targetSubSub: number | null) => {
-                    return allMentors?.filter(m => {
-                        const isSelected = as.supervisor_ids.includes(String(m.id))
-                        const isSameSite = String(m.site_id) === String(as.site_id)
-                        if (!isSelected || !isSameSite) return false
+                if (assignErr) throw assignErr
 
-                        return m.supervisor_subjects?.some((ss: any) => {
-                            const matchMain = Number(ss.subject_id) === Number(targetMainSub)
-                            if (targetSubSub !== null) {
-                                return matchMain && Number(ss.sub_subject_id) === Number(targetSubSub)
-                            }
-                            return matchMain
-                        })
-                    }).map((m: any) => ({
-                        assignment_id: assignmentId,
-                        supervisor_id: m.id
-                    })) || []
-                }
+                // 4. บันทึกรายชื่อพี่เลี้ยง
+                if (sub.supervisor_ids && sub.supervisor_ids.length > 0) {
+                    const mentorRecords = sub.supervisor_ids.map((sId: any) => ({
+                        assignment_id: assignment.id,
+                        supervisor_id: sId
+                    }))
 
-                if (subSubs.length > 0) {
-                    // Case 1: มีวิชาย่อย
-                    for (const sub of subSubs) {
-                        const { data: subAssign, error: asError } = await supabase
-                            .from('student_assignments')
-                            .insert([{
-                                student_id: student.id,
-                                rotation_id: parseInt(as.rotation_id),
-                                subject_id: mainSubjectId,
-                                sub_subject_id: sub.id,
-                                site_id: parseInt(as.site_id),
-                                status: 'active'
-                            }]).select().single()
+                    const { error: mentorErr } = await supabase
+                        .from('assignment_supervisors')
+                        .insert(mentorRecords)
 
-                        if (asError) throw asError
-                        const mentorRecords = getValidMentorRecords(subAssign.id, mainSubjectId, sub.id)
-                        if (mentorRecords.length > 0) {
-                            await supabase.from('assignment_supervisors').insert(mentorRecords)
-                        }
-                    }
-
-                    // สร้างเล่มรายงาน (Portfolio)
-                    const { data: mainAssign, error: mainErr } = await supabase
-                        .from('student_assignments')
-                        .insert([{
-                            student_id: student.id,
-                            rotation_id: parseInt(as.rotation_id),
-                            subject_id: mainSubjectId,
-                            sub_subject_id: null,
-                            site_id: parseInt(as.site_id),
-                            status: 'active'
-                        }]).select().single()
-
-                    if (mainErr) throw mainErr
-                    const mainMentorRecords = getValidMentorRecords(mainAssign.id, mainSubjectId, null)
-                    if (mainMentorRecords.length > 0) {
-                        await supabase.from('assignment_supervisors').insert(mainMentorRecords)
-                    }
-                } else {
-                    // Case 2: วิชาทั่วไป
-                    const { data: singleAssign, error: asError } = await supabase
-                        .from('student_assignments')
-                        .insert([{
-                            student_id: student.id,
-                            rotation_id: parseInt(as.rotation_id),
-                            subject_id: mainSubjectId,
-                            sub_subject_id: null,
-                            site_id: parseInt(as.site_id),
-                            status: 'active'
-                        }]).select().single()
-
-                    if (asError) throw asError
-                    const mentorRecords = getValidMentorRecords(singleAssign.id, mainSubjectId, null)
-                    if (mentorRecords.length > 0) {
-                        await supabase.from('assignment_supervisors').insert(mentorRecords)
-                    }
+                    if (mentorErr) throw mentorErr
                 }
             }
         }

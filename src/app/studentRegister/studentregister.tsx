@@ -1,6 +1,6 @@
 // //ver4
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -49,58 +49,59 @@ export default function StudentRegisterPage() {
         email: '', class_year: '4',
         assignments: []
     })
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
     // ฟังก์ชันสำหรับดึงข้อมูล (ใช้ซ้ำได้ทั้งตอนโหลดครั้งแรกและตอน Real-time Update)
-    const fetchSites = async () => {
+    const fetchSites = async (silent = false) => {
+        if (!silent) setLoading(true)
         const { data } = await supabase.from('training_sites').select('*')
         if (data) {
             setSites(data)
             const uniqueProvinces = Array.from(new Set(data.map(item => item.province?.trim()).filter(Boolean))) as string[]
             setAllProvinces(uniqueProvinces.sort())
         }
+        if (!silent) setLoading(false)
     }
 
-    // const fetchMentors = async () => {
-    //     const { data } = await supabase.from('supervisors').select('*')
-    //     if (data) setMentors(data)
-    // }
-    const fetchMentors = async () => {
+    const fetchMentors = async (silent = false) => {
+        if (!silent) setLoading(true)
         // ดึงข้อมูลพี่เลี้ยง พร้อมข้อมูลจากตารางกลาง (supervisor_subjects)
         const { data, error } = await supabase
             .from('supervisors')
             .select(`
-            *,
-            supervisor_subjects (
-                subject_id,
-                sub_subject_id
-            )
-        `)
+                *,
+                supervisor_subjects (
+                    subject_id,
+                    sub_subject_id
+                )
+            `)
 
         if (error) {
             console.error("Error fetching mentors:", error)
+            if (!silent) setLoading(false)
             return
         }
 
         if (data) {
             setMentors(data)
-            // console.log("Mentors with subjects:", data) // 🚩 ลองเช็กใน Console ว่ามีก้อน supervisor_subjects มาไหม
         }
+        if (!silent) setLoading(false)
     }
 
-    // ค้นหาฟังก์ชัน fetchConfigs เดิม แล้วแก้ไขเป็นตามนี้:
-    const fetchConfigs = async () => {
+    const fetchConfigs = async (silent = false) => {
+        if (!silent) setLoading(true)
         const { data } = await supabase
             .from('system_configs')
-            .select('key_value') // แก้จาก value เป็น key_value ให้ตรงกับ DB
-            .eq('key_name', 'allowed_student_batch') // แก้จาก key เป็น key_name ให้ตรงกับ DB
+            .select('key_value')
+            .eq('key_name', 'allowed_student_batch')
             .maybeSingle();
 
         if (data) {
             setAllowedBatch(data.key_value);
-            console.log("Allowed Batch loaded:", data.key_value); // เช็คใน Console ดูได้เลยว่าเลข 65 มาหรือยัง
         } else {
             console.warn("Could not find configuration for allowed_student_batch");
         }
+        if (!silent) setLoading(false)
     }
 
     useEffect(() => {
@@ -157,29 +158,31 @@ export default function StudentRegisterPage() {
         fetchRotations()
 
         // --- ระบบ REAL-TIME SUBSCRIPTION ---
+        const handleRealtime = () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+            debounceTimer.current = setTimeout(() => {
+                fetchSites(true)
+                fetchMentors(true)
+                fetchConfigs(true)
+            }, 1500)
+        }
 
         // ติดตามการเปลี่ยนแปลงตารางสถานที่ฝึก (จังหวัด/รพ.)
         const siteChannel = supabase
             .channel('realtime-sites')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, () => {
-                fetchSites()
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, handleRealtime)
             .subscribe()
 
         // ติดตามการเปลี่ยนแปลงตารางพี่เลี้ยง
         const mentorChannel = supabase
             .channel('realtime-mentors')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, () => {
-                fetchMentors()
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, handleRealtime)
             .subscribe()
 
         // ติดตามการเปลี่ยนแปลงตาราง Config (ปีที่อนุญาต)
         const configChannel = supabase
             .channel('realtime-configs')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'system_configs' }, () => {
-                fetchConfigs()
-            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'system_configs' }, handleRealtime)
             .subscribe()
 
         // Clean up เมื่อปิดหน้าจอ
@@ -187,6 +190,7 @@ export default function StudentRegisterPage() {
             supabase.removeChannel(siteChannel)
             supabase.removeChannel(mentorChannel)
             supabase.removeChannel(configChannel)
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
         }
     }, [])
 

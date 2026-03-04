@@ -1,6 +1,6 @@
 // ver3 — API Routes Migration
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr' // เก็บไว้สำหรับ Realtime เท่านั้น
 import {
     Users, ClipboardCheck, Clock,
@@ -35,6 +35,7 @@ export default function SupervisorDashboard() {
     const [urgentRotationName, setUrgentRotationName] = useState<string>("")
     const [configYear, setConfigYear] = useState<string>('')
     const [subjectNames, setSubjectNames] = useState<string[]>([])
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
     // เก็บ supabase client ไว้สำหรับ Realtime subscription เท่านั้น
     const supabase = createBrowserClient(
@@ -58,8 +59,8 @@ export default function SupervisorDashboard() {
         }
     }, [isMockup])
 
-    const fetchRealData = async () => {
-        setLoading(true);
+    const fetchRealData = async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             // ดึง lineUserId จาก LIFF / debug mode
             const urlParams = new URLSearchParams(window.location.search);
@@ -98,19 +99,25 @@ export default function SupervisorDashboard() {
     useEffect(() => {
         fetchRealData();
 
+        const handleRealtime = () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+            debounceTimer.current = setTimeout(() => {
+                fetchRealData(true); // Silent update
+            }, 1500)
+        }
+
         // ฟังการเปลี่ยนแปลงในตาราง assignment_supervisors
         const channel = supabase
             .channel('db-changes')
             .on('postgres_changes',
                 { event: '*', schema: 'public', table: 'assignment_supervisors' },
-                () => {
-                    fetchRealData(); // ถ้ามีการ Insert/Update/Delete ให้ดึงข้อมูลใหม่ทันที
-                }
+                handleRealtime
             )
             .subscribe();
 
         return () => {
             supabase.removeChannel(channel); // ปิด Channel เมื่อออกจากหน้า
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
         };
     }, []);
 

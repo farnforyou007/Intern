@@ -291,6 +291,7 @@ export async function POST(req: Request) {
         }
 
         if (action === 'init-form') {
+            const { track } = body || {}
             // ดึง system config + rotations for add modal
             const { data: config } = await supabase
                 .from('system_configs')
@@ -300,7 +301,7 @@ export async function POST(req: Request) {
 
             const currentYear = config?.key_value || new Date().getFullYear() + 543
 
-            const { data: rotationsData } = await supabase
+            let rotQuery = supabase
                 .from('rotations')
                 .select(`
                     *,
@@ -314,6 +315,13 @@ export async function POST(req: Request) {
                 `)
                 .eq('academic_year', currentYear)
                 .order('round_number', { ascending: true })
+
+            // กรอง track ถ้ามี
+            if (track) {
+                rotQuery = rotQuery.eq('track', track)
+            }
+
+            const { data: rotationsData } = await rotQuery
 
             return apiSuccess({
                 currentYear: currentYear.toString(),

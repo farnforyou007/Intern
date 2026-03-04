@@ -1,6 +1,6 @@
 //version 0100 — API Routes Migration
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr' // เก็บไว้สำหรับ Realtime เท่านั้น
 import {
     UserCheck, ShieldAlert, MapPin, Phone, Trash2,
@@ -537,19 +537,20 @@ export default function AdminManagement() {
     const [currentPage, setCurrentPage] = useState(1)
     const [activeTab, setActiveTab] = useState('pending')
     const [itemsPerPage, setItemsPerPage] = useState(10)
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
     // เก็บ supabase client ไว้สำหรับ Realtime subscription เท่านั้น
     const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
     useEffect(() => {
         fetchData()
-        // const channel = supabase.channel('admin-personnel-realtime')
-        //     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'supervisors' }, (payload) => {
-        //         fetchData();
-        //         Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 4000, icon: 'info', title: `มีผู้สมัครใหม่: คุณ ${payload.new.full_name}` })
-        //     })
-        //     .subscribe()
-        // return () => { supabase.removeChannel(channel) }
+
+        const handleRealtime = () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+            debounceTimer.current = setTimeout(() => {
+                fetchData(true); // Silent update
+            }, 1500)
+        }
 
         const personnelChannel = supabase.channel('personnel-updates')
             .on('postgres_changes', {
@@ -557,7 +558,7 @@ export default function AdminManagement() {
                 schema: 'public',
                 table: 'supervisors'
             }, (payload) => {
-                fetchData(); // รีโหลดข้อมูลใหม่
+                handleRealtime(); // รีโหลดข้อมูลใหม่แบบเงียบๆ
                 if (payload.eventType === 'INSERT') {
                     Swal.fire({
                         toast: true,
@@ -578,19 +579,19 @@ export default function AdminManagement() {
                 schema: 'public',
                 table: 'assignment_supervisors' // ตารางที่คุณใช้คำนวณ Progress
             }, () => {
-                // เมื่อมีการ update/insert ในตารางนี้ ให้ดึง fetchData ใหม่เงียบๆ
-                fetchData();
+                handleRealtime();
             })
             .subscribe()
 
         return () => {
             supabase.removeChannel(personnelChannel)
             supabase.removeChannel(progressChannel)
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
         }
     }, [])
 
-    const fetchData = async () => {
-        setLoading(true)
+    const fetchData = async (silent = false) => {
+        if (!silent) setLoading(true)
         try {
             const res = await fetch('/api/admin/supervisors')
             const result = await res.json()
@@ -842,7 +843,7 @@ export default function AdminManagement() {
                             <span>Export</span>
                         </Button>
 
-                        <Button onClick={fetchData} variant="outline" className="h-12 w-12 p-0 rounded-xl shadow-sm bg-white border-slate-200 text-slate-500 hover:text-blue-600 transition-all active:scale-95 flex items-center justify-center shrink-0">
+                        <Button onClick={() => fetchData()} variant="outline" className="h-12 w-12 p-0 rounded-xl shadow-sm bg-white border-slate-200 text-slate-500 hover:text-blue-600 transition-all active:scale-95 flex items-center justify-center shrink-0">
                             <RefreshCw className={loading ? 'animate-spin' : ''} size={20} />
                         </Button>
                     </div>

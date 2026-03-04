@@ -35,7 +35,11 @@ export const getLineUserId = async (searchParams: URLSearchParams): Promise<stri
             'sp4': 'DEBUG_SV_04',      // พี่เลี้ยงคนที่ 4
             'sp5': 'DEBUG_SV_05',      // พี่เลี้ยงคนที่ 5
             'sp6': 'DEBUG_SV_06',      // พี่เลี้ยงคนที่ 6
-            'sp7': 'DEBUG_SV_07',      // พี่เลี้ยงคนที่ 6
+            'sp7': 'DEBUG_SV_07',      // พี่เลี้ยงคนที่ 
+            'sp8': 'DEBUG_SV_08',      // พี่เลี้ยงคนที่ 
+            'sp9': 'DEBUG_SV_09',      // พี่เลี้ยงคนที่ 
+            'sp10': 'DEBUG_SV_10',      // พี่เลี้ยงคนที่ 
+            'sp11': 'DEBUG_SV_11',      // พี่เลี้ยงคนที่ 
             'panis': 'U4c81677b787575d8eb15b091d37957db',      // พี่เลี้ยงคนที่ 3
             'teacher1': 'DEBUG_TEACHER_01', // อาจารย์คนที่ 1
             'teacher2': 'DEBUG_TEACHER_02', // อาจารย์คนที่ 2

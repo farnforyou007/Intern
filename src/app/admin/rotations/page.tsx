@@ -325,6 +325,8 @@ export default function RotationsPage() {
     const currentYearBS = (new Date().getFullYear() + 543).toString();
     const [selectedYearFilter, setSelectedYearFilter] = useState(currentYearBS);
     const [availableYears, setAvailableYears] = useState<string[]>([]);
+    const [selectedTrackFilter, setSelectedTrackFilter] = useState<string>('all');
+    const TRACKS = ['A', 'B', 'C'];
 
     const [formData, setFormData] = useState({
         name: '',
@@ -332,13 +334,15 @@ export default function RotationsPage() {
         end_date: '',
         academic_year: currentYearBS,
         round_number: 1,
+        track: 'A',
         selected_subjects: [] as number[]
     })
 
     const fetchData = useCallback(async () => {
         setLoading(true)
         try {
-            const res = await fetch(`/api/admin/rotations?year=${selectedYearFilter}`)
+            const trackParam = selectedTrackFilter !== 'all' ? `&track=${selectedTrackFilter}` : ''
+            const res = await fetch(`/api/admin/rotations?year=${selectedYearFilter}${trackParam}`)
             const result = await res.json()
             if (!result.success) throw new Error(result.error)
 
@@ -353,7 +357,7 @@ export default function RotationsPage() {
         } finally {
             setLoading(false)
         }
-    }, [selectedYearFilter, currentYearBS]);
+    }, [selectedYearFilter, selectedTrackFilter, currentYearBS]);
 
     useEffect(() => {
         fetchData()
@@ -368,6 +372,7 @@ export default function RotationsPage() {
                 end_date: rotation.end_date,
                 academic_year: rotation.academic_year,
                 round_number: rotation.round_number,
+                track: rotation.track || 'A',
                 selected_subjects: rotation.rotation_subjects.map((s: any) => s.subject_id)
             })
         } else {
@@ -378,6 +383,7 @@ export default function RotationsPage() {
                 end_date: '',
                 academic_year: selectedYearFilter, // ใช้ปีที่เลือกจาก Filter เป็นค่าเริ่มต้น
                 round_number: rotations.length + 1,
+                track: selectedTrackFilter !== 'all' ? selectedTrackFilter : 'A',
                 selected_subjects: []
             })
         }
@@ -397,7 +403,8 @@ export default function RotationsPage() {
                 start_date: formData.start_date,
                 end_date: formData.end_date,
                 academic_year: formData.academic_year,
-                round_number: formData.round_number
+                round_number: formData.round_number,
+                track: formData.track
             }
 
             const res = await fetch('/api/admin/rotations', {
@@ -513,6 +520,20 @@ export default function RotationsPage() {
                             </select>
                         </div>
 
+                        <div className="flex items-center gap-3 bg-white px-4 h-12 rounded-xl border border-slate-200 shadow-sm grow sm:grow-0">
+                            <span className="text-sm font-bold text-slate-400">สาย</span>
+                            <select
+                                value={selectedTrackFilter}
+                                onChange={(e) => setSelectedTrackFilter(e.target.value)}
+                                className="text-sm font-black text-emerald-600 bg-transparent outline-none cursor-pointer"
+                            >
+                                <option value="all">ทุกสาย</option>
+                                {TRACKS.map(t => (
+                                    <option key={t} value={t}>สาย {t}</option>
+                                ))}
+                            </select>
+                        </div>
+
                         <Button
                             onClick={() => handleOpenModal()}
                             className="h-12 px-6 rounded-xl bg-slate-900 hover:bg-black text-white font-black shadow-lg shadow-slate-200 flex items-center gap-2 transition-all active:scale-95 whitespace-nowrap"
@@ -547,7 +568,10 @@ export default function RotationsPage() {
                                     <TableRow key={rot.id} className="hover:bg-slate-50/50 transition-colors border-b border-slate-50">
                                         <TableCell className="px-6 py-5 font-black text-slate-400">#{rot.round_number}</TableCell>
                                         <TableCell className="px-6 py-5">
-                                            <div className="font-bold text-slate-900">{rot.name}</div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-slate-900">{rot.name}</span>
+                                                <span className="text-[10px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded border border-emerald-100">สาย {rot.track || 'A'}</span>
+                                            </div>
                                             <div className="flex flex-wrap gap-1 mt-1.5">
                                                 {rot.rotation_subjects.length > 0 ? (
                                                     rot.rotation_subjects.map((rs: any) => {
@@ -560,7 +584,7 @@ export default function RotationsPage() {
                                         <TableCell className="px-6 py-5">
                                             <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
                                                 <Calendar size={14} className="text-slate-400" />
-                                                {new Date(rot.start_date).toLocaleDateString('th-TH')} ถึง {new Date(rot.end_date).toLocaleDateString('th-TH')}
+                                                {new Date(rot.start_date).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })} ถึง {new Date(rot.end_date).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}
                                             </div>
                                             <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">ปีการศึกษา {rot.academic_year}</div>
                                         </TableCell>
@@ -596,6 +620,19 @@ export default function RotationsPage() {
                         <div className="col-span-2 md:col-span-1">
                             <label className="text-sm font-bold text-slate-700 mb-1.5 block">ปีการศึกษา</label>
                             <Input value={formData.academic_year} onChange={(e) => setFormData({ ...formData, academic_year: e.target.value })} placeholder="เช่น 2569" className="h-12 rounded-xl border-slate-200" />
+                        </div>
+
+                        <div className="col-span-2 md:col-span-1">
+                            <label className="text-sm font-bold text-slate-700 mb-1.5 flex items-center gap-2">สาย</label>
+                            <select
+                                value={formData.track}
+                                onChange={(e) => setFormData({ ...formData, track: e.target.value })}
+                                className="w-full h-12 rounded-xl border border-slate-200 px-4 text-sm font-bold bg-white"
+                            >
+                                {TRACKS.map(t => (
+                                    <option key={t} value={t}>สาย {t}</option>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="col-span-2">

@@ -5,7 +5,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import {
     Users, CheckCircle, AlertCircle, TrendingUp, TrendingDown,
     GraduationCap, User, LayoutDashboard, Award, MapPin,
-    CalendarDays, ChevronDown, Filter
+    CalendarDays, ChevronDown, Filter, Clock
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import {
@@ -371,13 +371,16 @@ export default function TeacherDashboard() {
     }, [finishedStudents]);
 
     const siteStats = useMemo(() => {
-        const map: { [site: string]: { province: string; studentScores: { [studentId: string]: number[] } } } = {}
+        const map: { [site: string]: { province: string; studentScores: { [studentId: string]: number[] }; isSiteFullyDone: boolean } } = {}
         analyticsStudentScores.forEach((s: any) => {
             const site = s.place?.site_name || 'ไม่ระบุ'
             const studentId = String(s.student?.id || s.student?.student_code || Math.random())
-            if (!map[site]) map[site] = { province: s.place?.province || '-', studentScores: {} }
+            if (!map[site]) map[site] = { province: s.place?.province || '-', studentScores: {}, isSiteFullyDone: true }
             if (!map[site].studentScores[studentId]) map[site].studentScores[studentId] = []
             map[site].studentScores[studentId].push(s.netScore)
+
+            // ถ้ามีนักศึกษาคนไหนใน site นี้ที่ยังประเมินไม่เสร็จสมบูรณ์ -> ให้ทั้ง site เป็น incomplete
+            if (!s.isFullyDone) map[site].isSiteFullyDone = false
         })
         return Object.entries(map).map(([site, v]) => {
             const uniqueStudents = Object.keys(v.studentScores).length
@@ -390,7 +393,8 @@ export default function TeacherDashboard() {
                 site,
                 province: v.province,
                 count: uniqueStudents,
-                avg: parseFloat(avg.toFixed(2))
+                avg: parseFloat(avg.toFixed(2)),
+                isSiteFullyDone: v.isSiteFullyDone
             }
         }).sort((a, b) => b.avg - a.avg)
     }, [analyticsStudentScores])
@@ -727,7 +731,16 @@ export default function TeacherDashboard() {
                                             <td className="p-4 text-center whitespace-nowrap">
                                                 <span className="bg-indigo-50 text-indigo-600 font-black text-xs px-2.5 py-1 rounded-lg">{s.count} คน</span>
                                             </td>
-                                            <td className="p-4 text-center font-black text-lg text-indigo-600">{s.avg}</td>
+                                            <td className="p-4 text-center">
+                                                {s.isSiteFullyDone ? (
+                                                    <span className="font-black text-lg text-indigo-600">{s.avg}</span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-600 font-black text-[11px] border border-amber-100">
+                                                        <Clock size={12} />
+                                                        ยังประเมินไม่ครบ
+                                                    </span>
+                                                )}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>

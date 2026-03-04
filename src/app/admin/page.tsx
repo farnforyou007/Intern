@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     Users, Hospital, BookOpen, GraduationCap,
@@ -102,6 +102,7 @@ export default function AdminDashboard() {
     // 🔒 Year filter
     const [selectedYear, setSelectedYear] = useState<string>('')
     const [yearOptions, setYearOptions] = useState<string[]>([])
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null)
     // เก็บ supabase client ไว้สำหรับ Realtime subscription เท่านั้น
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -111,18 +112,29 @@ export default function AdminDashboard() {
     useEffect(() => {
         fetchData()
 
+        const handleRealtime = () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+            debounceTimer.current = setTimeout(() => {
+                fetchData(true) // Silent update
+            }, 1500)
+        }
+
         // Real-time Listener
         const channel = supabase.channel('admin-dashboard-realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => fetchData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, () => fetchData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, () => fetchData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'subjects' }, () => fetchData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'subjects' }, handleRealtime)
             .subscribe()
 
-        return () => { supabase.removeChannel(channel) }
+        return () => {
+            supabase.removeChannel(channel)
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+        }
     }, [selectedYear])
 
-    const fetchData = async () => {
+    const fetchData = async (silent = false) => {
+        if (!silent) setLoading(true)
         try {
             const yearParam = selectedYear ? `?year=${selectedYear}` : ''
             const res = await fetch(`/api/admin/dashboard${yearParam}`)

@@ -1,6 +1,6 @@
 // ver3 — API Routes Migration
 "use client"
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr' // เก็บไว้สำหรับ Realtime เท่านั้น
 import AdminLayout from '@/components/AdminLayout'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -60,14 +60,15 @@ export default function StudentManagement() {
     const [selectedYearFilter, setSelectedYearFilter] = useState<string>(currentYearBS);
     const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('all');       // รุ่นรหัส (65, 67)
     const [availableYears, setAvailableYears] = useState<string[]>([]);
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
     // เพิ่มฟังก์ชันดึงรายการปีที่มีในระบบ (วางไว้ก่อน useEffect)
     const fetchAvailableYears = useCallback(async () => {
         // ย้ายมาดึงพร้อม fetchData แล้ว (API route return availableYears มาให้)
     }, []);
 
-    const fetchData = useCallback(async () => {
-        setLoading(true)
+    const fetchData = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true)
         try {
             const res = await fetch(`/api/admin/students?year=${selectedYearFilter}`)
             const result = await res.json()
@@ -101,16 +102,26 @@ export default function StudentManagement() {
     useEffect(() => {
         fetchData()
 
+        const handleRealtime = () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+            debounceTimer.current = setTimeout(() => {
+                fetchData(true) // Silent update
+            }, 1500)
+        }
+
         const channel = supabase
             .channel('student-management-realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => fetchData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'student_assignments' }, () => fetchData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, () => fetchData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, () => fetchData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, () => fetchData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'student_assignments' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'training_sites' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'supervisors' }, handleRealtime)
             .subscribe()
 
-        return () => { supabase.removeChannel(channel) }
+        return () => {
+            supabase.removeChannel(channel)
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+        }
     }, [fetchData])
 
     // --- แก้ไขฟังก์ชัน getDisplayAssignment ให้แสดงผลัดที่ตรงกับคำค้นหาโดยอัตโนมัติ ---
@@ -1230,9 +1241,10 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
 
     const [form, setForm] = useState<any>({
         student_code: '', prefix: 'นางสาว', first_name: '', last_name: '', nickname: '',
-        phone: '', email: '', training_year: '',
+        phone: '', email: '', training_year: '', track: 'A',
         assignments: []
     });
+    const TRACKS = ['A', 'B', 'C'];
 
     useEffect(() => {
         if (isOpen) {
@@ -1241,16 +1253,19 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                 const res = await fetch('/api/admin/students', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'init-form' })
+                    body: JSON.stringify({ action: 'init-form', track: form.track })
                 })
                 const result = await res.json()
                 if (!result.success) return
 
                 const { currentYear, rotations: rotationsData } = result.data
 
-                setForm({
-                    student_code: '', prefix: 'นางสาว', first_name: '', last_name: '', nickname: '',
-                    phone: '', email: '',
+                setForm((prev: any) => ({
+                    ...prev,
+                    student_code: prev.student_code, prefix: prev.prefix,
+                    first_name: prev.first_name, last_name: prev.last_name,
+                    nickname: prev.nickname, phone: prev.phone,
+                    email: prev.email,
                     training_year: currentYear,
                     assignments: (rotationsData || []).map((r: any) => {
                         const subjects: any[] = [];
@@ -1290,13 +1305,18 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                             subjects: subjects
                         };
                     })
-                });
+                }));
             };
             initData();
             setAvatarPreview(null);
             setAvatarFile(null);
         }
-    }, [isOpen]);
+    }, [isOpen, form.track]);
+
+    // ฟังก์ชันเปลี่ยนสาย — reload ผลัดใหม่ตามสายที่เลือก
+    const handleTrackChange = (newTrack: string) => {
+        setForm((prev: any) => ({ ...prev, track: newTrack }))
+    }
 
     // ฟังก์ชันจัดการการเลือกโรงพยาบาล
     const handleSelectSite = (idx: number, site: any) => {
@@ -1402,7 +1422,8 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                 nickname: form.nickname,
                 phone: form.phone,
                 email: form.email,
-                training_year: form.training_year
+                training_year: form.training_year,
+                track: form.track
             }))
             formData.append('assignments', JSON.stringify(form.assignments))
             formData.append('mentorsData', JSON.stringify(mentors))
@@ -1486,7 +1507,7 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                             </div>
 
                             <div className="space-y-6">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div className="space-y-2">
                                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสนักศึกษา</label>
                                         <Input value={form.student_code || ''} onChange={e => setForm({ ...form, student_code: e.target.value })} className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-base px-6 focus:ring-2 ring-blue-500" placeholder="6XXXXXXX" />
@@ -1494,6 +1515,18 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                                     <div className="space-y-2">
                                         <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">ชื่อเล่น</label>
                                         <Input value={form.nickname || ''} onChange={e => setForm({ ...form, nickname: e.target.value })} className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-base px-6 focus:ring-2 ring-blue-500" placeholder="ชื่อเล่น" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[11px] font-black text-emerald-500 uppercase tracking-widest ml-1">สาย</label>
+                                        <select
+                                            value={form.track}
+                                            onChange={e => handleTrackChange(e.target.value)}
+                                            className="w-full h-14 rounded-2xl bg-emerald-50 border-none font-black text-base px-6 focus:ring-2 ring-emerald-500 outline-none text-emerald-700"
+                                        >
+                                            {TRACKS.map(t => (
+                                                <option key={t} value={t}>สาย {t}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
 
