@@ -769,19 +769,55 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                         };
                     }
 
+                    // ✅ ถ้า sub_subject_id == null แต่มี sub_subjects อยู่ → เป็นวิชาหลักสำหรับประเมินเล่ม
+                    const hasSubSubjects = !curr.sub_subject_id && assignments.some(
+                        (a: any) => a.subject_id === curr.subject_id && a.sub_subject_id != null
+                    );
+                    const displayName = curr.sub_subjects?.name
+                        || (hasSubSubjects ? `${curr.subjects?.name || 'ไม่ระบุวิชา'} (ประเมินเล่ม)` : curr.subjects?.name || 'ไม่ระบุวิชา');
+
                     acc[rId].subjects_in_rotation.push({
                         assignment_id: curr.id,
                         subject_id: curr.subject_id,
                         sub_subject_id: curr.sub_subject_id,
-                        // ✅ ใช้ชื่อที่ดึงมาจากการ Optimize
-                        displayName: curr.sub_subjects?.name || curr.subjects?.name || 'ไม่ระบุวิชา',
+                        displayName,
                         supervisor_ids: curr.assignment_supervisors?.map((sv: any) => sv.supervisor_id) || [],
                         supervisors_data: curr.assignment_supervisors?.map((sv: any) => sv.supervisors) || []
                     });
                     return acc;
                 }, {});
 
-                setForm({ ...data, grouped_assignments: Object.values(grouped) });
+                // ✅ เช็คแต่ละผลัด: ถ้ามีวิชาย่อย (sub_subject_id != null) แต่ไม่มี entry วิชาหลัก (sub_subject_id == null)
+                // ให้เพิ่ม entry วิชาหลักสำหรับประเมินเล่มเข้าไปด้วย
+                const groupedValues: any[] = Object.values(grouped);
+                for (const rot of groupedValues) {
+                    const subjects = rot.subjects_in_rotation;
+                    // หา subject_id ที่มี sub_subject entries
+                    const subjectIdsWithSubs = [...new Set(
+                        subjects.filter((s: any) => s.sub_subject_id != null).map((s: any) => s.subject_id)
+                    )];
+                    for (const sjId of subjectIdsWithSubs) {
+                        // เช็คว่ามี entry วิชาหลัก (sub_subject_id == null) หรือยัง
+                        const hasParent = subjects.some((s: any) => s.subject_id === sjId && s.sub_subject_id == null);
+                        if (!hasParent) {
+                            // ดึงชื่อวิชาจาก entry ที่มีอยู่แล้ว
+                            const existingSub = subjects.find((s: any) => s.subject_id === sjId);
+                            const parentName = existingSub?.subjects?.name || assignments.find((a: any) => a.subject_id === sjId)?.subjects?.name || 'ไม่ระบุวิชา';
+                            // เพิ่ม entry ใหม่ที่ด้านบนสุดของกลุ่มวิชานี้
+                            const insertIdx = subjects.findIndex((s: any) => s.subject_id === sjId);
+                            subjects.splice(insertIdx, 0, {
+                                assignment_id: null, // ยังไม่มีใน DB — จะสร้างตอน save
+                                subject_id: sjId,
+                                sub_subject_id: null,
+                                displayName: `${parentName} (ประเมินเล่ม)`,
+                                supervisor_ids: [],
+                                supervisors_data: []
+                            });
+                        }
+                    }
+                }
+
+                setForm({ ...data, grouped_assignments: groupedValues });
                 setIsEditing(false);
                 setSiteSearch("");
                 setActiveEditIdx(null);
@@ -1220,6 +1256,14 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                         const subjects: any[] = [];
                         (r.rotation_subjects || []).forEach((rs: any) => {
                             if (rs.subjects?.sub_subjects && rs.subjects.sub_subjects.length > 0) {
+                                // เพิ่มวิชาหลัก (parent) สำหรับประเมินเล่ม
+                                subjects.push({
+                                    subject_id: rs.subject_id,
+                                    sub_subject_id: null,
+                                    displayName: `${rs.subjects.name} (ประเมินเล่ม)`,
+                                    supervisor_ids: []
+                                });
+                                // เพิ่มวิชาย่อยแต่ละตัว
                                 rs.subjects.sub_subjects.forEach((ss: any) => {
                                     subjects.push({
                                         subject_id: rs.subject_id,

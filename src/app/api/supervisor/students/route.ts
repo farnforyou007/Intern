@@ -80,30 +80,41 @@ export async function GET(req: Request) {
             return checkPerm(assign)
         })
 
-        // 3.5 ดึง evaluation_logs + evaluation_groups เพื่อคำนวณ progress
+        // 3.5 ดึง evaluation_logs + evaluation_groups + answers เพื่อคำนวณ progress แบบละเอียด
         const assignmentIds = filteredMine.map((item: any) => item.student_assignments?.id).filter(Boolean)
         const subjectIds = [...new Set(filteredMine.map((item: any) => item.student_assignments?.subject_id).filter(Boolean))]
 
-        let logsMap = new Map<number, number>()
+        // ดึง logs พร้อมจำนวน answers ต่อ log
+        // key: assignmentId -> { groupId -> answerCount }
+        let logsDetailMap = new Map<number, Map<string, number>>()
         if (assignmentIds.length > 0) {
             const { data: logs } = await supabase
                 .from('evaluation_logs')
-                .select('assignment_id')
+                .select('assignment_id, group_id, evaluation_answers(id)')
                 .eq('supervisor_id', supervisor.id)
                 .in('assignment_id', assignmentIds)
             for (const l of (logs || [])) {
-                logsMap.set(l.assignment_id, (logsMap.get(l.assignment_id) || 0) + 1)
+                if (!logsDetailMap.has(l.assignment_id)) logsDetailMap.set(l.assignment_id, new Map())
+                const groupMap = logsDetailMap.get(l.assignment_id)!
+                groupMap.set(l.group_id, (l.evaluation_answers as any[])?.length || 0)
             }
         }
 
-        let groupsCountMap = new Map<string, number>()
+        // ดึง evaluation_groups พร้อมจำนวน items ต่อ group
+        // key: "subjectId-subSubjectId" -> [{ groupId, itemCount }]
+        let groupsDetailMap = new Map<string, { groupId: string; itemCount: number }[]>()
         if (subjectIds.length > 0) {
             const { data: groups } = await supabase
                 .from('evaluation_groups')
-                .select('id, subject_id')
+                .select('id, subject_id, sub_subject_id, evaluation_items(id)')
                 .in('subject_id', subjectIds)
             for (const g of (groups || [])) {
-                groupsCountMap.set(g.subject_id, (groupsCountMap.get(g.subject_id) || 0) + 1)
+                const key = `${g.subject_id}-${g.sub_subject_id || 'null'}`
+                if (!groupsDetailMap.has(key)) groupsDetailMap.set(key, [])
+                groupsDetailMap.get(key)!.push({
+                    groupId: g.id,
+                    itemCount: (g.evaluation_items as any[])?.length || 0
+                })
             }
         }
 
@@ -111,14 +122,28 @@ export async function GET(req: Request) {
         const mineWithProgress = filteredMine.map((item: any) => {
             const assignId = item.student_assignments?.id
             const subjId = item.student_assignments?.subject_id
-            const logsCount = logsMap.get(assignId) || 0
-            const totalGroups = groupsCountMap.get(subjId) || 1
-            const status = item.is_evaluated ? 2 : (logsCount > 0 ? 1 : 0)
+            const subSubjId = item.student_assignments?.sub_subject_id
+            const groupKey = `${subjId}-${subSubjId || 'null'}`
+
+            const groupsForAssignment = groupsDetailMap.get(groupKey) || []
+            const totalGroups = groupsForAssignment.length || 1
+            const logsForAssignment = logsDetailMap.get(assignId) || new Map()
+
+            // นับ group ที่ตอบครบทุกข้อเป็น "done"
+            let completedGroups = 0
+            let hasAnyAnswers = false
+            for (const group of groupsForAssignment) {
+                const answerCount = logsForAssignment.get(group.groupId) || 0
+                if (answerCount > 0) hasAnyAnswers = true
+                if (answerCount >= group.itemCount && group.itemCount > 0) completedGroups++
+            }
+
+            const status = item.is_evaluated ? 2 : (hasAnyAnswers ? 1 : 0)
 
             return {
                 ...item,
-                has_eval_logs: logsCount > 0,
-                eval_progress: { done: logsCount, total: totalGroups },
+                has_eval_logs: hasAnyAnswers,
+                eval_progress: { done: completedGroups, total: totalGroups },
                 evaluation_status: status
             }
         })

@@ -191,26 +191,99 @@ export async function POST(req: Request) {
 
             if (studentError) throw studentError
 
-            // Update assignments + supervisors
+            // Update assignments + supervisors (OPTIMIZED: batch operations)
             if (grouped_assignments && grouped_assignments.length > 0) {
+                // Phase 1: แยก entries เก่า vs ใหม่ + เตรียมข้อมูล
+                const existingEntries: { id: number; siteId: number; supervisorIds: number[] }[] = []
+                const newEntries: { rotationId: number; siteId: number; subjectId: number; subSubjectId: number | null; supervisorIds: number[] }[] = []
+
                 for (const rot of grouped_assignments) {
                     for (const sub of rot.subjects_in_rotation) {
-                        await supabase.from('student_assignments')
-                            .update({ site_id: rot.site_id })
-                            .eq('id', sub.assignment_id)
-
-                        await supabase.from('assignment_supervisors')
-                            .delete()
-                            .eq('assignment_id', sub.assignment_id)
-
-                        if (sub.supervisor_ids && sub.supervisor_ids.length > 0) {
-                            const mentorRecords = sub.supervisor_ids.map((sId: any) => ({
-                                assignment_id: sub.assignment_id,
-                                supervisor_id: sId
-                            }))
-                            await supabase.from('assignment_supervisors').insert(mentorRecords)
+                        if (sub.assignment_id) {
+                            existingEntries.push({
+                                id: sub.assignment_id,
+                                siteId: parseInt(rot.site_id),
+                                supervisorIds: sub.supervisor_ids || []
+                            })
+                        } else {
+                            newEntries.push({
+                                rotationId: parseInt(rot.rotation_id),
+                                siteId: parseInt(rot.site_id),
+                                subjectId: sub.subject_id,
+                                subSubjectId: sub.sub_subject_id || null,
+                                supervisorIds: sub.supervisor_ids || []
+                            })
                         }
                     }
+                }
+
+                // Phase 2: ทำงานพร้อมกัน — update เก่า + insert ใหม่
+                const allAssignmentIds = existingEntries.map(e => e.id)
+
+                const [, newAssignments] = await Promise.all([
+                    // Batch update site_id ของ entries เดิม (กลุ่มตาม site_id เพื่อ batch)
+                    (async () => {
+                        const bySite = existingEntries.reduce((acc, e) => {
+                            acc[e.siteId] = acc[e.siteId] || []
+                            acc[e.siteId].push(e.id)
+                            return acc
+                        }, {} as Record<number, number[]>)
+                        await Promise.all(
+                            Object.entries(bySite).map(([siteId, ids]) =>
+                                supabase.from('student_assignments')
+                                    .update({ site_id: parseInt(siteId) })
+                                    .in('id', ids)
+                            )
+                        )
+                    })(),
+                    // Batch insert entries ใหม่
+                    newEntries.length > 0
+                        ? supabase.from('student_assignments')
+                            .insert(newEntries.map(e => ({
+                                student_id: studentId,
+                                rotation_id: e.rotationId,
+                                site_id: e.siteId,
+                                subject_id: e.subjectId,
+                                sub_subject_id: e.subSubjectId
+                            })))
+                            .select('id')
+                            .then(res => {
+                                if (res.error) throw res.error
+                                return res.data || []
+                            })
+                        : Promise.resolve([]),
+                    // Bulk delete supervisors เก่าทั้งหมดในคำสั่งเดียว
+                    allAssignmentIds.length > 0
+                        ? supabase.from('assignment_supervisors').delete().in('assignment_id', allAssignmentIds)
+                        : Promise.resolve(null)
+                ])
+
+                // Phase 3: รวม supervisor records ใหม่ทั้งหมดแล้ว insert ครั้งเดียว
+                const allMentorRecords: { assignment_id: number; supervisor_id: number }[] = []
+
+                // Mentors ของ entries เดิม
+                for (const e of existingEntries) {
+                    for (const sId of e.supervisorIds) {
+                        allMentorRecords.push({ assignment_id: e.id, supervisor_id: sId })
+                    }
+                }
+
+                // Mentors ของ entries ใหม่
+                if (newAssignments && newAssignments.length > 0) {
+                    newEntries.forEach((e, i) => {
+                        const newId = newAssignments[i]?.id
+                        if (newId) {
+                            for (const sId of e.supervisorIds) {
+                                allMentorRecords.push({ assignment_id: newId, supervisor_id: sId })
+                            }
+                        }
+                    })
+                }
+
+                // Bulk insert supervisor records ทั้งหมดในครั้งเดียว
+                if (allMentorRecords.length > 0) {
+                    const { error: svError } = await supabase.from('assignment_supervisors').insert(allMentorRecords)
+                    if (svError) throw svError
                 }
             }
 

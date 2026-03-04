@@ -79,9 +79,9 @@ export default function StudentListPage() {
                 <div>
                     <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
                         <Users size={28} className="text-blue-600" />
-                        <span>STUDENTS <span className="text-blue-600">List</span></span>
+                        <span>ข้อมูล <span className="text-blue-600">นักศึกษา</span></span>
                     </h1>
-                    <p className="text-slate-400 font-bold mt-2 ml-1 text-[11px] uppercase tracking-[0.2em]">รายชื่อนักศึกษาในความดูแล</p>
+                    <p className="text-slate-400 font-bold mt-2 ml-1 text-[11px] uppercase tracking-[0.2em]">รายชื่อนักศึกษาในรายวิชา</p>
                 </div>
             </div>
 

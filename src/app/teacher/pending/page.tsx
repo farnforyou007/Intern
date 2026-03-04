@@ -49,7 +49,7 @@ export default function TeacherPendingPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#F0F7FF] flex flex-col items-center justify-center p-6 text-center font-sans">
+        <div className="fixed inset-0 z-9999 min-h-screen bg-[#F0F7FF] flex flex-col items-center justify-center p-6 text-center font-sans">
             {/* Icon Box - ใช้สีเหลือง Amber ให้ดูเป็นสถานะรอเหมือนกัน */}
             <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center text-amber-500 mb-8 shadow-xl shadow-indigo-100 animate-pulse relative">
                 <Clock size={48} />

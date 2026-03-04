@@ -624,11 +624,11 @@ export default function SmartRegister() {
 
                 } else {
                     // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
-                    liff.login({ redirectUri: window.location.href });
+                    // liff.login({ redirectUri: window.location.href });
                     // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
                 }
-                // setLineUserId("DEBUG_SV_07");
-                // setLineDisplayName("Tester Teacher PP");
+                setLineUserId("DEBUG_TEACHER_03");
+                setLineDisplayName("Tester Teacher Phadungkun");
             } catch (err) {
                 console.error("LIFF Init Error", err)
 

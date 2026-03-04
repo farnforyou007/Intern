@@ -55,14 +55,14 @@ export async function GET(req: Request) {
 
         const hasDoubleRole = user.role === 'supervisor' || user.role === 'both'
 
-        // 3. ดึง Subjects
+        // 3. ดึง Subjects (พร้อม sub_subject_id เพื่อแยกวิชาย่อย)
         const { data: subData } = await supabase
             .from('supervisor_subjects')
-            .select('subject_id, subjects(name, id)')
+            .select('subject_id, sub_subject_id, subjects(name, id), sub_subjects:sub_subject_id(name, id)')
             .eq('supervisor_id', user.id)
 
         const subjectList = subData || []
-        const subjectIds = subjectList.map((s: any) => s.subject_id)
+        const subjectIds = [...new Set(subjectList.map((s: any) => s.subject_id))]
 
         let assignments: any[] = []
         let analyticsData: any[] = []
@@ -106,9 +106,30 @@ export async function GET(req: Request) {
                 ? (rawAnalyticsRes || []).filter((a: any) => yearStudentIds!.has(String(a.student_id)))
                 : (rawAnalyticsRes || [])
 
-            // Process analytics
-            analyticsData = (analyticsRes || []).map((item: any) => {
-                const logs = item.evaluation_logs || []
+            // Process analytics — GROUP BY student+subject (เหมือน subjects API)
+            // เพื่อให้คะแนน Top 5 / site stats ตรงกับหน้าประเมิน
+            const studentSubjectMap: { [key: string]: any } = {}
+                ; (analyticsRes || []).forEach((item: any) => {
+                    const studentId = item.student_id
+                    const subjectId = item.subject_id
+                    if (!studentId) return
+                    const key = `${studentId}-${subjectId}`
+                    if (!studentSubjectMap[key]) {
+                        studentSubjectMap[key] = {
+                            student: item.students,
+                            place: item.training_sites,
+                            subjectName: item.subjects?.name,
+                            subject_id: subjectId,
+                            allLogs: []
+                        }
+                    }
+                    if (item.evaluation_logs?.length > 0) {
+                        studentSubjectMap[key].allLogs.push(...item.evaluation_logs)
+                    }
+                })
+
+            analyticsData = Object.values(studentSubjectMap).map((item: any) => {
+                const logs = item.allLogs || []
                 const supervisorMap: { [key: string]: { supervisorId: string; supervisorName: string; logs: any[] } } = {}
                 logs.forEach((log: any) => {
                     const svId = log.supervisor_id || 'unknown'
@@ -145,10 +166,10 @@ export async function GET(req: Request) {
                     }))
                 }
                 return {
-                    id: item.id,
-                    student: item.students,
-                    place: item.training_sites,
-                    subjectName: item.subjects?.name,
+                    id: `${item.student?.id}-${item.subject_id}`,
+                    student: item.student,
+                    place: item.place,
+                    subjectName: item.subjectName,
                     subject_id: item.subject_id,
                     evaluations,
                     mentorCount

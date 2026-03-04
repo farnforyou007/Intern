@@ -15,11 +15,11 @@ export const getLineUserId = async (searchParams: URLSearchParams): Promise<stri
         if (typeof window !== 'undefined') {
             localStorage.removeItem('debug_mode'); // ลบค่าที่จำไว้ในเครื่อง
             // ทำการ Reload หน้าเพื่อให้ระบบกลับไปเริ่มกระบวนการ LIFF ใหม่
-            window.location.href = window.location.pathname; 
+            window.location.href = window.location.pathname;
         }
         return null;
     }
-    
+
     let activeDebugKey = debugKey;
     if (!activeDebugKey && typeof window !== 'undefined') {
         activeDebugKey = localStorage.getItem('debug_mode');
@@ -35,9 +35,11 @@ export const getLineUserId = async (searchParams: URLSearchParams): Promise<stri
             'sp4': 'DEBUG_SV_04',      // พี่เลี้ยงคนที่ 4
             'sp5': 'DEBUG_SV_05',      // พี่เลี้ยงคนที่ 5
             'sp6': 'DEBUG_SV_06',      // พี่เลี้ยงคนที่ 6
+            'sp7': 'DEBUG_SV_07',      // พี่เลี้ยงคนที่ 6
             'panis': 'U4c81677b787575d8eb15b091d37957db',      // พี่เลี้ยงคนที่ 3
             'teacher1': 'DEBUG_TEACHER_01', // อาจารย์คนที่ 1
             'teacher2': 'DEBUG_TEACHER_02', // อาจารย์คนที่ 2
+            'teacher3': 'DEBUG_TEACHER_03', // อาจารย์คนที่ 3
             'admin': 'DEBUG_ADMIN_01'  // แอดมิน (ถ้ามี)
         };
         const userId = mockMap[activeDebugKey];

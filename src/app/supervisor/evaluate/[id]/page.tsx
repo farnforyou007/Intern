@@ -170,28 +170,50 @@ export default function EvaluationPage() {
         setAutoSaveStatus('saved');
         if (isFinal) {
             // 🚩 เช็คว่าตอบครบทุกข้อทุกหมวดหรือยัง
-            const totalItems = groups.reduce((sum: number, g: any) => sum + (g.evaluation_items?.length || 0), 0)
-            const answeredItems = groups.reduce((sum: number, g: any) => {
-                return sum + (g.evaluation_items?.filter((item: any) => scores[item.id] !== undefined).length || 0)
-            }, 0)
+            let firstIncompleteGroupIdx = -1
+            let firstUnansweredItemId: number | null = null
 
-            if (answeredItems < totalItems) {
+            for (let i = 0; i < groups.length; i++) {
+                const g = groups[i]
+                const unanswered = g.evaluation_items?.find((item: any) => scores[item.id] === undefined)
+                if (unanswered) {
+                    firstIncompleteGroupIdx = i
+                    firstUnansweredItemId = unanswered.id
+                    break
+                }
+            }
+
+            if (firstIncompleteGroupIdx >= 0) {
+                const incompleteGroup = groups[firstIncompleteGroupIdx]
+                const totalItems = groups.reduce((sum: number, g: any) => sum + (g.evaluation_items?.length || 0), 0)
+                const answeredItems = groups.reduce((sum: number, g: any) => {
+                    return sum + (g.evaluation_items?.filter((item: any) => scores[item.id] !== undefined).length || 0)
+                }, 0)
                 const remaining = totalItems - answeredItems
-                const result = await Swal.fire({
+
+                await Swal.fire({
                     icon: 'warning',
-                    title: 'ยังประเมินไม่ครบ',
-                    html: `<p>ยังเหลืออีก <b>${remaining}</b> ข้อ จากทั้งหมด <b>${totalItems}</b> ข้อ</p><p class="text-sm text-slate-400 mt-2">ต้องการบันทึกและส่งผลอยู่หรือไม่?</p>`,
-                    showCancelButton: true,
-                    confirmButtonText: 'ส่งเลย',
-                    cancelButtonText: 'กลับไปทำต่อ',
+                    title: 'ประเมินยังไม่ครบ',
+                    html: `<p>ยังเหลืออีก <b>${remaining}</b> ข้อ จากทั้งหมด <b>${totalItems}</b> ข้อ</p><p class="text-sm text-slate-500 mt-2">กำลังพาไปที่หมวด <b>${incompleteGroup.group_name}</b></p>`,
+                    confirmButtonText: 'ไปที่ข้อที่ยังไม่ได้ทำ',
                     confirmButtonColor: '#064e3b',
-                    cancelButtonColor: '#94a3b8',
                     customClass: { popup: 'rounded-[2.5rem] p-6 font-sans' }
                 })
-                if (!result.isConfirmed) {
-                    setSaving(false)
-                    return
-                }
+
+                // นำทางไปหมวดที่ยังไม่ครบ
+                setActiveTab(firstIncompleteGroupIdx)
+                setSaving(false)
+
+                // รอ render แล้ว scroll ไปหาข้อที่ยังไม่ตอบ
+                setTimeout(() => {
+                    const el = document.getElementById(`eval-item-${firstUnansweredItemId}`)
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        el.classList.add('ring-2', 'ring-rose-400', 'ring-offset-2')
+                        setTimeout(() => el.classList.remove('ring-2', 'ring-rose-400', 'ring-offset-2'), 3000)
+                    }
+                }, 300)
+                return
             }
 
             await fetch('/api/supervisor/evaluate', {
@@ -355,7 +377,7 @@ export default function EvaluationPage() {
                     </div>
                 </div>
                 {currentGroup?.evaluation_items?.map((item: any, idx: number) => (
-                    <div key={item.id} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 space-y-4">
+                    <div key={item.id} id={`eval-item-${item.id}`} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-6 space-y-4 transition-all">
                         <div className="flex justify-between items-start gap-4">
                             <h3 className="font-black text-slate-800 text-base leading-tight flex gap-3">
                                 <span className="text-emerald-700">{idx + 1}.</span>

@@ -2,11 +2,12 @@
 
 //ver00
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { createBrowserClient } from '@supabase/ssr'
 import {
     ChevronLeft, User, Users, Search, GraduationCap, FileText, X,
     Download, MapPin, Phone, ListChecks, BookOpen, ChevronRight, FileSpreadsheet, Clock, ChevronDown,
-    CalendarDays, Filter
+    CalendarDays, Filter, CheckCircle
 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import html2canvas from 'html2canvas'
@@ -57,12 +58,16 @@ export default function EvaluationSummary() {
 
 
 
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null)
+
     useEffect(() => {
-        const fetchData = async () => {
-            if (isFirstLoad) {
-                setLoading(true)
-            } else {
-                setIsTabLoading(true)
+        const fetchData = async (isSilent = false) => {
+            if (!isSilent) {
+                if (isFirstLoad) {
+                    setLoading(true)
+                } else {
+                    setIsTabLoading(true)
+                }
             }
 
             const urlParams = new URLSearchParams(window.location.search);
@@ -106,11 +111,38 @@ export default function EvaluationSummary() {
             } catch (error) {
                 console.error("Fetch data error:", error)
             } finally {
-                setLoading(false)
-                setIsTabLoading(false)
+                if (!isSilent) {
+                    setLoading(false)
+                    setIsTabLoading(false)
+                }
             }
         }
         fetchData()
+
+        // Realtime subscription — อัปเดตเมื่อพี่เลี้ยงส่งผลประเมิน
+        const supabase = createBrowserClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+
+        const handleRealtime = () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+            debounceTimer.current = setTimeout(() => {
+                fetchData(true) // Silent update
+            }, 1500) // Debounce 1.5s
+        }
+
+        const channel = supabase
+            .channel('teacher_subjects_realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'evaluation_logs' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'evaluation_answers' }, handleRealtime)
+            .subscribe()
+
+        return () => {
+            supabase.removeChannel(channel)
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+        }
     }, [subjectId, selectedTrainingYear])
 
     // ฟังก์ชันเปิด Modal รายละเอียด พร้อมดึงข้อคำถามจริง
@@ -314,14 +346,14 @@ export default function EvaluationSummary() {
                     }
                 };
             }
-            
+
             XLSX.utils.book_append_sheet(workbook, summaryWorksheet, "สรุปผลคะแนนรวม");
 
             // --- จากนั้นค่อยตามด้วยลูป allEvalTitles เดิมของคุณ ---
             allEvalTitles.forEach(title => {
                 const config = evaluationSettings[title] || { short: title.replace('แบบประเมิน', '').trim(), color: defaultColor };
                 const sheetData: any[] = [];
-                
+
                 // data.forEach(item => {
                 //     const isMulti = item.mentorCount > 1;
 
@@ -448,7 +480,7 @@ export default function EvaluationSummary() {
                             'รหัสประจำตัว': item.student?.student_code,
                             'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
                             'สถานที่ฝึก': item.place?.site_name || '-',
-                            
+
                         };
                         // console.log('Current Item:', item)
                         if (currentEval) {
@@ -465,7 +497,7 @@ export default function EvaluationSummary() {
                         sheetData.push(row);
                     }
                 });
-                
+
                 // ลบ _rowType ก่อนสร้าง sheet แต่เก็บไว้ใช้ highlight
                 const rowTypes = sheetData.map(r => r._rowType || 'normal');
                 sheetData.forEach(r => delete r._rowType);
@@ -733,15 +765,18 @@ export default function EvaluationSummary() {
                     <div>
                         <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
                             <GraduationCap size={28} className="text-blue-600" />
-                            <span>EVALUATION <span className="text-blue-600">Results</span></span>
+                            <span>ผลการประเมิน <span className="text-blue-600">รายวิชา</span></span>
                         </h1>
-                        <p className="text-slate-400 font-bold mt-2 ml-1 text-[11px] uppercase tracking-[0.2em]">ผลการประเมินรายวิชา — Weighted Summary</p>
+                        <p className="text-slate-400 font-bold mt-2 ml-1 text-[11px] uppercase tracking-[0.2em]">ผลการประเมินรายวิชาที่รับผิดชอบ — Weighted Summary</p>
                     </div>
                 </div>
 
                 {/* Subject pills */}
                 <div className="flex gap-2 overflow-x-auto no-scrollbar pb-4 mb-6">
-                    {subjects.map((s, i) => (
+                    {subjects.reduce((acc: any[], s: any) => {
+                        if (!acc.find((u: any) => u.subject_id === s.subject_id)) acc.push(s);
+                        return acc;
+                    }, []).map((s: any, i: number) => (
                         <button key={i} onClick={() => handleFilterChange(s.subject_id)} className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${String(subjectId) === String(s.subject_id) ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}>{s.subjects.name}</button>
                     ))}
                 </div>
@@ -800,6 +835,7 @@ export default function EvaluationSummary() {
                                     <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">รายวิชา</th>
                                     <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">สถานที่ฝึก</th>
                                     <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">คะแนนสุทธิ</th>
+                                    <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">สถานะ</th>
                                     <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">จัดการ</th>
                                 </tr>
                             </thead>
@@ -826,6 +862,7 @@ export default function EvaluationSummary() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5.5 text-center"><div className="h-6 w-12 bg-indigo-50 rounded mx-auto" /></td>
+                                            <td className="px-6 py-5.5 text-center"><div className="h-6 w-20 bg-emerald-50 rounded-full mx-auto" /></td>
                                             <td className="px-6 py-5.5 text-center"><div className="h-8 w-20 bg-slate-100 rounded-xl mx-auto" /></td>
                                         </tr>
                                     ))
@@ -865,6 +902,21 @@ export default function EvaluationSummary() {
                                                 <td className="px-6 py-4 text-center">
                                                     <span className="text-lg font-black text-indigo-600">{totalNet}</span>
                                                     {isMultiMentor && <p className="text-[8px] font-black text-slate-300 uppercase">AVG</p>}
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    {item.evalStatus === 'done' ? (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black border border-emerald-100">
+                                                            <CheckCircle size={12} /> ครบแล้ว
+                                                        </span>
+                                                    ) : item.evalStatus === 'partial' ? (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-black border border-amber-100">
+                                                            <Clock size={12} /> {item.doneSupervisors}/{item.totalSupervisors}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-400 rounded-full text-[10px] font-black border border-slate-100">
+                                                            <Clock size={12} /> รอประเมิน
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex justify-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">

@@ -1,6 +1,6 @@
 // ver8 — API Routes Migration (Dashboard + Analytics)
 "use client"
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
     Users, CheckCircle, AlertCircle, TrendingUp, TrendingDown,
@@ -24,6 +24,7 @@ export default function TeacherDashboard() {
     const [allAssignments, setAllAssignments] = useState<any[]>([])
     const [evaluationData, setEvaluationData] = useState<any[]>([])
     const [kpi, setKpi] = useState({ total: 0, evaluated: 0, pending: 0, percent: 0 })
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null)
     const [selectedSubject, setSelectedSubject] = useState<string | 'all'>('all')
     const [hasDoubleRole, setHasDoubleRole] = useState(false)
     const [analyticsData, setAnalyticsData] = useState<any[]>([])
@@ -39,13 +40,24 @@ export default function TeacherDashboard() {
 
     useEffect(() => {
         fetchDashboardData()
+        const handleRealtime = () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+            debounceTimer.current = setTimeout(() => {
+                fetchDashboardData(true) // Silent update
+            }, 1500) // Debounce 1.5s
+        }
+
         const channel = supabase
             .channel('evaluation_realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, () => fetchDashboardData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'evaluation_logs' }, () => fetchDashboardData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'evaluation_answers' }, () => fetchDashboardData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'assignment_supervisors' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'evaluation_logs' }, handleRealtime)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'evaluation_answers' }, handleRealtime)
             .subscribe()
-        return () => { supabase.removeChannel(channel) }
+
+        return () => {
+            supabase.removeChannel(channel)
+            if (debounceTimer.current) clearTimeout(debounceTimer.current)
+        }
     }, [selectedYear])
 
     const calculateKPI = (assignments: any[], subjectId: string) => {
@@ -57,8 +69,8 @@ export default function TeacherDashboard() {
         setKpi({ total, evaluated, pending, percent })
     }
 
-    const fetchDashboardData = async () => {
-        setLoading(true)
+    const fetchDashboardData = async (silent = false) => {
+        if (!silent) setLoading(true)
         try {
             const urlParams = new URLSearchParams(window.location.search);
             const lineUserId = await getLineUserId(urlParams);
@@ -89,7 +101,7 @@ export default function TeacherDashboard() {
         } catch (error) {
             console.error("Dashboard error:", error)
         } finally {
-            setLoading(false)
+            if (!silent) setLoading(false)
         }
     }
 
@@ -220,10 +232,16 @@ export default function TeacherDashboard() {
 
     const analyticsStudentScores = useMemo(() => {
         return filteredAnalyticsData.map((item: any) => {
-            // หาข้อมูลสถานะจาก allAssignments โดยใช้ ID ที่เราเพิ่งเพิ่มเข้าไป
-            const assignmentInfo = allAssignments.find(a => a.id === item.id);
-            const supervisors = assignmentInfo?.assignment_supervisors || [];
-            const isFullyDone = supervisors.length > 0 && supervisors.every((sv: any) => sv.is_evaluated === true);
+            // หา assignments ทั้งหมดของนักศึกษาคนนี้ในวิชานี้ (เฉพาะที่มีพี่เลี้ยง)
+            const studentAssignments = allAssignments.filter(a =>
+                String(a.student_id) === String(item.student?.id) && String(a.subject_id) === String(item.subject_id)
+            );
+            const assignmentsWithSupervisors = studentAssignments.filter((a: any) =>
+                (a.assignment_supervisors || []).length > 0
+            );
+            const isFullyDone = assignmentsWithSupervisors.length > 0 && assignmentsWithSupervisors.every((a: any) =>
+                a.assignment_supervisors.every((sv: any) => Number(sv.evaluation_status) === 2)
+            );
 
             const net = item.evaluations.reduce((acc: number, ev: any) => {
                 const itemCount = ev.answers?.length || 0
@@ -353,18 +371,28 @@ export default function TeacherDashboard() {
     }, [finishedStudents]);
 
     const siteStats = useMemo(() => {
-        const map: { [site: string]: { province: string; scores: number[] } } = {}
+        const map: { [site: string]: { province: string; studentScores: { [studentId: string]: number[] } } } = {}
         analyticsStudentScores.forEach((s: any) => {
             const site = s.place?.site_name || 'ไม่ระบุ'
-            if (!map[site]) map[site] = { province: s.place?.province || '-', scores: [] }
-            map[site].scores.push(s.netScore)
+            const studentId = String(s.student?.id || s.student?.student_code || Math.random())
+            if (!map[site]) map[site] = { province: s.place?.province || '-', studentScores: {} }
+            if (!map[site].studentScores[studentId]) map[site].studentScores[studentId] = []
+            map[site].studentScores[studentId].push(s.netScore)
         })
-        return Object.entries(map).map(([site, v]) => ({
-            site,
-            province: v.province,
-            count: v.scores.length,
-            avg: parseFloat((v.scores.reduce((a: number, b: number) => a + b, 0) / v.scores.length).toFixed(2))
-        })).sort((a, b) => b.avg - a.avg)
+        return Object.entries(map).map(([site, v]) => {
+            const uniqueStudents = Object.keys(v.studentScores).length
+            // คำนวณค่าเฉลี่ยจากคะแนนเฉลี่ยของแต่ละนักศึกษา
+            const studentAvgs = Object.values(v.studentScores).map(scores =>
+                scores.reduce((a, b) => a + b, 0) / scores.length
+            )
+            const avg = studentAvgs.length > 0 ? studentAvgs.reduce((a, b) => a + b, 0) / studentAvgs.length : 0
+            return {
+                site,
+                province: v.province,
+                count: uniqueStudents,
+                avg: parseFloat(avg.toFixed(2))
+            }
+        }).sort((a, b) => b.avg - a.avg)
     }, [analyticsStudentScores])
 
     const ChartTooltip = ({ active, payload, label }: any) => {
@@ -461,7 +489,7 @@ export default function TeacherDashboard() {
                 <div>
                     <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
                         <LayoutDashboard size={28} className="text-blue-600" />
-                        <span>TEACHER <span className="text-blue-600">Dashboard</span></span>
+                        <span>แดชบอร์ด <span className="text-blue-600">อาจารย์</span></span>
                     </h1>
                     <p className="text-slate-400 font-bold mt-2 ml-1 text-[11px] uppercase tracking-[0.2em]">ภาพรวม KPI สถิติ และข้อมูลอาจารย์</p>
                 </div>
@@ -511,28 +539,47 @@ export default function TeacherDashboard() {
                             <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mb-1">อาจารย์ผู้รับผิดชอบรายวิชา</p>
                             <h1 className="text-2xl font-black text-white truncate">{teacherData?.full_name || '...'}</h1>
                             <div className="flex flex-wrap gap-1.5 mt-3">
-                                {subjects.map((s, i) => (
-                                    <span key={i} className="text-[10px] font-black text-white/90 bg-white/15 px-2.5 py-1 rounded-lg border border-white/10">{s.subjects.name}</span>
-                                ))}
+                                {(() => {
+                                    // Deduplicate: show sub_subject name หรือ main subject name
+                                    const seen = new Set<string>();
+                                    return subjects.map((s: any, i: number) => {
+                                        const label = s.sub_subjects?.name || s.subjects?.name || 'ไม่ระบุ';
+                                        const key = `${s.subject_id}-${s.sub_subject_id || 'main'}`;
+                                        if (seen.has(key)) return null;
+                                        seen.add(key);
+                                        return (
+                                            <span key={i} className="text-[10px] font-black text-white/90 bg-white/15 px-2.5 py-1 rounded-lg border border-white/10">{label}</span>
+                                        );
+                                    });
+                                })()}
                             </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Subject Filter (เฉพาะรายวิชา ไม่รวมทุกวิชา) */}
-                {subjects.length > 1 && (
-                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                        {subjects.map((s, i) => (
-                            <button
-                                key={i}
-                                onClick={() => handleSubjectChange(s.subject_id)}
-                                className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${selectedSubject === s.subject_id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}
-                            >
-                                {s.subjects.name}
-                            </button>
-                        ))}
-                    </div>
-                )}
+                {/* Subject Filter — deduplicate by subject_id */}
+                {(() => {
+                    const uniqueSubjects = subjects.reduce((acc: any[], s: any) => {
+                        if (!acc.find((u: any) => u.subject_id === s.subject_id)) {
+                            acc.push(s);
+                        }
+                        return acc;
+                    }, []);
+                    return uniqueSubjects.length > 1 ? (
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                            {uniqueSubjects.map((s: any, i: number) => (
+                                <button
+                                    key={i}
+                                    onClick={() => handleSubjectChange(s.subject_id)}
+                                    className={`px-5 py-2.5 rounded-2xl text-[11px] font-black border transition-all shrink-0 ${selectedSubject === s.subject_id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}
+                                >
+                                    {s.subjects.name}
+                                </button>
+                            ))}
+                        </div>
+                    ) : null;
+                })()}
 
                 {/* KPI Cards */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -546,27 +593,34 @@ export default function TeacherDashboard() {
                 <div className="bg-white p-6 lg:p-8 rounded-[2rem] border border-slate-100 shadow-sm">
                     <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">สรุปความคืบหน้ารายวิชา</h2>
                     <div className="space-y-5">
-                        {(selectedSubject === 'all' ? subjects : subjects.filter(s => s.subject_id === selectedSubject)).map((s, i) => {
-                            const subAssignments = allAssignments.filter(a => a.subject_id === s.subject_id)
-                            const total = subAssignments.length
-                            // ✅ ใช้ evaluation_status เหมือน KPI (ป้องกัน type mismatch กับ is_evaluated)
-                            const done = subAssignments.filter((a: any) => a.assignment_supervisors?.some((sv: any) => Number(sv.evaluation_status) === 2)).length
-                            const pct = total > 0 ? Math.round((done / total) * 100) : 0
-                            return (
-                                <div key={i}>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <p className="text-sm font-black text-slate-700">{s.subjects.name}</p>
-                                        <span className="text-xs font-bold">
-                                            <span className="text-indigo-600">{done}/{total}</span>
-                                            <span className="text-slate-400 ml-1">({pct}%)</span>
-                                        </span>
+                        {(() => {
+                            // Deduplicate subjects by subject_id for progress bars
+                            const source = selectedSubject === 'all' ? subjects : subjects.filter((s: any) => s.subject_id === selectedSubject);
+                            const unique = source.reduce((acc: any[], s: any) => {
+                                if (!acc.find((u: any) => u.subject_id === s.subject_id)) acc.push(s);
+                                return acc;
+                            }, []);
+                            return unique.map((s: any, i: number) => {
+                                const subAssignments = allAssignments.filter((a: any) => a.subject_id === s.subject_id)
+                                const total = subAssignments.length
+                                const done = subAssignments.filter((a: any) => a.assignment_supervisors?.some((sv: any) => Number(sv.evaluation_status) === 2)).length
+                                const pct = total > 0 ? Math.round((done / total) * 100) : 0
+                                return (
+                                    <div key={i}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <p className="text-sm font-black text-slate-700">{s.subjects.name}</p>
+                                            <span className="text-xs font-bold">
+                                                <span className="text-indigo-600">{done}/{total}</span>
+                                                <span className="text-slate-400 ml-1">({pct}%)</span>
+                                            </span>
+                                        </div>
+                                        <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                            <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out" style={{ width: `${pct}%` }} />
+                                        </div>
                                     </div>
-                                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out" style={{ width: `${pct}%` }} />
-                                    </div>
-                                </div>
-                            )
-                        })}
+                                )
+                            });
+                        })()}
                         {subjects.length === 0 && (
                             <p className="text-center text-sm text-slate-400 py-8">ยังไม่มีรายวิชาในระบบ</p>
                         )}

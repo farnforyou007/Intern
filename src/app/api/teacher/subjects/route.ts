@@ -65,13 +65,14 @@ export async function GET(req: Request) {
         // ถ้าไม่มี subjectId ให้ default เป็นวิชาแรก
         const effectiveSubjectId = subjectId || (subjects.length > 0 ? subjects[0].subject_id : '')
 
-        // 4. ดึง Assignments + Evaluations
+        // 4. ดึง Assignments + Evaluations + Supervisors
         let query = supabase.from('student_assignments').select(`
             id, 
             students (id, first_name, last_name, student_code, avatar_url, phone),
             subjects (id, name),
             sub_subjects (id, name),
-            training_sites (site_name, province), 
+            training_sites (site_name, province),
+            assignment_supervisors (is_evaluated, evaluation_status, supervisors(full_name)),
             evaluation_logs (
                 id, total_score, comment, supervisor_id, created_at,
                 supervisors (id, full_name),
@@ -110,11 +111,13 @@ export async function GET(req: Request) {
                     place: item.training_sites,
                     subjectName: item.subjects?.name || 'ไม่ระบุวิชา',
                     subSubjects: new Set<string>(),
-                    allLogs: []
+                    allLogs: [],
+                    allSupervisors: [] as any[]
                 }
             }
             if (item.sub_subjects?.name) groupedStudents[studentId].subSubjects.add(item.sub_subjects.name)
             if (item.evaluation_logs?.length > 0) groupedStudents[studentId].allLogs.push(...item.evaluation_logs)
+            if (item.assignment_supervisors?.length > 0) groupedStudents[studentId].allSupervisors.push(...item.assignment_supervisors)
         })
 
         const processed = Object.values(groupedStudents).map((item: any) => {
@@ -157,7 +160,17 @@ export async function GET(req: Request) {
             let displaySubjectName = item.subjectName
             if (item.subSubjects.size > 0) displaySubjectName += ` (${Array.from(item.subSubjects).join(', ')})`
 
-            return { student: item.student, place: item.place, subjectName: displaySubjectName, evaluations, supervisorEvaluations, mentorCount }
+            // คำนวณสถานะการประเมิน
+            const supervisorsWithData = (item.allSupervisors || []).filter((sv: any) => sv !== null)
+            let evalStatus: 'done' | 'partial' | 'pending' = 'pending'
+            if (supervisorsWithData.length > 0) {
+                const allDone = supervisorsWithData.every((sv: any) => Number(sv.evaluation_status) === 2)
+                const someDone = supervisorsWithData.some((sv: any) => Number(sv.evaluation_status) >= 1)
+                if (allDone) evalStatus = 'done'
+                else if (someDone) evalStatus = 'partial'
+            }
+
+            return { student: item.student, place: item.place, subjectName: displaySubjectName, evaluations, supervisorEvaluations, mentorCount, evalStatus, totalSupervisors: supervisorsWithData.length, doneSupervisors: supervisorsWithData.filter((sv: any) => Number(sv.evaluation_status) === 2).length }
         })
 
         return apiSuccess({

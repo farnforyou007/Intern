@@ -61,7 +61,7 @@ const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
                         <p className="text-sm font-black text-slate-800">{subjectName}</p>
                         <p className="text-[10px] text-slate-500 font-bold">
                             {isMine
-                                ? <span className="text-emerald-600">เสร็จ {completedCount}{partialCount > 0 ? <span className="text-amber-500"> · ทำอยู่ {partialCount}</span> : ''}/{tasks.length}</span>
+                                ? <span className="text-emerald-600">สำเร็จ {completedCount}{partialCount > 0 ? <span className="text-amber-500"> · กำลังประเมิน {partialCount}</span> : ''}/{tasks.length}</span>
                                 : <span>{tasks.length} รายการย่อย</span>
                             }
                         </p>
@@ -180,7 +180,7 @@ const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => 
                     ) : (
                         !isClaimed && (
                             <p className="text-[9px] text-amber-600 font-bold flex items-center gap-1">
-                                <PlusCircle size={10} /> กดเพื่อรับดูแล
+                                <PlusCircle size={10} /> กดรับดูแลเพื่อประเมิน
                             </p>
                         )
                     )}
@@ -214,7 +214,7 @@ const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => 
                 ) : isPartial ? (
                     // 3. กรณีทำไปแค่บางส่วน (ยังเลือกไม่ครบทุกข้อ)
                     <div className="text-[9px] font-black text-amber-600 bg-amber-100 px-2 py-1 rounded-lg flex items-center gap-1 shrink-0">
-                        <Clock size={10} /> บางส่วน
+                        <Clock size={10} /> กำลังประเมิน
                     </div>
                 ) : (
                     // <ChevronRight size={isCard ? 20 : 16} className="text-slate-300 shrink-0" />

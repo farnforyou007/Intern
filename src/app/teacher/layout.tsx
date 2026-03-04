@@ -232,6 +232,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                     setIsAuthorized(false)
                     if (pathname !== '/teacher/pending') {
                         router.replace('/teacher/pending')
+                        return <>{children}</>
                     }
                 } else {
                     const hasSubjects = userData.supervisor_subjects && userData.supervisor_subjects.length > 0
