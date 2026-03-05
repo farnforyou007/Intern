@@ -244,7 +244,7 @@ export default function EvaluationPage() {
     return (
         <div className="min-h-screen bg-slate-50 pb-80 font-sans">
             {/* Header */}
-            <div className="bg-white sticky top-0 z-50 border-b border-slate-100 shadow-sm">
+            <div className="bg-white sticky top-0  z-50 border-b border-slate-100 shadow-sm">
                 <div className="p-6 pb-2 flex items-center gap-4">
                     <button onClick={() => router.back()} className="p-2 bg-slate-50 rounded-full text-slate-400 hover:text-emerald-600 transition-colors"><ArrowLeft size={20} /></button>
 

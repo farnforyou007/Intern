@@ -431,11 +431,7 @@ export default function SupervisorStudentList() {
 
     return (
         <div className="min-h-screen bg-slate-50 pb-24 font-sans">
-            <div className="bg-white px-6 pt-12 pb-6 sticky top-0 z-30 shadow-sm border-b border-slate-100">
-                {/* <div className="flex items-center gap-4 mb-6">
-                    <button onClick={() => router.back()} className="p-2 hover:bg-slate-100 rounded-full"><ArrowLeft size={24} className="text-slate-600" /></button>
-                    <h1 className="text-xl font-black text-slate-900">รายชื่อนักศึกษา</h1>
-                </div> */}
+            <div className="bg-white px-6 pt-6 pb-6 sticky top-0 z-30 shadow-sm border-b border-slate-100">
                 <div className="flex items-center justify-between mb-6">
                     <button
                         onClick={() => router.back()}

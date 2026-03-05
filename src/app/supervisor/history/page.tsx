@@ -81,7 +81,7 @@ export default function EvaluationHistory() {
         <div className="min-h-screen bg-[#F8FAFC] font-sans pb-24 text-slate-900">
 
             {/* --- Header (Design เดียวกับหน้า Student List) --- */}
-            <div className="bg-white px-6 pt-12 pb-6 sticky top-0 z-20 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] rounded-b-[2.5rem]">
+            <div className="bg-white px-6 pt-6 pb-6 sticky top-0 z-20 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] rounded-b-[2.5rem]">
                 <div className="flex items-center justify-between mb-6">
                     <button
                         onClick={() => router.back()}

@@ -438,7 +438,7 @@ export default function RotationSchedule() {
     return (
         <div className="min-h-screen bg-[#F8FAFC] font-sans pb-24 text-slate-900">
             {/* Header */}
-            <div className="bg-white px-6 pt-12 pb-6 sticky top-0 z-20 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] rounded-b-[2.5rem]">
+            <div className="bg-white px-6 pt-6 pb-6 sticky top-0 z-20 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] rounded-b-[2.5rem]">
                 <div className="flex items-center justify-between mb-6">
                     <button onClick={() => router.back()} className="w-11 h-11 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600 active:scale-95 transition-all">
                         <ArrowLeft size={20} strokeWidth={2.5} />
