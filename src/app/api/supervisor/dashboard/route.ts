@@ -96,6 +96,17 @@ export async function GET(req: Request) {
         let urgentRotationName = ''
         let pendingStudentsCount = 0
 
+        // === Per-rotation alerts ===
+        interface RotationAlert {
+            rotationName: string
+            endDate: string
+            daysLeft: number
+            status: 'overdue' | 'normal'
+            pendingCount: number
+            totalCount: number
+        }
+        const rotationAlerts: RotationAlert[] = []
+
         if (assignments.length > 0) {
             // กรองเฉพาะงานที่ยังไม่ตรวจ และมีข้อมูลวันสิ้นสุด
             const pendingTasksData = assignments.filter((a: any) =>
@@ -146,6 +157,59 @@ export async function GET(req: Request) {
                 ).size
             }
 
+            // --- จัดกลุ่ม assignments ตามผลัด เพื่อสร้าง rotationAlerts ---
+            const rotationMap = new Map<string, { endDate: string, items: any[] }>()
+            for (const a of assignments) {
+                const rotData = (a.student_assignments as any)?.rotations
+                if (!rotData?.name) continue
+                const key = `${rotData.name}__${rotData.end_date || ''}`
+                if (!rotationMap.has(key)) {
+                    rotationMap.set(key, { endDate: rotData.end_date || '', items: [] })
+                }
+                rotationMap.get(key)!.items.push(a)
+            }
+
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+
+            for (const [key, { endDate: endStr, items }] of rotationMap) {
+                const rotName = key.split('__')[0]
+                const pending = items.filter((a: any) => a.evaluation_status !== 2).length
+                // ข้ามผลัดที่ประเมินครบแล้ว
+                if (pending === 0) continue
+
+                let rotDaysLeft = 0
+                let rotStatus: 'overdue' | 'normal' = 'normal'
+                if (endStr) {
+                    const end = new Date(endStr)
+                    end.setHours(0, 0, 0, 0)
+                    if (end < today) {
+                        rotDaysLeft = Math.ceil((today.getTime() - end.getTime()) / (1000 * 60 * 60 * 24))
+                        rotStatus = 'overdue'
+                    } else {
+                        rotDaysLeft = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+                        rotStatus = 'normal'
+                    }
+                }
+
+                rotationAlerts.push({
+                    rotationName: rotName,
+                    endDate: endStr,
+                    daysLeft: rotDaysLeft,
+                    status: rotStatus,
+                    pendingCount: pending,
+                    totalCount: items.length
+                })
+            }
+
+            // เรียง: overdue ก่อน → ตามจำนวนวัน
+            rotationAlerts.sort((a, b) => {
+                if (a.status === 'overdue' && b.status !== 'overdue') return -1
+                if (a.status !== 'overdue' && b.status === 'overdue') return 1
+                if (a.status === 'overdue') return b.daysLeft - a.daysLeft // overdue มากสุดก่อน
+                return a.daysLeft - b.daysLeft // ใกล้สิ้นสุดก่อน
+            })
+
             const uniqueStudentIds = assignments
                 .map((a: any) => a.student_assignments?.students?.id)
                 .filter(Boolean)
@@ -170,7 +234,8 @@ export async function GET(req: Request) {
             urgentRotationName,
             pendingStudentsCount,
             configYear: currentYear,
-            subjectNames
+            subjectNames,
+            rotationAlerts
         })
     } catch (error: any) {
         console.error('Supervisor Dashboard API Error:', error)

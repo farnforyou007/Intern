@@ -220,11 +220,30 @@ export default function AdminDashboard() {
         })
 
         if (result.isConfirmed) {
-            Swal.fire({ title: 'กำลังส่ง...', didOpen: () => Swal.showLoading() })
-            // ใส่ Code เรียก API จริงตรงนี้
-            setTimeout(() => {
-                Swal.fire('สำเร็จ', 'ส่งแจ้งเตือนเรียบร้อยแล้ว', 'success')
-            }, 1500)
+            Swal.fire({ title: 'กำลังส่งแจ้งเตือน...', didOpen: () => Swal.showLoading(), allowOutsideClick: false })
+            try {
+                const res = await fetch('/api/admin/dashboard/notify', { method: 'POST' })
+                const data = await res.json()
+
+                if (data.success) {
+                    Swal.fire({
+                        title: 'สำเร็จ',
+                        text: `ส่งแจ้งเตือนไปยังพี่เลี้ยงเรียบร้อยแล้ว (${data.data.sentCount} ท่าน)`,
+                        icon: 'success',
+                        customClass: { popup: 'rounded-[2rem] font-sans' }
+                    })
+                } else {
+                    throw new Error(data.error || 'Failed to send notifications')
+                }
+            } catch (error: any) {
+                console.error("Notify error:", error)
+                Swal.fire({
+                    title: 'เกิดข้อผิดพลาด',
+                    text: error.message || 'ไม่สามารถส่งแจ้งเตือนได้ในขณะนี้',
+                    icon: 'error',
+                    customClass: { popup: 'rounded-[2rem] font-sans' }
+                })
+            }
         }
     }
 

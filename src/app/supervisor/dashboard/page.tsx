@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr' // เก็บไว้สำหรับ Realtime เท่านั้น
 import {
     Users, ClipboardCheck, Clock,
-    Bell, ChevronRight, CheckCircle,
+    Bell, ChevronRight, ChevronDown, CheckCircle,
     AlertCircle, PieChart, GraduationCap, LogOut
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -35,6 +35,8 @@ export default function SupervisorDashboard() {
     const [urgentRotationName, setUrgentRotationName] = useState<string>("")
     const [configYear, setConfigYear] = useState<string>('')
     const [subjectNames, setSubjectNames] = useState<string[]>([])
+    const [rotationAlerts, setRotationAlerts] = useState<any[]>([])
+    const [showAlertDetails, setShowAlertDetails] = useState(false)
     const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
     // เก็บ supabase client ไว้สำหรับ Realtime subscription เท่านั้น
@@ -88,6 +90,7 @@ export default function SupervisorDashboard() {
             setPendingStudentsCount(apiPendingCount)
             setConfigYear(apiYear)
             setSubjectNames(result.data.subjectNames || [])
+            setRotationAlerts(result.data.rotationAlerts || [])
         } catch (error) {
             console.error("Dashboard Fetch Error:", error);
         } finally {
@@ -203,6 +206,15 @@ export default function SupervisorDashboard() {
                     <GraduationCap size={200} />
                 </div>
 
+                {/* ปุ่ม Logout — มุมบนขวาสุด */}
+                <button
+                    onClick={handleLogout}
+                    className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-rose-500/80 transition-all active:scale-95 shadow-lg"
+                    title="ออกจากระบบ"
+                >
+                    <LogOut size={18} />
+                </button>
+
                 <div className="relative z-10 flex justify-between items-center mb-6">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
@@ -231,31 +243,16 @@ export default function SupervisorDashboard() {
                             </span>
                         )}
                     </div>
-                    {/* <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
-                        <img src={supervisor?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=fallback`} alt="avatar" className="w-full h-full object-cover" />
-                    </div> */}
-                    <div className="flex items-center gap-3">
 
-                        <div className="w-16 h-16 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
-                            <img
-                                src={profileImage}
-                                alt="avatar"
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                    // ถ้าโหลดรูปจาก Storage ไม่สำเร็จ ให้ใช้รูปสำรองทันที
-                                    e.currentTarget.src = "https://api.dicebear.com/7.x/avataaars/svg?seed=fallback";
-                                }}
-                            />
-                        </div>
-
-                        {/* ปุ่ม Logout แบบวงกลม */}
-                        <button
-                            onClick={handleLogout}
-                            className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-rose-500/80 transition-all active:scale-95 shadow-lg"
-                            title="ออกจากระบบ"
-                        >
-                            <LogOut size={18} />
-                        </button>
+                    <div className="w-20 h-20 rounded-2xl border-4 border-white/20 shadow-inner overflow-hidden bg-white">
+                        <img
+                            src={profileImage}
+                            alt="avatar"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                e.currentTarget.src = "https://api.dicebear.com/7.x/avataaars/svg?seed=fallback";
+                            }}
+                        />
                     </div>
                 </div>
 
@@ -303,63 +300,105 @@ export default function SupervisorDashboard() {
                 </div>
             </div> */}
 
-            {/* --- Notification Bar --- */}
+            {/* --- Notification Bar (Facebook-style) --- */}
             <div className="px-6 -mt-8 relative z-20">
-                <div className={`p-5 rounded-[2.5rem] shadow-xl shadow-slate-200/60 border flex items-center gap-4 transition-colors ${alertStatus === 'overdue' ? 'bg-red-50 border-red-100' : 'bg-white border-slate-50'
-                    }`}>
+                <div className={`rounded-[2.5rem] shadow-xl shadow-slate-200/60 border transition-colors overflow-hidden ${alertStatus === 'overdue' ? 'bg-red-50 border-red-100' : 'bg-white border-slate-50'}`}>
+                    {/* Main notification row */}
+                    <button
+                        onClick={() => rotationAlerts.length > 0 && setShowAlertDetails(prev => !prev)}
+                        className="w-full px-5 py-4 flex items-center gap-4 text-left"
+                    >
+                        {/* ไอคอน + Badge มุมบนขวา */}
+                        <div className="relative shrink-0">
+                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${alertStatus === 'overdue'
+                                ? 'bg-red-100 text-red-500 border-red-200'
+                                : 'bg-amber-50 text-amber-500 border-amber-100'}`}>
+                                {alertStatus === 'overdue' ? <AlertCircle size={24} className="animate-pulse" /> : <Bell size={24} />}
+                            </div>
+                            {rotationAlerts.length > 0 && (
+                                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[9px] font-black min-w-[22px] h-[22px] px-1 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+                                    {rotationAlerts.length}
+                                </span>
+                            )}
+                        </div>
 
-                    {/* ไอคอน: ถ้าเกินกำหนดให้เป็นสีแดง */}
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border ${alertStatus === 'overdue'
-                        ? 'bg-red-100 text-red-500 border-red-200'
-                        : 'bg-amber-50 text-amber-500 border-amber-100'
-                        }`}>
-                        {alertStatus === 'overdue' ? <AlertCircle size={28} className="animate-pulse" /> : <Bell size={28} />}
-                    </div>
+                        <div className="flex-1 min-w-0">
+                            <h3 className={`font-black text-sm leading-tight ${alertStatus === 'overdue' ? 'text-red-700' : 'text-slate-800'}`}>
+                                {daysLeft !== null
+                                    ? (alertStatus === 'overdue'
+                                        ? `${urgentRotationName} ล่าช้า ${daysLeft} วัน`
+                                        : `สิ้นสุด ${urgentRotationName} ใน ${daysLeft} วัน`)
+                                    : 'การแจ้งเตือน'}
+                            </h3>
+                            <p className={`text-[11px] font-bold italic mt-0.5 ${alertStatus === 'overdue' ? 'text-red-400' : 'text-slate-400'}`}>
+                                {stats.pending > 0 && stats.partial > 0
+                                    ? `ยังไม่ประเมิน ${stats.pending} · กำลังประเมิน ${stats.partial} รายการ`
+                                    : stats.pending > 0
+                                        ? `เหลือ นศ. ${pendingStudentsCount} คน (${stats.pending} รายการ) ที่ต้องประเมิน`
+                                        : stats.partial > 0
+                                            ? `เหลืออีก ${stats.partial} รายการที่ประเมินยังไม่ครบ`
+                                            : "ประเมินครบถ้วนแล้ว ยอดเยี่ยม! 🎉"}
+                            </p>
+                        </div>
 
-                    <div className="flex-1">
-                        <h3 className={`font-black text-sm ${alertStatus === 'overdue' ? 'text-red-700' : 'text-slate-800'}`}>
-                            {daysLeft !== null
-                                ? (alertStatus === 'overdue'
-                                    ? ` ${urgentRotationName} ล่าช้า ${daysLeft} วัน`
-                                    : ` สิ้นสุด ${urgentRotationName} ใน ${daysLeft} วัน`)
-                                : 'การแจ้งเตือน'}
-                        </h3>
-                        <p className={`text-[11px] font-bold italic ${alertStatus === 'overdue' ? 'text-red-400' : 'text-slate-400'}`}>
-                            {stats.pending > 0 && stats.partial > 0
-                                ? `ยังไม่ประเมิน ${stats.pending} · กำลังประเมิน ${stats.partial} รายการ`
-                                : stats.pending > 0
-                                    ? `เหลือ นศ. ${pendingStudentsCount} คน (${stats.pending} รายการ) ที่ต้องประเมิน`
-                                    : stats.partial > 0
-                                        ? `เหลืออีก ${stats.partial} รายการที่ประเมินยังไม่ครบ`
-                                        : "ประเมินครบถ้วนแล้ว ยอดเยี่ยม! 🎉"}
-                        </p>
-                    </div>
+                        {/* ลูกศร */}
+                        {rotationAlerts.length > 0 && (
+                            <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${alertStatus === 'overdue' ? 'bg-red-100 text-red-400' : 'bg-slate-100 text-slate-400'}`}>
+                                <ChevronDown size={18} className={`transition-transform duration-300 ${showAlertDetails ? 'rotate-180' : ''}`} />
+                            </div>
+                        )}
+                    </button>
 
-                    {/* ปุ่ม */}
-                    {(stats.pending > 0 || stats.partial > 0) && (
-                        <button
-                            onClick={() => router.push('/supervisor/students')}
-                            className={`text-white text-[10px] font-black px-5 py-3 rounded-2xl shadow-lg active:scale-95 transition-all ${alertStatus === 'overdue' ? 'bg-red-500 hover:bg-red-600' : 'bg-[#064e3b] hover:bg-[#043e2f]'
-                                }`}
-                        >
-                            {alertStatus === 'overdue' ? 'เคลียร์ด่วน' : 'ดูรายชื่อ'}
-                        </button>
+                    {/* Expandable rotation detail list — ซ่อนจริงๆ ด้วย hidden */}
+                    {showAlertDetails && (
+                        <div className="px-4 pb-4 space-y-2 border-t border-dashed border-slate-200/60 pt-3 animate-in slide-in-from-top-2 duration-200">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">รายละเอียดแต่ละผลัด</p>
+                            {rotationAlerts.map((ra: any, idx: number) => (
+                                <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl border ${ra.status === 'overdue'
+                                    ? 'bg-red-50/80 border-red-100'
+                                    : 'bg-amber-50/60 border-amber-100'
+                                    }`}>
+                                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${ra.status === 'overdue' ? 'bg-red-400 animate-pulse' : 'bg-amber-400'}`} />
+                                    <div className="flex-1 min-w-0">
+                                        <p className={`text-[11px] font-black truncate ${ra.status === 'overdue' ? 'text-red-700' : 'text-slate-700'}`}>{ra.rotationName}</p>
+                                        <p className={`text-[9px] font-bold ${ra.status === 'overdue' ? 'text-red-400' : 'text-amber-600'}`}>
+                                            {ra.status === 'overdue'
+                                                ? `ล่าช้า ${ra.daysLeft} วัน`
+                                                : `เหลืออีก ${ra.daysLeft} วัน`}
+                                        </p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <p className={`text-base font-black leading-none ${ra.status === 'overdue' ? 'text-red-500' : 'text-amber-500'}`}>{ra.pendingCount}</p>
+                                        <p className="text-[8px] text-slate-400 font-bold">/{ra.totalCount} รายการ</p>
+                                    </div>
+                                </div>
+                            ))}
+
+                            <button
+                                onClick={() => router.push('/supervisor/students')}
+                                className={`w-full text-white text-[11px] font-black py-2.5 rounded-xl shadow active:scale-95 transition-all ${alertStatus === 'overdue' ? 'bg-red-500 hover:bg-red-600' : 'bg-[#064e3b] hover:bg-[#043e2f]'}`}
+                            >
+                                {alertStatus === 'overdue' ? '⚡ เคลียร์ด่วน' : 'ดูรายชื่อทั้งหมด'}
+                            </button>
+                        </div>
                     )}
                 </div>
             </div>
 
             {/* 🔒 แจ้งเตือนเมื่อไม่มีนักศึกษาในปีปัจจุบัน */}
-            {configYear && stats.total === 0 && !loading && (
-                <div className="mx-6 mt-6 bg-amber-50 border border-amber-200 p-5 rounded-[2rem] flex items-start gap-4">
-                    <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600 shrink-0">
-                        <AlertCircle size={24} />
+            {
+                configYear && stats.total === 0 && !loading && (
+                    <div className="mx-6 mt-6 bg-amber-50 border border-amber-200 p-5 rounded-[2rem] flex items-start gap-4">
+                        <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600 shrink-0">
+                            <AlertCircle size={24} />
+                        </div>
+                        <div>
+                            <p className="text-sm font-black text-amber-800">ไม่พบรายชื่อนักศึกษา</p>
+                            <p className="text-xs text-amber-600 font-medium mt-0.5">ในรอบปีการศึกษา {configYear} ยังไม่มีนักศึกษาที่อยู่ในความดูแลของคุณ</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-sm font-black text-amber-800">ไม่พบรายชื่อนักศึกษา</p>
-                        <p className="text-xs text-amber-600 font-medium mt-0.5">ในรอบปีการศึกษา {configYear} ยังไม่มีนักศึกษาที่อยู่ในความดูแลของคุณ</p>
-                    </div>
-                </div>
-            )}
+                )
+            }
 
             {/* --- Main Menus --- */}
             <div className="p-8 space-y-4">
@@ -375,7 +414,7 @@ export default function SupervisorDashboard() {
                 <MenuCard icon={<ClipboardCheck size={24} />}
                     onClick={() => router.push('/supervisor/history')}
                     title="ประวัติประเมิน"
-                    desc="ดูคะแนนย้อนหลังและสรุปผล"
+                    desc="ดูคะแนนย้อนหลังหรือแก้ไขคะแนนที่ประเมินแล้ว"
                     color="text-blue-600 bg-blue-50" />
                 <MenuCard icon={<Clock size={24} />}
                     onClick={() => router.push('/supervisor/schedule')}
