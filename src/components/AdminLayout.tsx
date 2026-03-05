@@ -297,7 +297,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
     LayoutDashboard, Hospital, CalendarClock, BookOpen,
     UserCircle, Menu, X, LogOut, UserRoundCheck,
-    Users, ClipboardPen, Settings
+    Users, ClipboardPen, Settings, FileBarChart2
 } from "lucide-react"
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -327,6 +327,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'จัดการแบบประเมิน', icon: <ClipboardPen size={20} />, href: '/admin/templates' },
         { name: 'จัดการบุคลากร', icon: <UserRoundCheck size={20} />, href: '/admin/supervisors' },
         { name: 'จัดการนักศึกษา', icon: <Users size={20} />, href: '/admin/students' },
+        { name: 'ผลการประเมิน', icon: <FileBarChart2 size={20} />, href: '/admin/evaluations' },
         { name: 'ตั้งค่าระบบ', icon: <Settings size={20} />, href: '/admin/settings' },
     ]
 
