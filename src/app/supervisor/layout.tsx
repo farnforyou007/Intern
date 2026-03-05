@@ -158,8 +158,8 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
                 </div>
 
                 {/* ลายน้ำด้านล่างแบบจางๆ */}
-                <p className="absolute bottom-10 text-[9px] font-black text-slate-300 uppercase tracking-[0.5em]">
-                    TTMED Internships Management System
+                <p className="absolute bottom-10 text-[9px] font-black text-slate-300 uppercase tracking-[0.5em] pl-[0.5em]">
+                    TTMED Internships Evolutions System
                 </p>
             </div>
         )
