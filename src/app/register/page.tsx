@@ -624,11 +624,11 @@ export default function SmartRegister() {
 
                 } else {
                     // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
-                    // liff.login({ redirectUri: window.location.href });
+                    liff.login({ redirectUri: window.location.href });
                     // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
                 }
-                setLineUserId("DEBUG_SV_11");
-                setLineDisplayName("DEBUG_SV_11");
+                // setLineUserId("DEBUG_SV_11");
+                // setLineDisplayName("DEBUG_SV_11");
             } catch (err) {
                 console.error("LIFF Init Error", err)
 
@@ -808,7 +808,7 @@ export default function SmartRegister() {
                         onClick={() => { setUserType('supervisor'); setSelectedSite(null); setSearchTerm(''); }}
                         className={`flex-1 h-12 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${userType === 'supervisor' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
                     >
-                        <Hospital size={18} /> พี่เลี้ยงแหล่งฝึก
+                        <Hospital size={18} /> พี่เลี้ยง
                     </button>
                     <button
                         type="button"
