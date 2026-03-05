@@ -689,7 +689,7 @@ export default function SmartRegister() {
             return;
         }
         if (userType === 'supervisor' && !selectedSite) {
-            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกสถานที่ฝึกประสบการณ์ของคุณ', 'warning');
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกหน่วยงานต้นสังกัดของคุณ', 'warning');
             return;
         }
 
@@ -858,7 +858,7 @@ export default function SmartRegister() {
                     {/* ช่องเลือกสถานที่ฝึก (แสดงเฉพาะพี่เลี้ยง) */}
                     {userType === 'supervisor' && (
                         <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-100 space-y-5">
-                            <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">สถานที่ฝึกประสบการณ์</label>
+                            <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">หน่วยงานที่สังกัด</label>
                             <div className="relative" ref={dropdownRef}>
                                 <Building2 className="absolute left-5 top-1/2 -translate-y-1/2 text-blue-600 z-10" size={20} />
                                 <input
