@@ -16,8 +16,9 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Swal from 'sweetalert2'
 import AdminLayout from '@/components/AdminLayout'
+import { Suspense } from 'react'
 
-export default function AdminEvaluationSummary() {
+function AdminEvaluationContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const subjectId = searchParams.get('id') || ''
@@ -694,64 +695,62 @@ export default function AdminEvaluationSummary() {
 
 
     if (loading) return (
-        <AdminLayout>
-            <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-slate-900">
-                <div className="max-w-7xl mx-auto pb-20 px-4 animate-pulse">
-                    {/* Header skeleton */}
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
-                        <div>
-                            <div className="flex items-center gap-4">
-                                <div className="w-14 h-14 bg-blue-200 rounded-2xl" />
-                                <div className="h-10 w-64 bg-slate-200 rounded-2xl" />
-                            </div>
-                            <div className="h-3 w-48 bg-slate-100 rounded mt-4 ml-1" />
+        <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-slate-900">
+            <div className="max-w-7xl mx-auto pb-20 px-4 animate-pulse">
+                {/* Header skeleton */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
+                    <div>
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 bg-blue-200 rounded-2xl" />
+                            <div className="h-10 w-64 bg-slate-200 rounded-2xl" />
                         </div>
-                    </div>
-
-                    {/* Subject pills skeleton */}
-                    <div className="flex gap-2 pb-4 mb-6">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className="w-28 h-10 bg-slate-200 rounded-2xl" />
-                        ))}
-                    </div>
-
-                    {/* Filter bar skeleton */}
-                    <div className="bg-white/50 p-4 rounded-[2.5rem] border border-slate-100 mb-8">
-                        <div className="flex flex-col xl:flex-row items-center gap-4">
-                            <div className="w-48 h-14 bg-slate-100 rounded-[1.5rem]" />
-                            <div className="w-64 h-14 bg-slate-100 rounded-[1.5rem]" />
-                            <div className="flex-1 h-14 bg-slate-100 rounded-[1.5rem] w-full" />
-                            <div className="w-40 h-14 bg-emerald-100 rounded-[1.5rem]" />
-                        </div>
-                    </div>
-
-                    {/* Table skeleton */}
-                    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-                        <div className="h-16 bg-slate-50/50 border-b border-slate-100" />
-                        {[1, 2, 3, 4, 5].map(i => (
-                            <div key={i} className="flex items-center gap-6 px-6 py-5 border-b border-slate-50">
-                                <div className="w-8 h-4 bg-slate-100 rounded" />
-                                <div className="flex items-center gap-3 flex-1">
-                                    <div className="w-10 h-10 bg-slate-100 rounded-xl" />
-                                    <div className="space-y-2">
-                                        <div className="h-4 w-36 bg-slate-100 rounded" />
-                                        <div className="h-2 w-20 bg-slate-50 rounded" />
-                                    </div>
-                                </div>
-                                <div className="h-6 w-32 bg-blue-50 rounded-lg hidden md:block" />
-                                <div className="h-4 w-24 bg-slate-100 rounded hidden lg:block" />
-                                <div className="h-8 w-16 bg-slate-100 rounded-lg" />
-                                <div className="h-8 w-8 bg-slate-100 rounded-lg" />
-                            </div>
-                        ))}
+                        <div className="h-3 w-48 bg-slate-100 rounded mt-4 ml-1" />
                     </div>
                 </div>
+
+                {/* Subject pills skeleton */}
+                <div className="flex gap-2 pb-4 mb-6">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="w-28 h-10 bg-slate-200 rounded-2xl" />
+                    ))}
+                </div>
+
+                {/* Filter bar skeleton */}
+                <div className="bg-white/50 p-4 rounded-[2.5rem] border border-slate-100 mb-8">
+                    <div className="flex flex-col xl:flex-row items-center gap-4">
+                        <div className="w-48 h-14 bg-slate-100 rounded-[1.5rem]" />
+                        <div className="w-64 h-14 bg-slate-100 rounded-[1.5rem]" />
+                        <div className="flex-1 h-14 bg-slate-100 rounded-[1.5rem] w-full" />
+                        <div className="w-40 h-14 bg-emerald-100 rounded-[1.5rem]" />
+                    </div>
+                </div>
+
+                {/* Table skeleton */}
+                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+                    <div className="h-16 bg-slate-50/50 border-b border-slate-100" />
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="flex items-center gap-6 px-6 py-5 border-b border-slate-50">
+                            <div className="w-8 h-4 bg-slate-100 rounded" />
+                            <div className="flex items-center gap-3 flex-1">
+                                <div className="w-10 h-10 bg-slate-100 rounded-xl" />
+                                <div className="space-y-2">
+                                    <div className="h-4 w-36 bg-slate-100 rounded" />
+                                    <div className="h-2 w-20 bg-slate-50 rounded" />
+                                </div>
+                            </div>
+                            <div className="h-6 w-32 bg-blue-50 rounded-lg hidden md:block" />
+                            <div className="h-4 w-24 bg-slate-100 rounded hidden lg:block" />
+                            <div className="h-8 w-16 bg-slate-100 rounded-lg" />
+                            <div className="h-8 w-8 bg-slate-100 rounded-lg" />
+                        </div>
+                    ))}
+                </div>
             </div>
-        </AdminLayout>
+        </div>
     )
 
     return (
-        <AdminLayout>
+        <>
             <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-slate-900">
                 {/* Admin-style Header */}
                 <div className="max-w-7xl mx-auto pb-20 px-4">
@@ -1241,7 +1240,7 @@ export default function AdminEvaluationSummary() {
                                                         </div>
                                                     </div>
                                                 </div>
-                                            );
+                                            )
                                         })()}
                                     </div>
                                 )}
@@ -1256,9 +1255,34 @@ export default function AdminEvaluationSummary() {
                     </div>
                 )}
             </div>
-        </AdminLayout>
+        </>
     )
 }
 
-
-// ver2
+export default function AdminEvaluationSummary() {
+    return (
+        <AdminLayout>
+            <Suspense fallback={
+                <div className="min-h-screen flex flex-col items-center justify-center bg-white overflow-hidden relative font-sans">
+                    <div className="absolute top-0 left-0 w-full h-full opacity-[0.03] pointer-events-none">
+                        <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-indigo-600 rounded-full blur-[100px]"></div>
+                        <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-blue-500 rounded-full blur-[100px]"></div>
+                    </div>
+                    <div className="relative flex flex-col items-center">
+                        <div className="relative w-20 h-20 mb-8">
+                            <div className="absolute inset-0 rounded-full border-[3px] border-slate-100 border-t-indigo-600 animate-spin"></div>
+                            <div className="absolute inset-2 rounded-full border-[2px] border-transparent border-t-blue-400 animate-[spin_0.8s_linear_infinite]"></div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-2 h-2 bg-indigo-600 rounded-full animate-ping"></div>
+                            </div>
+                        </div>
+                        <h2 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em]">กำลังโหลดข้อมูล</h2>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">กรุณารอซักครู่...</span>
+                    </div>
+                </div>
+            }>
+                <AdminEvaluationContent />
+            </Suspense>
+        </AdminLayout>
+    )
+}
