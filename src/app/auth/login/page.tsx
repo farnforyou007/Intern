@@ -162,7 +162,7 @@ export default function LoginPage() {
                             <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                             <input
                                 type="email"
-                                placeholder="อีเมลแอดมิน"
+                                placeholder="อีเมล"
                                 className="w-full h-14 pl-14 pr-6 rounded-2xl border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-slate-700"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
@@ -194,7 +194,7 @@ export default function LoginPage() {
                                     <span>กำลังตรวจสอบข้อมูล...</span>
                                 </>
                             ) : (
-                                'เข้าสู่ระบบแอดมิน'
+                                'เข้าสู่ระบบ'
                             )}
                         </button>
                     </div>

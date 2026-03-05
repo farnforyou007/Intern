@@ -850,7 +850,7 @@ export default function AdminManagement() {
                 </div>
 
                 <Tabs defaultValue="pending" value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="bg-slate-100/50 p-1 rounded-2xl h-auto mb-6 md:mb-8 border border-slate-100 flex w-fit ml-auto shadow-sm overflow-x-auto">
+                    <TabsList className="bg-slate-100/50 p-1 rounded-2xl h-auto mb-6 md:mb-8 border border-slate-100 flex w-fit shadow-sm overflow-x-auto">
                         <TabsTrigger value="pending" className="rounded-xl px-3 md:px-6 py-2 md:py-2.5 data-[state=active]:bg-white font-bold text-xs md:text-sm gap-1 md:gap-2 transition-all whitespace-nowrap flex-1 md:flex-none">รออนุมัติ <span className="bg-orange-500 text-white px-2 py-0.5 rounded-md text-[10px]">{pendingList.length}</span></TabsTrigger>
                         <TabsTrigger value="teachers" className="rounded-xl px-3 md:px-6 py-2 md:py-2.5 data-[state=active]:bg-white font-bold text-xs md:text-sm transition-all whitespace-nowrap flex-1 md:flex-none">อาจารย์คณะ</TabsTrigger>
                         <TabsTrigger value="supervisors" className="rounded-xl px-3 md:px-6 py-2 md:py-2.5 data-[state=active]:bg-white font-bold text-xs md:text-sm transition-all whitespace-nowrap flex-1 md:flex-none">พี่เลี้ยงแหล่งฝึก</TabsTrigger>
