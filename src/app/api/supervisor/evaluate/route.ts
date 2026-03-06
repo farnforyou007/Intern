@@ -8,7 +8,7 @@ import { apiSuccess, apiError } from '@/lib/api-helpers'
  * ดึงข้อมูล assignment + evaluation groups + คะแนนเก่า
  */
 export async function GET(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const { searchParams } = new URL(req.url)

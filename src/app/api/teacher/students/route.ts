@@ -8,7 +8,7 @@ import { apiSuccess, apiError } from '@/lib/api-helpers'
  * ดึงรายชื่อนักศึกษาทั้งหมด + ปีการศึกษา options
  */
 export async function GET(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const { searchParams } = new URL(req.url)

@@ -8,7 +8,7 @@ import { apiSuccess, apiError } from '@/lib/api-helpers'
  * ดึงผลัดตามปีที่เลือก + วิชาทั้งหมด + ปีที่มีข้อมูล
  */
 export async function GET(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const { searchParams } = new URL(req.url)

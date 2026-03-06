@@ -8,7 +8,7 @@ import { apiSuccess, apiError } from '@/lib/api-helpers'
  * ดึงค่า system_configs (current_training_year)
  */
 export async function GET(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const { data, error } = await supabase

@@ -22,7 +22,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 })
         }
 
-        const supabase = createServerSupabase()
+        const supabase = await createServerSupabase()
 
         // 1. บันทึกข้อมูลลงตาราง supervisors
         const { data: supervisor, error: insError } = await supabase

@@ -9,7 +9,7 @@ export async function GET(request: Request) {
         return apiError('Missing lineUserId', 400)
     }
 
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const { data, error } = await supabase

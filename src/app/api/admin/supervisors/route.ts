@@ -11,7 +11,7 @@ const isValidLineId = (id?: string) => id && /^U[0-9a-f]{32}$/.test(id)
  * ดึงรายชื่อ supervisors + subjects + sites + eval progress ทั้งหมด
  */
 export async function GET() {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const [
@@ -64,7 +64,7 @@ export async function GET() {
  * Actions: approve, delete, update, save-subjects, send-reminder
  */
 export async function POST(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const body = await req.json()

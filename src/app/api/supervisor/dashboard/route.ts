@@ -9,7 +9,7 @@ import { apiSuccess, apiError, getLineUserIdFromRequest } from '@/lib/api-helper
  * Return: supervisor info, stats, daysLeft, alertStatus, urgentRotationName, pendingStudentsCount
  */
 export async function GET(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const lineUserId = getLineUserIdFromRequest(req)

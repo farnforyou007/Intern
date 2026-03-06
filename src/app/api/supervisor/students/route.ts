@@ -8,7 +8,7 @@ import { apiSuccess, apiError } from '@/lib/api-helpers'
  * ดึงข้อมูล supervisor + students ที่อยู่ในสิทธิ์ + ปีการศึกษา + eval progress
  */
 export async function GET(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const { searchParams } = new URL(req.url)

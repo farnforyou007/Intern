@@ -8,7 +8,7 @@ import { apiSuccess, apiError } from '@/lib/api-helpers'
  * ดึงข้อมูลนักศึกษาพร้อม assignments, rotations, subjects, sites, mentors
  */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         const { id } = await params

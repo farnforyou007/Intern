@@ -5,7 +5,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const action = searchParams.get('action')
 
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         if (action === 'init') {
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 })
         }
 
-        const supabase = createServerSupabase()
+        const supabase = await createServerSupabase()
 
         // 1. บันทึกข้อมูลนักศึกษาลงตารางหลัก
         const { data: student, error: stError } = await supabase.from('students').insert([{

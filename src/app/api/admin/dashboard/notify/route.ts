@@ -9,7 +9,7 @@ import { flexEvaluationReminder } from '@/lib/lineFlex'
  * ส่งแจ้งเตือน LINE Flex Message ไปยังพี่เลี้ยงที่มีรายการค้างประเมิน
  */
 export async function POST(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
         // 1. ดึงรายการ assignment ทั้งหมด (เพื่อมาคำนวณสัดส่วน)

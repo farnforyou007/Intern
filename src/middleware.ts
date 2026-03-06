@@ -27,6 +27,7 @@ export async function middleware(request: NextRequest) {
                         value,
                         ...options,
                         sameSite: 'lax',
+                        httpOnly: true,
                         secure: true // บังคับใช้บน Vercel (HTTPS)
                     })
                 },
