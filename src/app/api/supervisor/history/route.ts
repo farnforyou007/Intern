@@ -11,9 +11,10 @@ export async function GET(req: Request) {
     const supabase = await createServerSupabase()
 
     try {
-        const { searchParams } = new URL(req.url)
-        const lineUserId = searchParams.get('lineUserId')
-        if (!lineUserId) return apiError('Missing lineUserId', 400)
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
 
         // 0. ดึงปีการศึกษาปัจจุบัน
         const { data: configData } = await supabase
@@ -27,9 +28,10 @@ export async function GET(req: Request) {
         const { data: sv } = await supabase
             .from('supervisors')
             .select('id')
-            .eq('line_user_id', lineUserId)
+            .eq('user_id', authUser.id)
             .single()
-        if (!sv) return apiError('Supervisor not found', 404)
+
+        if (!sv) return apiError('Unauthorized: Active status required.', 401)
 
         // 2. ดึงประวัติที่ is_evaluated = true
         const { data, error } = await supabase

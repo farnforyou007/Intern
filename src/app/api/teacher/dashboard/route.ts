@@ -12,9 +12,12 @@ export async function GET(req: Request) {
 
     try {
         const { searchParams } = new URL(req.url)
-        const lineUserId = searchParams.get('lineUserId')
         const selectedYear = searchParams.get('selectedYear') || ''
-        if (!lineUserId) return apiError('Missing lineUserId', 400)
+
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
 
         // 0. ดึงปีการศึกษา default + options
         let defaultYear = selectedYear
@@ -45,13 +48,15 @@ export async function GET(req: Request) {
             yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)))
         }
 
-        // 2. ดึง Teacher info
+        // 2. ดึง Teacher info - 🛡️ Hardened RBAC
         const { data: user } = await supabase
             .from('supervisors')
             .select('id, full_name, avatar_url, role, supervisor_subjects(id)')
-            .eq('line_user_id', lineUserId)
-            .single()
-        if (!user) return apiError('Teacher not found', 404)
+            .eq('user_id', authUser.id)
+            .or('role.eq.teacher,role.eq.both') // Require teacher role
+            .maybeSingle()
+
+        if (!user) return apiError('Teacher not found or Permission denied', 403)
 
         const hasDoubleRole = user.role === 'supervisor' || user.role === 'both'
 

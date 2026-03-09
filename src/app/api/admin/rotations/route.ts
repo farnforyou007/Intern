@@ -11,6 +11,11 @@ export async function GET(req: Request) {
     const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
+
         const { searchParams } = new URL(req.url)
         const selectedYear = searchParams.get('year') || ''
 
@@ -64,9 +69,13 @@ export async function GET(req: Request) {
  * Actions: save (insert/update + rotation_subjects sync), delete
  */
 export async function POST(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
         const body = await req.json()
         const { action } = body
 

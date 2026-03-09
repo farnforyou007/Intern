@@ -12,6 +12,11 @@ export async function GET(req: Request) {
     const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
+
         const { searchParams } = new URL(req.url)
         const subjectId = searchParams.get('subjectId') || ''
         const selectedTrainingYear = searchParams.get('selectedTrainingYear') || ''
@@ -184,9 +189,13 @@ export async function GET(req: Request) {
  * Actions: fetch-questions (for detail modal)
  */
 export async function POST(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
         const body = await req.json()
         const { action } = body
 

@@ -1,7 +1,7 @@
 // src/app/api/supervisor/dashboard/route.ts
 import { NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase-server'
-import { apiSuccess, apiError, getLineUserIdFromRequest } from '@/lib/api-helpers'
+import { apiSuccess, apiError } from '@/lib/api-helpers'
 
 /**
  * GET /api/supervisor/dashboard
@@ -12,9 +12,9 @@ export async function GET(req: Request) {
     const supabase = await createServerSupabase()
 
     try {
-        const lineUserId = getLineUserIdFromRequest(req)
-        if (!lineUserId) {
-            return apiError('Missing X-Line-User-Id header', 401)
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
         }
 
         // 0. ดึงปีการศึกษาปัจจุบันจาก system_configs
@@ -25,15 +25,16 @@ export async function GET(req: Request) {
             .single()
         const currentYear = configData?.key_value || ''
 
-        // 1. ดึงข้อมูลพี่เลี้ยง
+        // 1. ดึงข้อมูลพี่เลี้ยง (บังคับเช็ค role เพื่อความปลอดภัย)
         const { data: svData, error: svError } = await supabase
             .from('supervisors')
             .select('*, training_sites(site_name)')
-            .eq('line_user_id', lineUserId)
-            .single()
+            .eq('user_id', authUser.id)
+            .eq('role', 'supervisor') // 🛡️ Hardened RBAC
+            .maybeSingle()
 
         if (svError || !svData) {
-            return apiError('Supervisor not found', 404)
+            return apiError('Supervisor not found or Permission denied', 403)
         }
 
         // จัดการรูปโปรไฟล์

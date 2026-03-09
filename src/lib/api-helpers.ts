@@ -1,14 +1,6 @@
 import { NextResponse } from 'next/server'
 
 /**
- * ดึง line_user_id จาก Request Header
- * Client ต้องส่ง Header: X-Line-User-Id
- */
-export function getLineUserIdFromRequest(req: Request): string | null {
-    return req.headers.get('x-line-user-id') || null
-}
-
-/**
  * ส่ง JSON response สำเร็จ
  */
 export function apiSuccess(data: any, status = 200) {

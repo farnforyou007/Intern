@@ -5,8 +5,6 @@ export async function POST(request: Request) {
     try {
         const body = await request.json()
         const {
-            lineUserId,
-            lineDisplayName,
             fullName,
             phone,
             email,
@@ -18,16 +16,48 @@ export async function POST(request: Request) {
             selectedSubSubjects
         } = body
 
-        if (!lineUserId || !fullName || !phone || !email || !role) {
-            return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 })
+        const supabase = await createServerSupabase()
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+            return NextResponse.json({ success: false, error: 'Unauthorized. Please login via LINE first.' }, { status: 401 })
         }
 
-        const supabase = await createServerSupabase()
+        const lineUserId = user.user_metadata.line_user_id || user.app_metadata.line_user_id;
+        const lineDisplayName = user.user_metadata.full_name || user.user_metadata.display_name || user.user_metadata.name || 'Unknown User';
+
+        console.log('Registering Supervisor:', {
+            lineUserId,
+            lineDisplayName,
+            userId: user.id
+        });
+
+        if (!lineUserId) {
+            return NextResponse.json({
+                success: false,
+                error: 'Identity Error: line_user_id is missing from session metadata. Please logout and login again.'
+            }, { status: 400 })
+        }
+
+        // **เช็คก่อนว่ามีไลน์นี้ลงทะเบียนไปแล้วหรือยัง**
+        const { data: existingSupervisor } = await supabase
+            .from('supervisors')
+            .select('id')
+            .eq('line_user_id', lineUserId)
+            .maybeSingle()
+
+        if (existingSupervisor) {
+            return NextResponse.json({
+                success: false,
+                error: 'บัญชี LINE นี้ถูกใช้งานลงทะเบียนไปแล้ว หากต้องการแก้ไขข้อมูลหรือเปลี่ยนบทบาท กรุณาติดต่อแอดมิน'
+            }, { status: 400 })
+        }
 
         // 1. บันทึกข้อมูลลงตาราง supervisors
         const { data: supervisor, error: insError } = await supabase
             .from('supervisors')
             .insert([{
+                user_id: user.id, // Linking to Supabase Auth
                 line_user_id: lineUserId,
                 line_display_name: lineDisplayName,
                 full_name: fullName,

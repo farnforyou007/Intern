@@ -53,13 +53,11 @@ export default function SupervisorLayout({ children }: { children: React.ReactNo
 
                 const { data: user } = await supabase
                     .from('supervisors')
-                    .select('is_verified')
-                    // .eq('line_user_id', profile.userId)
+                    .select('is_verified, role')
                     .eq('line_user_id', lineUserId)
+                    .maybeSingle();
 
-                    .single();
-
-                if (!user) {
+                if (!user || user.role !== 'supervisor') {
                     setStatus('unregistered');
                 } else if (!user.is_verified) {
                     setStatus('pending');

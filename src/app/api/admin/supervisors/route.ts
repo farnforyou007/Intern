@@ -14,6 +14,11 @@ export async function GET() {
     const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
+
         const [
             { data: supervisors, error: supError },
             { data: subjects, error: subError },
@@ -67,6 +72,11 @@ export async function POST(req: Request) {
     const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
+
         const body = await req.json()
         const { action } = body
 
@@ -108,13 +118,33 @@ export async function POST(req: Request) {
             // --- ลบพี่เลี้ยง ---
             case 'delete': {
                 const { id } = body
+
+                // 1. ดึงข้อมูลเพื่อเอา user_id มาลบใน Auth ด้วย
+                const { data: target } = await supabase
+                    .from('supervisors')
+                    .select('user_id')
+                    .eq('id', id)
+                    .single()
+
+                // 2. ลบออกจาก Database
                 const { error } = await supabase
                     .from('supervisors')
                     .delete()
                     .eq('id', id)
 
                 if (error) return apiError(error.message, 500)
-                return apiSuccess({ message: 'ลบข้อมูลสำเร็จ' })
+
+                // 3. ถ้ามี user_id ให้ลบใน Supabase Auth ด้วย (Admin Service Role)
+                if (target?.user_id) {
+                    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+                    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(target.user_id)
+                    if (authError) {
+                        console.error('Failed to delete Auth user:', authError.message)
+                        // ไม่ throw error เพื่อให้ database deletion ยังถือว่าสำเร็จ
+                    }
+                }
+
+                return apiSuccess({ message: 'ลบข้อมูลและบัญชีสำเร็จ' })
             }
 
             // --- อัปเดตข้อมูลพี่เลี้ยง ---

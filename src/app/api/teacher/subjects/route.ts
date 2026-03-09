@@ -12,10 +12,13 @@ export async function GET(req: Request) {
 
     try {
         const { searchParams } = new URL(req.url)
-        const lineUserId = searchParams.get('lineUserId')
         const subjectId = searchParams.get('subjectId') || ''
         const selectedTrainingYear = searchParams.get('selectedTrainingYear') || ''
-        if (!lineUserId) return apiError('Missing lineUserId', 400)
+
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
 
         // 0. ดึงปีการศึกษา default + options
         let defaultYear = selectedTrainingYear
@@ -46,11 +49,11 @@ export async function GET(req: Request) {
             yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)))
         }
 
-        // 2. ดึง Teacher
+        // 2. ดึง Teacher - Use user_id from Auth Session
         const { data: user } = await supabase
             .from('supervisors')
             .select('id')
-            .eq('line_user_id', lineUserId)
+            .eq('user_id', authUser.id)
             .single()
         if (!user) return apiError('Teacher not found', 404)
 
@@ -191,9 +194,14 @@ export async function GET(req: Request) {
  * Actions: fetch-questions (for detail modal)
  */
 export async function POST(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase() // Added await
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata?.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
+
         const body = await req.json()
         const { action } = body
 

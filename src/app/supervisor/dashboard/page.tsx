@@ -144,27 +144,30 @@ export default function SupervisorDashboard() {
         if (result.isConfirmed) {
             setLoading(true);
             try {
-                // 1. ล้างข้อมูลใน Storage ของเบราว์เซอร์
+                // 1. Clear Supabase Session
+                await supabase.auth.signOut();
+
+                // 2. Clear Local/Session Storage
                 localStorage.clear();
                 localStorage.removeItem('debug_mode');
                 sessionStorage.clear();
 
-                // 2. ล้าง Cache Storage (ถ้ามี)
+                // 3. ล้าง Cache Storage (ถ้ามี)
                 if ('caches' in window) {
                     const cacheNames = await caches.keys();
                     await Promise.all(cacheNames.map(name => caches.delete(name)));
                 }
 
-                // 3. ออกจากระบบ LINE LIFF
+                // 4. ออกจากระบบ LINE LIFF
                 if (liff.isLoggedIn()) {
                     liff.logout();
                 }
 
-                // 4. ส่งกลับหน้าหลักและบังคับรีโหลดเพื่อล้าง Memory
-                window.location.href = '/';
+                // 5. ส่งกลับหน้าหลักและบังคับรีโหลดเพื่อล้าง Memory
+                window.location.replace('/');
             } catch (error) {
                 console.error("Logout error:", error);
-                window.location.href = '/';
+                window.location.replace('/');
             }
         }
     };

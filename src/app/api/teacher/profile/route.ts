@@ -2,14 +2,12 @@ import { createServerSupabase } from '@/lib/supabase-server'
 import { apiSuccess, apiError } from '@/lib/api-helpers'
 
 export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url)
-    const lineUserId = searchParams.get('lineUserId')
-
-    if (!lineUserId) {
-        return apiError('Missing lineUserId', 400)
-    }
-
     const supabase = await createServerSupabase()
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+
+    if (!authUser || authUser.app_metadata?.provider !== 'line') {
+        return apiError('Unauthorized', 401)
+    }
 
     try {
         const { data, error } = await supabase
@@ -29,7 +27,7 @@ export async function GET(request: Request) {
                     subjects(id, name)
                 )
             `)
-            .eq('line_user_id', lineUserId)
+            .eq('user_id', authUser.id)
             .limit(1)
 
         if (error) {

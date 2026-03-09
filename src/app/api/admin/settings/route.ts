@@ -11,6 +11,11 @@ export async function GET(req: Request) {
     const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
+
         const { data, error } = await supabase
             .from('system_configs')
             .select('key_name, key_value')
@@ -30,9 +35,13 @@ export async function GET(req: Request) {
  * Action: update-config
  */
 export async function POST(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
         const body = await req.json()
         const { action, key_name, key_value } = body
 

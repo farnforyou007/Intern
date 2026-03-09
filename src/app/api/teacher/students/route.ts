@@ -14,6 +14,20 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url)
         const selectedTrainingYear = searchParams.get('selectedTrainingYear') || ''
 
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
+
+        // Verify active supervisor status
+        const { data: sv } = await supabase
+            .from('supervisors')
+            .select('id')
+            .eq('user_id', authUser.id)
+            .single()
+
+        if (!sv) return apiError('Unauthorized: Access restricted to active personnel.', 401)
+
         // 0. ดึงปีการศึกษา default (ถ้าไม่ส่งมา)
         let defaultYear = selectedTrainingYear
         if (!defaultYear) {

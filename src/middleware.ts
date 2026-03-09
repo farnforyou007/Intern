@@ -45,35 +45,71 @@ export async function middleware(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     const { pathname } = request.nextUrl
 
-    // หน้าที่อนุญาตให้เข้าได้ "โดยไม่ต้องล็อกอิน"
-    const isPublicAuthPage = pathname.startsWith('/auth/callback') ||
-        pathname.startsWith('/forgot-password') ||
-        pathname === '/auth/login'
+    // 1. Define Routes
+    const isAdminRoute = pathname.startsWith('/admin') || pathname.startsWith('/api/admin')
+    const isTeacherRoute = pathname.startsWith('/teacher') || pathname.startsWith('/api/teacher')
+    const isSupervisorRoute = pathname.startsWith('/supervisor') || pathname.startsWith('/api/supervisor')
+    const isAuthPage = pathname === '/auth/login' || pathname.startsWith('/auth/callback')
+    const isLandingPage = pathname === '/'
 
-    // หน้าที่ต้อง "ล็อกอินแล้วเท่านั้น" (รวมถึงหน้าที่มาจากการกดลิงก์รีเซ็ต)
-    const isProtectedRoute = pathname.startsWith('/admin') ||
-        pathname.startsWith('/update-password')
+    // 2. Authentication & Authorization Logic
+    if (!user) {
+        // Redirect or Error if trying to access protected routes without a session
+        if (pathname.startsWith('/api/')) {
+            if (isAdminRoute || isTeacherRoute || isSupervisorRoute) {
+                return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+            }
+        } else {
+            if (isAdminRoute) return NextResponse.redirect(new URL('/auth/login', request.url))
+            if (isTeacherRoute || isSupervisorRoute) return NextResponse.redirect(new URL('/', request.url))
+        }
+    } else {
+        const provider = user.app_metadata?.provider
+        const role = user.user_metadata?.role
 
-    if (user && pathname === '/auth/login') {
-        return NextResponse.redirect(new URL('/admin', request.url))
-    }
+        // 1. Admin Protection (Email provider only)
+        if (isAdminRoute) {
+            if (provider !== 'email') {
+                if (pathname.startsWith('/api/')) return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+                return NextResponse.redirect(new URL('/', request.url))
+            }
+        }
 
-    if (!user && isProtectedRoute) {
-        return NextResponse.redirect(new URL('/auth/login', request.url))
-    }
+        // 2. Teacher vs Supervisor Protection (Line provider)
+        if (isTeacherRoute || isSupervisorRoute) {
+            if (provider !== 'line') {
+                if (pathname.startsWith('/api/')) return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+                return NextResponse.redirect(new URL('/admin', request.url))
+            }
 
-    // ตรวจสอบสิทธิ์การเข้าถึงโฟลเดอร์ต่างๆ
-    if (pathname.startsWith('/admin') && !user) {
-        return NextResponse.redirect(new URL('/auth/login', request.url))
-    }
+            // Cross-Role Protection
+            // If role metadata exists, enforce it. If it doesn't, let the layout handle it to avoid loops.
+            if (role) {
+                if ((isTeacherRoute && role !== 'teacher' && role !== 'both') ||
+                    (isSupervisorRoute && role !== 'supervisor' && role !== 'both')) {
 
-    if (user && pathname === '/auth/login') {
-        return NextResponse.redirect(new URL('/admin', request.url))
+                    if (pathname.startsWith('/api/')) {
+                        return NextResponse.json({ success: false, error: 'Forbidden: Role mismatch' }, { status: 403 })
+                    }
+                    return NextResponse.redirect(new URL('/', request.url))
+                }
+            }
+        }
+
+        // 3. Prevent redundant login page visits
+        if (isAuthPage && provider === 'email') return NextResponse.redirect(new URL('/admin', request.url))
+
+        // IMPORTANT: NEVER redirect FROM '/' to dashboard in Middleware for LINE users.
+        // Doing so causes redirect loops because metadata might be missing in the JWT.
+        // Let SplitHomePage's autoCheckLogin handle the dashbord redirection via DB check.
+        if (isLandingPage && provider === 'email') {
+            return NextResponse.redirect(new URL('/admin', request.url))
+        }
     }
 
     return response
 }
 
 export const config = {
-    matcher: ['/((?!_next/static|_next/image|favicon.ico|api).*)'],
+    matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }

@@ -11,6 +11,11 @@ export async function GET(req: Request) {
     const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
+
         const { searchParams } = new URL(req.url)
         let selectedYear = searchParams.get('year') || ''
 

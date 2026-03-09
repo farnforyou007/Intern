@@ -32,20 +32,32 @@ import React from 'react'
 import { Clock, ShieldAlert, ArrowLeft, LogOut, GraduationCap } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import liff from '@line/liff'
+import { createBrowserClient } from '@supabase/ssr'
 
 export default function TeacherPendingPage() {
     const router = useRouter()
+    const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
 
-    const handleLogout = () => {
-        // หากมีการใช้ LIFF ให้ logout ออก
+    const handleLogout = async () => {
         try {
+            // 1. Clear Supabase Session
+            await supabase.auth.signOut()
+
+            // 2. Clear LINE LIFF
             if (liff.isLoggedIn()) {
                 liff.logout()
             }
+
+            // 3. Clear Storage
+            localStorage.clear()
+            sessionStorage.clear()
         } catch (err) {
             console.error("Logout failed", err)
         }
-        router.replace('/')
+        window.location.replace('/')
     }
 
     return (

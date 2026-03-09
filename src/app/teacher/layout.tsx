@@ -133,10 +133,26 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
             customClass: { popup: 'rounded-[2rem] font-sans' }
         })
         if (result.isConfirmed) {
-            localStorage.clear()
-            localStorage.removeItem('debug_mode');
-            sessionStorage.clear()
-            window.location.replace('/auth/check')
+            try {
+                // 1. Clear Supabase Session
+                await supabase.auth.signOut()
+
+                // 2. Clear LINE LIFF
+                if (liff.isLoggedIn()) {
+                    liff.logout()
+                }
+
+                // 3. Clear Storage
+                localStorage.clear()
+                localStorage.removeItem('debug_mode');
+                sessionStorage.clear()
+
+                // 4. Redirect to landing page
+                window.location.replace('/')
+            } catch (error) {
+                console.error("Logout failed:", error)
+                window.location.replace('/')
+            }
         }
     }
 

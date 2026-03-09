@@ -15,6 +15,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         const studentId = id?.replace(':', '')
         if (!studentId) return apiError('Missing student ID', 400)
 
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
+
+        // Verify active supervisor status
+        const { data: sv } = await supabase
+            .from('supervisors')
+            .select('id')
+            .eq('user_id', authUser.id)
+            .single()
+
+        if (!sv) return apiError('Unauthorized: Access restricted to active personnel.', 401)
+
         const { data, error } = await supabase
             .from('students')
             .select(`

@@ -578,6 +578,8 @@ import {
 import Swal from 'sweetalert2'
 import liff from '@line/liff'
 import { flexRegisterSuccess } from '@/lib/lineFlex';
+import { getLineUserId } from '@/utils/auth';
+import { useSearchParams } from 'next/navigation';
 
 export default function SmartRegister() {
     const [fullName, setFullName] = useState('')
@@ -610,32 +612,86 @@ export default function SmartRegister() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
+    const searchParams = useSearchParams();
+
     useEffect(() => {
         const initLiff = async () => {
             try {
-                // ใส่ LIFF ID ที่คุณได้จาก LINE Developers Console
-                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
+                // 1. Check for User (Debug or Existing)
+                const lineId = await getLineUserId(searchParams);
 
-                if (liff.isLoggedIn()) {
-                    const profile = await liff.getProfile()
-                    setLineUserId(profile.userId)
-                    setLineDisplayName(profile.displayName)
-                    // ถ้าใน LINE มีชื่ออยู่แล้ว สามารถเอามาตั้งเป็นค่าเริ่มต้นได้
+                if (lineId) {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const sessionLineId = user?.user_metadata?.line_user_id || user?.app_metadata?.line_user_id;
 
+                    // ✅ ถ้ามี Session เดิมแต่ ID ไม่ตรงกัน (สลับการเทส) ให้ล้างก่อน
+                    if (user && sessionLineId && sessionLineId !== lineId) {
+                        console.log("Identity mismatch, signing out...", { sessionLineId, lineId });
+                        await supabase.auth.signOut();
+                        window.location.reload();
+                        return;
+                    }
+
+                    if (!user) {
+                        const isDebug = searchParams.get('debug') || localStorage.getItem('debug_mode');
+                        const debugName = searchParams.get('name') || `DEBUG_USER_${lineId.slice(-4)}`;
+
+                        if (isDebug && isDebug !== 'clear') {
+                            // Debug Bridge
+                            const res = await fetch('/api/auth/debug', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    lineUserId: lineId,
+                                    name: debugName
+                                })
+                            });
+                            if (res.ok) {
+                                const { data: { user: newUser } } = await supabase.auth.getUser();
+                                if (newUser) {
+                                    setLineDisplayName(newUser.user_metadata.full_name || debugName);
+                                    setLineUserId(newUser.user_metadata.line_user_id || lineId);
+                                }
+                            }
+                        } else {
+                            // Real LINE Bridge
+                            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+                            if (liff.isLoggedIn()) {
+                                const idToken = liff.getIDToken();
+                                const res = await fetch('/api/auth/line', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ idToken })
+                                });
+                                if (res.ok) {
+                                    const { data: { user: newUser } } = await supabase.auth.getUser();
+                                    if (newUser) {
+                                        setLineDisplayName(newUser.user_metadata.full_name || '');
+                                        setLineUserId(newUser.user_metadata.line_user_id || null);
+                                    }
+                                }
+                            } else {
+                                liff.login({ redirectUri: window.location.href });
+                            }
+                        }
+                    } else {
+                        // Session already established
+                        setLineDisplayName(user.user_metadata.full_name || user.user_metadata.display_name || 'User');
+                        setLineUserId(user.user_metadata.line_user_id || lineId);
+                    }
                 } else {
-                    // liff.login() // ถ้ายังไม่ล็อกอิน ให้พาไปหน้า Login ของ LINE
-                    liff.login({ redirectUri: window.location.href });
-                    // liff.login({ redirectUri: window.location.origin + "/supervisor/register" });
+                    // No ID found and not logged in - trigger LIFF
+                    await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+                    if (!liff.isLoggedIn()) {
+                        liff.login({ redirectUri: window.location.href });
+                    }
                 }
-                // setLineUserId("DEBUG_SV_11");
-                // setLineDisplayName("DEBUG_SV_11");
             } catch (err) {
-                console.error("LIFF Init Error", err)
-
+                console.error("Auth Init Error", err)
             }
         }
         initLiff()
-    }, [])
+    }, [searchParams])
 
     useEffect(() => {
         const fetchMasterData = async () => {
@@ -707,8 +763,6 @@ export default function SmartRegister() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    lineUserId,
-                    lineDisplayName,
                     fullName,
                     phone,
                     email,
@@ -843,7 +897,7 @@ export default function SmartRegister() {
                         <label className="text-[10px] font-black text-slate-400 ml-4 uppercase tracking-[0.2em]">ข้อมูลพื้นฐาน</label>
                         <div className="relative">
                             <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                            <input placeholder="ชื่อ-นามสกุลจริง" className="w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={fullName} onChange={e => setFullName(e.target.value)} />
+                            <input placeholder="ชื่อ-นามสกุล" className="w-full h-14 pl-14 pr-6 rounded-2xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700" value={fullName} onChange={e => setFullName(e.target.value)} />
                         </div>
                         <div className="relative">
                             <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />

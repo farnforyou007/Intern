@@ -8,9 +8,23 @@ import { createBrowserClient } from '@supabase/ssr'
 export default function PendingPage() {
     const router = useRouter()
 
-    const handleLogout = () => {
-        liff.logout()
-        router.replace('/')
+    const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
+    const handleLogout = async () => {
+        try {
+            await supabase.auth.signOut()
+            if (liff.isLoggedIn()) {
+                liff.logout()
+            }
+            localStorage.clear()
+            sessionStorage.clear()
+        } catch (err) {
+            console.error("Logout failed", err)
+        }
+        window.location.replace('/')
     }
 
     return (

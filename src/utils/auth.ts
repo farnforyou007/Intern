@@ -1,9 +1,22 @@
 import liff from '@line/liff';
+import { createBrowserClient } from '@supabase/ssr';
 
 /**
  * ฟังก์ชันสำหรับดึง Line User ID โดยรองรับทั้งโหมดจริงและโหมด Debug
  */
 export const getLineUserId = async (searchParams: URLSearchParams): Promise<string | null> => {
+    // 0. ตรวจสอบ Supabase Session (สำหรับ Debug Shadow User หรือ Session ที่ Bridge แล้ว)
+    if (typeof window !== 'undefined') {
+        const supabase = createBrowserClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+        const { data: { user } } = await supabase.auth.getUser();
+        const metaLineId = user?.user_metadata?.line_user_id || user?.app_metadata?.line_user_id;
+
+        if (metaLineId) return metaLineId;
+    }
+
     // 1. ตรวจสอบโหมด Debug จาก URL (?debug=...)
     const debugKey = searchParams.get('debug');
 
@@ -47,13 +60,13 @@ export const getLineUserId = async (searchParams: URLSearchParams): Promise<stri
             'admin': 'DEBUG_ADMIN_01'  // แอดมิน (ถ้ามี)
         };
         const userId = mockMap[activeDebugKey];
-        if (userId && typeof window !== 'undefined') {
-            // ✅ บันทึกไว้ในเครื่องเลย รอบหน้าเข้าหน้าอื่นไม่ต้องพิมพ์ URL แล้ว
+        if (typeof window !== 'undefined') {
+            // ✅ บันทึกไว้ในเครื่องเพื่อให้หน้ารองๆ (Dashboard, etc.) จำได้
             localStorage.setItem('debug_mode', activeDebugKey);
         }
 
-        // return mockMap[debugKey] || null;
-        return userId || null;
+        // ถ้าเจอใน Map ให้คืนค่า ID จริง, ถ้าไม่เจอ (เช่น พิมพ์ ID ตรงๆ) ให้คืนค่าที่พิมพ์มาเลย
+        return userId || activeDebugKey;
     }
 
     // 2. ถ้าไม่มี Debug Mode ให้ใช้งาน LINE LIFF จริง

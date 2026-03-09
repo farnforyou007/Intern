@@ -11,9 +11,10 @@ export async function GET(req: Request) {
     const supabase = await createServerSupabase()
 
     try {
-        const { searchParams } = new URL(req.url)
-        const lineUserId = searchParams.get('lineUserId')
-        if (!lineUserId) return apiError('Missing lineUserId', 400)
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
 
         // 0. ดึงปีการศึกษาปัจจุบัน
         const { data: configData } = await supabase
@@ -23,11 +24,11 @@ export async function GET(req: Request) {
             .single()
         const currentYear = configData?.key_value || ''
 
-        // 1. ดึงข้อมูล Supervisor
+        // 1. ดึงข้อมูล Supervisor - Use user_id from Auth Session
         const { data: supervisor } = await supabase
             .from('supervisors')
             .select('*')
-            .eq('line_user_id', lineUserId)
+            .eq('user_id', authUser.id)
             .single()
         if (!supervisor) return apiError('Supervisor not found', 404)
 
@@ -181,17 +182,31 @@ export async function GET(req: Request) {
  * Action: claim — รับดูแลนักศึกษา
  */
 export async function POST(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase() // Added await
 
     try {
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
+
+        // Fetch the secure supervisor record
+        const { data: supervisor } = await supabase
+            .from('supervisors')
+            .select('id')
+            .eq('user_id', authUser.id)
+            .single()
+
+        if (!supervisor) return apiError('Unauthorized: Active status required.', 401)
+
         const body = await req.json()
         const { action } = body
 
         if (action === 'claim') {
-            const { assignment_id, supervisor_id } = body
+            const { assignment_id } = body // supervisor_id comes from session
             const { error } = await supabase
                 .from('assignment_supervisors')
-                .insert([{ assignment_id, supervisor_id }])
+                .insert([{ assignment_id, supervisor_id: supervisor.id }])
             if (error) throw error
             return apiSuccess({ claimed: true })
         }

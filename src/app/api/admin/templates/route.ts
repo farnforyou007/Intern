@@ -11,6 +11,11 @@ export async function GET(req: Request) {
     const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
+
         const { data, error } = await supabase
             .from('eval_templates')
             .select('*')
@@ -29,9 +34,13 @@ export async function GET(req: Request) {
  * Actions: save-template, delete-template, fetch-items, save-item, delete-item, reorder-items
  */
 export async function POST(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || user.app_metadata.provider !== 'email') {
+            return apiError('Unauthorized', 401)
+        }
         const body = await req.json()
         const { action } = body
 

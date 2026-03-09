@@ -21,14 +21,14 @@ export default function TeacherUnauthorized() {
             {/* Action Buttons */}
             <div className="w-full max-w-xs space-y-4">
                 <button
-                    onClick={() => router.replace('/auth/check')}
+                    onClick={() => router.replace('/')}
                     className="w-full py-5 bg-indigo-600 text-white rounded-3xl font-black text-sm shadow-xl shadow-indigo-200 flex items-center justify-center gap-3 active:scale-95 transition-all"
                 >
                     <ArrowLeft size={20} />
                     ตรวจสอบสิทธิ์อีกครั้ง
                 </button>
 
-                <a 
+                <a
                     href="https://line.me/ti/p/@your-admin-id" // ลิงก์ติดต่อแอดมิน
                     className="w-full py-5 bg-white text-slate-900 rounded-3xl font-black text-sm shadow-sm flex items-center justify-center gap-3 active:scale-95 transition-all border border-slate-100"
                 >

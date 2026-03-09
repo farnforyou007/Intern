@@ -23,31 +23,45 @@ export default function SplitHomePage() {
     useEffect(() => {
         const autoCheckLogin = async () => {
             try {
-                // 1. เริ่มการทำงาน LIFF ทันทีที่โหลดหน้า
+                // 1. เริ่มการทำงาน LIFF
                 await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
 
-                // 2. ถ้าผู้ใช้ Login อยู่แล้ว (ซึ่งรวมถึงจังหวะที่เพิ่ง Login กลับมาด้วย)
-                if (liff.isLoggedIn()) {
-                    const profile = await liff.getProfile();
+                // 2. เช็ก Supabase Session (Secure Cookie)
+                const { data: { user: authUser } } = await supabase.auth.getUser();
 
-                    // 3. ไปเช็กข้อมูลใน Supabase อัตโนมัติโดยไม่ต้องรอให้ผู้ใช้กดปุ่ม
+                if (authUser) {
                     const { data: user } = await supabase
                         .from('supervisors')
                         .select('is_verified, role')
-                        .eq('line_user_id', profile.userId)
-                        .single();
+                        .eq('user_id', authUser.id)
+                        .maybeSingle();
 
                     if (user) {
                         if (user.is_verified) {
                             router.replace(user.role === 'teacher' ? '/teacher/dashboard' : '/supervisor/dashboard');
                         } else {
-                            router.replace('/supervisor/pending');
+                            router.replace(user.role === 'teacher' ? '/teacher/pending' : '/supervisor/pending');
                         }
-                        return; // จบการทำงาน
+                        return;
                     }
                 }
 
-                // 4. ถ้ายังไม่ได้ Login หรือไม่มีข้อมูลในระบบ ค่อยปิด Loading เพื่อโชว์หน้า UI ปกติ
+                // 3. ถ้าไม่มี Supabase Session แต่ Login LIFF ไว้แล้ว -> ทำการ Bridge สิทธิ
+                if (liff.isLoggedIn()) {
+                    const idToken = liff.getIDToken();
+                    const res = await fetch('/api/auth/line', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ idToken })
+                    });
+
+                    const data = await res.json();
+                    if (res.ok && data.redirectTo) {
+                        router.replace(data.redirectTo);
+                        return;
+                    }
+                }
+
                 setIsChecking(false);
             } catch (err) {
                 console.error("Auto Login Check Failed:", err);
@@ -56,38 +70,40 @@ export default function SplitHomePage() {
         };
 
         autoCheckLogin();
-    }, [router, supabase]); // ทำงานทุกครั้งที่หน้าเว็บถูกเปิดขึ้นมา
+    }, [router, supabase]);
 
     const handleLineLogin = async () => {
         try {
             await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
             if (!liff.isLoggedIn()) {
-                liff.login()
+                liff.login({ redirectUri: window.location.href })
                 return
             }
-            const profile = await liff.getProfile()
-            const { data: user } = await supabase
-                .from('supervisors')
-                .select('is_verified, role')
-                .eq('line_user_id', profile.userId)
-                .single()
 
-            if (user) {
-                if (user.is_verified) {
-                    router.replace(user.role === 'teacher' ? '/teacher/dashboard' : '/supervisor/dashboard')
-                } else {
-                    router.replace('/supervisor/pending')
-                }
+            const idToken = liff.getIDToken()
+            const res = await fetch('/api/auth/line', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idToken })
+            })
+
+            if (res.ok) {
+                const data = await res.json()
+                router.replace(data.redirectTo || '/')
             } else {
                 router.push('/register')
             }
         } catch (err) {
             console.error("Login failed", err)
+            router.push('/register')
         }
     }
 
+    const [debugLineId, setDebugLineId] = useState('')
+    const [isDev, setIsDev] = useState(false)
+
     useEffect(() => {
-        setIsChecking(false)
+        setIsDev(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     }, [])
 
     if (isChecking) return (
@@ -215,6 +231,47 @@ export default function SplitHomePage() {
                             </div>
                         </button>
                     </div>
+
+                    {/* Debug Mode (Local Dev only) */}
+                    {isDev && (
+                        <div className="p-6 bg-amber-50/50 rounded-[2.5rem] border border-amber-200/50 border-dashed">
+                            <div className="flex items-center gap-2 mb-4">
+                                <ShieldCheck size={14} className="text-amber-600" />
+                                <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Debug Mode (Local Only)</h4>
+                            </div>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="ใส่ LINE ID ที่ต้องการเทส"
+                                    value={debugLineId}
+                                    onChange={(e) => setDebugLineId(e.target.value)}
+                                    className="flex-1 px-4 py-2 rounded-xl border border-amber-200 text-sm font-medium focus:ring-2 focus:ring-amber-500 outline-none bg-white font-sans"
+                                />
+                                <button
+                                    onClick={async () => {
+                                        if (!debugLineId) return;
+                                        const res = await fetch('/api/auth/debug', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ lineUserId: debugLineId })
+                                        });
+                                        const data = await res.json();
+                                        if (res.ok && data.redirectTo) {
+                                            // ✅ บันทึก ID ลงใน localStorage เพื่อให้ getLineUserId ดึงไปใช้ต่อได้โดยไม่เด้งไป LINE
+                                            localStorage.setItem('debug_mode', debugLineId);
+                                            router.replace(data.redirectTo);
+                                        } else {
+                                            alert(`Debug login failed: ${data.error || 'Unknown error'}`);
+                                        }
+                                    }}
+                                    className="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-black hover:bg-amber-700 transition-colors shadow-sm"
+                                >
+                                    Login
+                                </button>
+                            </div>
+                            <p className="text-[9px] text-amber-500 mt-2 font-bold uppercase italic opacity-70">* ใช้สำหรับจำลองการ Login เพื่อความรวดเร็วในการพัฒนาบนเครื่อง Local</p>
+                        </div>
+                    )}
 
                     {/* Bottom Actions */}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-6 border-t border-slate-200 pt-10">

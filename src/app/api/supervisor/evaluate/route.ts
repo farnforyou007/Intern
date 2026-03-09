@@ -15,6 +15,20 @@ export async function GET(req: Request) {
         const id = searchParams.get('id')
         if (!id) return apiError('Missing id', 400)
 
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
+
+        // Fetch the supervisor record to verify they own this evaluation
+        const { data: supervisor } = await supabase
+            .from('supervisors')
+            .select('id')
+            .eq('user_id', authUser.id)
+            .single()
+
+        if (!supervisor) return apiError('Unauthorized: Active status required.', 401)
+
         // 1. ดึงข้อมูล Assignment
         const { data: assign, error: assignErr } = await supabase
             .from('assignment_supervisors')
@@ -58,7 +72,7 @@ export async function GET(req: Request) {
             .from('evaluation_logs')
             .select(`*, evaluation_answers(*)`)
             .eq('assignment_id', assign.student_assignments.id)
-            .eq('supervisor_id', assign.supervisor_id)
+            .eq('supervisor_id', supervisor.id)
 
         return apiSuccess({
             assignment: assign,
@@ -76,9 +90,23 @@ export async function GET(req: Request) {
  * Actions: save-scores, finish
  */
 export async function POST(req: Request) {
-    const supabase = createServerSupabase()
+    const supabase = await createServerSupabase()
 
     try {
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser || authUser.app_metadata.provider !== 'line') {
+            return apiError('Unauthorized', 401)
+        }
+
+        // Fetch the supervisor record to ensure they appear in the logs correctly
+        const { data: supervisor } = await supabase
+            .from('supervisors')
+            .select('id')
+            .eq('user_id', authUser.id)
+            .single()
+
+        if (!supervisor) return apiError('Unauthorized: Active status required.', 401)
+
         const body = await req.json()
         const { action } = body
 
@@ -91,7 +119,7 @@ export async function POST(req: Request) {
                 .upsert({
                     assignment_id,
                     group_id,
-                    supervisor_id,
+                    supervisor_id: supervisor.id, // Explicitly use authenticated ID
                     comment: comment || '',
                 }, { onConflict: 'assignment_id, group_id, supervisor_id' })
                 .select().single()
