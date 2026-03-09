@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, ChevronLeft, ListTodo, Edit2, Trash2, LayoutTemplate, Copy, X, Save, GripVertical, AlertCircle, Settings2, Layers, BookOpen, Lock, Eye, EyeOff } from "lucide-react"
+import { Plus, ChevronLeft, ListTodo, Edit2, Trash2, LayoutTemplate, Copy, X, Save, GripVertical, AlertCircle, Settings2, Layers, BookOpen, Lock, Eye, EyeOff , Info } from "lucide-react"
 import Swal from 'sweetalert2'
 
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'

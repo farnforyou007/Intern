@@ -1,5 +1,6 @@
 // version not invite code 
 "use client"
+export const dynamic = 'force-dynamic'
 import { useState, useEffect, useRef } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import {
@@ -11,8 +12,21 @@ import liff from '@line/liff'
 import { flexRegisterSuccess } from '@/lib/lineFlex';
 import { getLineUserId } from '@/utils/auth';
 import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react'
 
-export default function SmartRegister() {
+export default function RegisterPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="animate-spin text-blue-600" size={40} />
+            </div>
+        }>
+            <RegisterForm />
+        </Suspense>
+    )
+}
+
+function RegisterForm() {
     const [fullName, setFullName] = useState('')
     const [phone, setPhone] = useState('')
     const [email, setEmail] = useState('')
