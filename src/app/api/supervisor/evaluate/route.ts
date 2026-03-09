@@ -37,8 +37,10 @@ export async function GET(req: Request) {
                 student_assignments:assignment_id(
                     id, 
                     sub_subject_id,
+                    rotation_id,
                     students:student_id(*), 
-                    subjects:subject_id(*)
+                    subjects:subject_id(*),
+                    rotations:rotation_id(id, name, start_date, end_date)
                 )
             `)
             .eq('id', id)
@@ -61,23 +63,41 @@ export async function GET(req: Request) {
             query = query.is('sub_subject_id', null)
         }
 
-        const { data: evalGroups, error: groupsErr } = await query
+        const { data: allGroups, error: groupsErr } = await query
             .order('group_name', { ascending: true })
             .order('order_index', { foreignTable: 'evaluation_items', ascending: true })
 
         if (groupsErr) throw groupsErr
 
-        // 3. ดึงคะแนนเก่า
+        // 3. ดึงคะแนนเก่า (เพื่อดูว่ามีประวัติไหม และเตรียมส่งกลับ)
         const { data: logs } = await supabase
             .from('evaluation_logs')
             .select(`*, evaluation_answers(*)`)
             .eq('assignment_id', assign.student_assignments.id)
             .eq('supervisor_id', supervisor.id)
 
+        // 4. กรองกลุ่มที่จะแสดง: แสดงถ้า (Active) หรือ (มีประวัติการประเมินใน Assignment นี้)
+        const usedInThisAssignmentIds = new Set((logs || []).map(l => l.group_id))
+        const evalGroups = (allGroups || []).filter(g => g.is_active || usedInThisAssignmentIds.has(g.id))
+
+        // 5. คำนวณสิทธิ์การแก้ไข (Grace Period 14 วัน หลังจบผลัด)
+        const endDateStr = assign.student_assignments.rotations?.end_date
+        let canEdit = true
+        let gracePeriodEnd = null
+        if (endDateStr) {
+            const end = new Date(endDateStr)
+            gracePeriodEnd = new Date(end)
+            gracePeriodEnd.setDate(gracePeriodEnd.getDate() + 14)
+            const today = new Date()
+            canEdit = today <= gracePeriodEnd
+        }
+
         return apiSuccess({
             assignment: assign,
-            groups: evalGroups || [],
-            logs: logs || []
+            groups: evalGroups,
+            logs: logs || [],
+            canEdit: canEdit,
+            gracePeriodEnd: gracePeriodEnd?.toISOString()
         })
     } catch (error: any) {
         console.error('Supervisor Evaluate GET Error:', error)
@@ -109,6 +129,28 @@ export async function POST(req: Request) {
 
         const body = await req.json()
         const { action } = body
+
+        // --- เพิ่มการตรวจสอบ Grace Period สำหรับการบันทึก ---
+        if (action === 'save-scores' || action === 'finish') {
+            const evalId = action === 'finish' ? body.evalId : body.evalId
+
+            const { data: assign } = await supabase
+                .from('assignment_supervisors')
+                .select('student_assignments(rotations(end_date))')
+                .eq('id', evalId)
+                .single()
+
+            const endDateStr = (assign as any)?.student_assignments?.rotations?.end_date
+            if (endDateStr) {
+                const end = new Date(endDateStr)
+                const gracePeriodEnd = new Date(end)
+                gracePeriodEnd.setDate(gracePeriodEnd.getDate() + 14)
+                const today = new Date()
+                if (today > gracePeriodEnd) {
+                    return apiError('หมดเวลาแก้ไขคะแนน (เกินระยะเวลา 14 วันหลังจบผลัด)', 403)
+                }
+            }
+        }
 
         if (action === 'save-scores') {
             const { assignment_id, group_id, supervisor_id, comment, answers, evalId } = body

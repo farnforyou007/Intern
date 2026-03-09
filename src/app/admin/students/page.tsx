@@ -11,7 +11,7 @@ import {
     Search, Edit2, Trash2, GraduationCap, Save,
     Eye, Phone, Mail, MapPin, UserCircle, X, Hospital,
     Calendar, Loader2, Filter, CheckCircle2, ChevronLeft, ChevronRight, Plus, Camera, ChevronDown, Users, Download, Building2
-    , BookOpen
+    , BookOpen, Bike, FileText
 } from "lucide-react"
 import Swal from 'sweetalert2'
 import * as XLSX from 'xlsx'
@@ -962,7 +962,9 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                 phone: form.phone,
                 email: form.email,
                 training_year: form.training_year,
-                avatar_url: form.avatar_url
+                avatar_url: form.avatar_url,
+                has_motorcycle: form.has_motorcycle,
+                parental_consent_url: form.parental_consent_url
             };
 
             const res = await fetch('/api/admin/students', {
@@ -1015,6 +1017,37 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                             <div className="space-y-3">
                                 <div className="flex items-center gap-3 text-blue-400 font-bold"><Mail size={16} /><span className="text-[14px] truncate">{form.email || '-'}</span></div>
                                 <div className="flex items-center gap-3 text-blue-400 font-bold"><Phone size={16} /><span className="text-[14px]">{form.phone || '-'}</span></div>
+
+                                <div className="mt-6 pt-6 border-t border-slate-800 space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3 text-slate-400 font-bold">
+                                            <Bike size={18} />
+                                            <span className="text-xs uppercase tracking-wider">รถจักรยานยนต์</span>
+                                        </div>
+                                        {form.has_motorcycle ? (
+                                            <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-black rounded-lg border border-emerald-500/20 uppercase">มีรถ</span>
+                                        ) : (
+                                            <span className="px-2.5 py-1 bg-slate-800 text-slate-500 text-[10px] font-black rounded-lg border border-slate-700 uppercase">ไม่มี</span>
+                                        )}
+                                    </div>
+
+                                    {form.has_motorcycle && form.parental_consent_url && (
+                                        <a
+                                            href={form.parental_consent_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-3 p-3 rounded-xl bg-blue-600/10 border border-blue-600/20 text-blue-400 hover:bg-blue-600/20 transition-all group"
+                                        >
+                                            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform">
+                                                <FileText size={16} />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[11px] font-black uppercase tracking-tight text-white leading-none mb-1">ใบอนุญาตผู้ปกครอง</p>
+                                                <p className="text-[9px] font-bold text-blue-400/60 truncate italic">คลิกเพื่อดู PDF</p>
+                                            </div>
+                                        </a>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1061,6 +1094,18 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <Input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="เบอร์โทร" className="h-12 rounded-xl bg-white border-none font-bold" />
                                         <Input value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="อีเมล" className="h-12 rounded-xl bg-white border-none font-bold" />
+                                    </div>
+                                    <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-blue-100">
+                                        <input
+                                            type="checkbox"
+                                            id="edit_has_motorcycle"
+                                            checked={form.has_motorcycle || false}
+                                            onChange={e => setForm({ ...form, has_motorcycle: e.target.checked })}
+                                            className="w-5 h-5 rounded border-blue-200 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <label htmlFor="edit_has_motorcycle" className="text-sm font-black text-slate-700 cursor-pointer">
+                                            นำรถจักรยานยนต์ไปฝึกงาน
+                                        </label>
                                     </div>
                                     {/* วางไว้ในส่วนกรอกข้อมูล เช่น ใต้ช่อง Email */}
                                     <div className="col-span-2">

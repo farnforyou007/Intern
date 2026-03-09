@@ -31,6 +31,7 @@ export async function GET(req: Request) {
         // ดึงนักศึกษาพร้อม deep joins
         let query = supabase.from('students').select(`
             id, student_code, prefix, first_name, last_name, nickname, phone, email, avatar_url, training_year,
+            has_motorcycle, parental_consent_url,
             student_assignments (
                 id, rotation_id, site_id, subject_id, sub_subject_id,
                 training_sites (site_name, province),

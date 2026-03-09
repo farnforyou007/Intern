@@ -35,6 +35,7 @@ interface RegistrationForm {
     email: string;
     track: string;
     assignments: any[]; // หรือระบุ Type ของ assignment ให้ละเอียด
+    has_motorcycle: boolean;
 }
 
 export default function StudentRegisterPage() {
@@ -53,6 +54,8 @@ export default function StudentRegisterPage() {
     const [trainingYear, setTrainingYear] = useState<string>('');
     const [rotations, setRotations] = useState<any[]>([]);
     const [availableTracks, setAvailableTracks] = useState<string[]>(['A']);
+    const [motorcycleFile, setMotorcycleFile] = useState<File | null>(null);
+    const [motorcyclePreview, setMotorcyclePreview] = useState<string | null>(null);
     const debounceTimer = useRef<NodeJS.Timeout | null>(null)
     const [form, setForm] = useState<RegistrationForm>({
         student_code: '', prefix: '',
@@ -60,7 +63,8 @@ export default function StudentRegisterPage() {
         nickname: '', phone: '',
         email: '',
         track: 'A',
-        assignments: []
+        assignments: [],
+        has_motorcycle: false
     })
 
 
@@ -259,12 +263,18 @@ export default function StudentRegisterPage() {
         if (!form.phone || form.phone.length < 10) tempErrors.phone = "กรุณากรอกเบอร์โทร 10 หลัก"
 
         // กรองการเลือกพี่เลี้ยงว่าครบทุกวิชา (ยกเว้น Portfolio ผดุงครรภ์ที่ระบบจะออโต้)
+        /* 
         const mentorMissing = form.assignments.some((as: any) =>
             as.subjects.some((sub: any) =>
                 !sub.isPortfolio && sub.supervisor_ids.length === 0
             )
         )
         if (mentorMissing) tempErrors.rotation = "กรุณาเลือกพี่เลี้ยงให้ครบทุกรายวิชาในทุกผลัด"
+        */
+
+        if (form.has_motorcycle && !motorcycleFile) {
+            tempErrors.motorcycleFile = "กรุณาแนบไฟล์ PDF หนังสือรับรองจากผู้ปกครอง"
+        }
 
         setErrors(tempErrors)
 
@@ -358,8 +368,9 @@ export default function StudentRegisterPage() {
                 <p><b>ชื่อ-นามสกุล:</b> ${form.prefix}${form.first_name} ${form.last_name}</p>
                 <p><b>รหัส:</b> ${form.student_code}</p>
                 <p><b>เบอร์โทร:</b> ${form.phone}</p>
+                <p><b>นำรถจักรยานยนต์มา:</b> ${form.has_motorcycle ? 'ใช่ (แนบไฟล์แล้ว)' : 'ไม่'}</p>
                 <hr className="my-2"/>
-                <p className="text-center text-blue-600 font-bold">กรุณาตรวจสอบ "พี่เลี้ยง" และ "โรงพยาบาล" ในทุกผลัดให้ถูกต้องก่อนยืนยัน</p>
+                <p className="text-center text-blue-600 font-bold">กรุณาตรวจสอบ "โรงพยาบาล" ในทุกผลัดให้ถูกต้องก่อนยืนยัน</p>
             </div>
         `,
             icon: 'warning',
@@ -388,6 +399,22 @@ export default function StudentRegisterPage() {
                 .from('avatars')
                 .getPublicUrl(fileName);
 
+            // 1.2 Upload Parental Consent if needed
+            let consentUrl = null;
+            if (form.has_motorcycle && motorcycleFile) {
+                const consentExt = motorcycleFile.name.split('.').pop();
+                const consentName = `parental_consent/consent_${form.student_code}_${Date.now()}.${consentExt}`;
+                const { error: consentUploadError } = await supabase.storage
+                    .from('avatars')
+                    .upload(consentName, motorcycleFile);
+                if (consentUploadError) throw consentUploadError;
+
+                const { data: { publicUrl: cUrl } } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(consentName);
+                consentUrl = cUrl;
+            }
+
             // 2. API Registration
             const res = await fetch('/api/register/student', {
                 method: 'POST',
@@ -403,7 +430,9 @@ export default function StudentRegisterPage() {
                     avatarUrl: publicUrl,
                     trainingYear: trainingYear,
                     track: form.track,
-                    assignments: form.assignments
+                    assignments: form.assignments,
+                    hasMotorcycle: form.has_motorcycle,
+                    parentalConsentUrl: consentUrl
                 })
             })
 
@@ -428,6 +457,7 @@ export default function StudentRegisterPage() {
                 phone: '',
                 email: '',
                 track: 'A',
+                has_motorcycle: false,
                 assignments: form.assignments.map((as: any) => ({
                     ...as,
                     site_id: '',
@@ -437,6 +467,8 @@ export default function StudentRegisterPage() {
 
             setAvatarFile(null);
             setAvatarPreview(null);
+            setMotorcycleFile(null);
+            setMotorcyclePreview(null);
 
         } catch (error: any) {
             console.error('Registration Error:', error);
@@ -547,7 +579,7 @@ export default function StudentRegisterPage() {
                     {errors.avatar && <span className="text-red-500 text-[11px] font-bold italic animate-bounce">*{errors.avatar}</span>}
                 </div>
 
-                <Card className="p-7 rounded-[3rem] border-none shadow-2xl shadow-blue-100/50 space-y-2.5">
+                <Card className="p-7 mt-5 rounded-[3rem] border-none shadow-2xl shadow-blue-100/50 ">
                     {/* Track Selection Section */}
                     <div className="space-y-3 pb-3 border-b border-slate-50">
                         <div className="flex items-center gap-2 ml-1">
@@ -578,8 +610,8 @@ export default function StudentRegisterPage() {
                     </div>
 
                     {/* Student Info - Row 1 (Prefix & ID) */}
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="flex-[4] min-w-[120px] space-y-1">
+                    <div className="flex flex-col sm:flex-row gap-4 ">
+                        <div className="min-w-[120px] space-y-1">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">คำนำหน้า (title)</label>
                             <div className="relative">
                                 <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -592,7 +624,7 @@ export default function StudentRegisterPage() {
                                 </select>
                             </div>
                         </div>
-                        <div className="flex-[8] space-y-1">
+                        <div className="space-y-1">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">รหัสนักศึกษา (studentid)</label>
                             <div className="relative">
                                 <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -653,15 +685,82 @@ export default function StudentRegisterPage() {
                         </div>
                         {errors.phone && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.phone}</span>}
                     </div>
+
+                    {/* Motorcycle Usage Section */}
+                    <div className="pt-2.5 border-t border-slate-50 space-y-1">
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all group">
+                            <input
+                                type="checkbox"
+                                id="has_motorcycle"
+                                checked={form.has_motorcycle}
+                                onChange={(e) => setForm({ ...form, has_motorcycle: e.target.checked })}
+                                className="w-5 h-5 rounded-lg border-2 border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <label htmlFor="has_motorcycle" className="flex-1 font-bold text-sm text-slate-700 cursor-pointer select-none">
+                                ผู้ปกครองได้อนุญาตให้นักศึกษานำรถจักรยานยนต์ไปใช้ในการฝึกปฏิบัติงาน
+                            </label>
+                        </div>
+
+                        {form.has_motorcycle && (
+                            <div className="space-y-2 animate-in slide-in-from-top duration-300">
+                                <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1">
+                                    แนบหนังสือรับรองจากผู้ปกครอง (PDF)
+                                </label>
+                                <div className={`relative h-24 rounded-2xl border-2 border-dashed ${errors.motorcycleFile ? 'border-red-300 bg-red-50' : 'border-blue-200 bg-blue-50/30'} flex flex-col items-center justify-center p-4 transition-all hover:bg-blue-50 group`}>
+                                    {motorcycleFile ? (
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-blue-600 text-white rounded-lg">
+                                                <Save size={16} />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-bold text-slate-700 truncate max-w-[200px]">{motorcycleFile.name}</p>
+                                                <p className="text-[9px] text-slate-400 font-bold uppercase">Ready to upload</p>
+                                            </div>
+                                            <button
+                                                onClick={(e) => { e.preventDefault(); setMotorcycleFile(null); }}
+                                                className="p-1.5 bg-white text-slate-400 rounded-lg hover:text-red-500 transition-colors shadow-sm"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="text-blue-400 mb-1 group-hover:scale-110 transition-transform">
+                                                <Save size={20} />
+                                            </div>
+                                            <p className="text-[10px] font-black text-blue-400 uppercase">Click to upload PDF</p>
+                                        </>
+                                    )}
+                                    <input
+                                        type="file"
+                                        accept=".pdf"
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file && file.type === 'application/pdf') {
+                                                setMotorcycleFile(file);
+                                            } else if (file) {
+                                                Swal.fire('ไฟล์ไม่ถูกต้อง', 'กรุณาแนบไฟล์รูปแบบ PDF เท่านั้น', 'error');
+                                            }
+                                        }}
+                                    />
+                                </div>
+                                {errors.motorcycleFile && <span className="text-red-500 text-[9px] font-bold italic ml-2">*{errors.motorcycleFile}</span>}
+                                <p className="text-[9px] text-slate-400 font-bold ml-1 italic leading-relaxed">
+                                    * หากมีการนำรถไปใช้งาน ต้องแนบหนังสือรับรองที่ลงนามโดยผู้ปกครอง
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </Card>
 
                 <div className="px-2 pt-6">
                     <h3 className="text-xl font-black text-slate-800 uppercase flex items-center gap-3">
                         <CalendarDays className="text-blue-600" size={28} /> Internship Plan
                     </h3>
-                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 italic mt-2 inline-block">
+                    {/* <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 italic mt-2 inline-block">
                         * หากมีพี่เลี้ยง 2 คน ให้เลือกทั้งสองคน
-                    </p>
+                    </p> */}
                 </div>
                 {errors.rotation && <p className="bg-red-50 text-red-500 text-[11px] font-bold italic p-3 rounded-xl animate-pulse">*{errors.rotation}</p>}
 
@@ -703,8 +802,8 @@ export default function StudentRegisterPage() {
                                 {sites.filter((s: any) => String(s.province || "").trim() === String(item.province || "").trim()).map(s => (<option key={s.id} value={String(s.id)}>{s.site_name}</option>))}
                             </select>
 
-                            {/* Granular Subject & Mentor Selection */}
-                            <div className="space-y-4 pt-2">
+                            {/* Granular Subject & Mentor Selection - Commented out for now */}
+                            {/* <div className="space-y-4 pt-2">
                                 {item.subjects
                                     .filter((sub: any) => !(sub.parentName?.includes('ผดุงครรภ์') && sub.isPortfolio)) // ซ่อนประเมินเล่มผดุงครรภ์
                                     .map((sub: any, sIdx: number) => {
@@ -771,7 +870,7 @@ export default function StudentRegisterPage() {
                                             </div>
                                         );
                                     })}
-                            </div>
+                            </div> */}
                         </div>
                     </Card>
                 ))}

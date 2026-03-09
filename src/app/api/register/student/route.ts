@@ -94,7 +94,9 @@ export async function POST(request: Request) {
             avatarUrl,
             trainingYear,
             track,
-            assignments // array of { rotation_id, site_id, supervisor_ids }
+            assignments, // array of { rotation_id, site_id, supervisor_ids }
+            hasMotorcycle,
+            parentalConsentUrl
         } = body
 
         if (!studentCode || !firstName || !lastName || !phone || !trainingYear) {
@@ -114,7 +116,9 @@ export async function POST(request: Request) {
             email: email,
             avatar_url: avatarUrl,
             training_year: trainingYear,
-            track: track || 'A'
+            track: track || 'A',
+            has_motorcycle: hasMotorcycle || false,
+            parental_consent_url: parentalConsentUrl || null
         }]).select().single()
 
         if (stError) throw stError
@@ -123,10 +127,9 @@ export async function POST(request: Request) {
         for (const as of assignments) {
             if (!as.site_id) continue
 
-            // วนลูปผ่านวิชาย่อย/ส่วนงานที่ส่งมาจาก Frontend (Granular)
+            // ในเวอร์ชันใหม่ นศ. ไม่ต้องเลือกพี่เลี้ยงเอง ระบบจะสร้าง Assignment รอให้พี่เลี้ยงมารับดูแล
             for (const sub of as.subjects) {
-                // หากไม่มีพี่เลี้ยงและไม่ใช่ Portfolio ที่รออัปเดต ให้ข้าม (กันเหนียว)
-                if (sub.supervisor_ids.length === 0 && !sub.isPortfolio) continue;
+                // if (sub.supervisor_ids.length === 0 && !sub.isPortfolio) continue;
 
                 const { data: assignment, error: assignErr } = await supabase
                     .from('student_assignments')

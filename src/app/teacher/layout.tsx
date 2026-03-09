@@ -95,7 +95,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import {
-    ShieldAlert, ArrowLeft, ArrowRight, UserPlus, LayoutDashboard, GraduationCap, BookOpen, Settings, Users, LogOut, Menu, X, UserCircle
+    ShieldAlert, ArrowLeft, ArrowRight, UserPlus, LayoutDashboard, GraduationCap, BookOpen, Settings, Users, LogOut, Menu, X, UserCircle, ListChecks
 } from 'lucide-react'
 import Link from 'next/link'
 import Swal from 'sweetalert2'
@@ -112,11 +112,11 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-
     const menuItems = [
         { name: 'แดชบอร์ด', desc: 'ภาพรวม KPI และสถิติ', icon: <LayoutDashboard size={20} />, href: '/teacher/dashboard' },
         { name: 'รายชื่อนักศึกษา', desc: 'ข้อมูลติดต่อ นศ.', icon: <Users size={20} />, href: '/teacher/students' },
         { name: 'ผลการประเมิน', desc: 'คะแนนและส่งออก Excel', icon: <BookOpen size={20} />, href: '/teacher/subjects' },
+        { name: 'จัดการเกณฑ์ประเมิน', desc: 'ตั้งค่าหมวดและข้อคำถาม', icon: <ListChecks size={20} />, href: '/teacher/criteria' },
         { name: 'ข้อมูลส่วนตัว', desc: 'ข้อมูลส่วนตัวและวิชาที่ดูแล', icon: <Settings size={20} />, href: '/teacher/profile' },
     ]
 

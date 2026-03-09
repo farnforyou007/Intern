@@ -29,6 +29,8 @@ export default function EvaluationPage() {
     const [activeTab, setActiveTab] = useState<number>(0)
     const searchParams = useSearchParams()
     const isEditMode = searchParams.get('edit') === 'true'
+    const [canEdit, setCanEdit] = useState(true)
+    const [gracePeriodEnd, setGracePeriodEnd] = useState<string | null>(null)
     // สถานะการบันทึกอัตโนมัติ
     const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
 
@@ -39,7 +41,7 @@ export default function EvaluationPage() {
     const scoresRef = useRef(scores)
     const remarksRef = useRef(remarks)
     const timerRef = useRef<NodeJS.Timeout | null>(null)
-    const isLocked = assignment?.is_evaluated && !isEditMode
+    const isLocked = (assignment?.is_evaluated && !isEditMode) || !canEdit
 
 
 
@@ -66,6 +68,8 @@ export default function EvaluationPage() {
 
             const assign = result.data.assignment
             setAssignment(assign)
+            setCanEdit(result.data.canEdit ?? true)
+            setGracePeriodEnd(result.data.gracePeriodEnd)
 
             const validGroups = result.data.groups || []
             setGroups(validGroups)
@@ -266,35 +270,40 @@ export default function EvaluationPage() {
                                 <span className="inline-flex items-center justify-center bg-emerald-600 text-white text-[11px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm shadow-emerald-100">
                                     {student?.nickname || 'นศ.'}
                                 </span>
+
+                                {isLocked ? (
+                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm border ${!canEdit ? 'bg-red-50 text-red-600 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                                        <CheckCircle2 size={12} /> {!canEdit ? 'Locked (Time Expired)' : 'Completed'}
+                                    </span>
+                                ) : (
+                                    <span className="px-3 py-1 bg-amber-50 text-amber-600 border border-amber-100 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> In-Progress
+                                    </span>
+                                )}
+
+                                {canEdit && gracePeriodEnd && (
+                                    <span className="px-3 py-1 bg-blue-50 text-blue-600 border border-blue-100 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm">
+                                        🕒 แก้ไขได้ถึง: {new Date(gracePeriodEnd).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                    </span>
+                                )}
+
                                 {/* 🟢 สถานะ Auto Save */}
-                                {/* <div className="flex items-center gap-5 text-[10px] font-bold">
-                                    {autoSaveStatus === 'saving' && <span className="text-amber-500 flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> กำลังบันทึก...</span>}
-                                    {autoSaveStatus === 'saved' && <span className="text-emerald-600 flex items-center gap-1"><Cloud size={10} /> บันทึกแล้ว</span>}
-                                </div> */}
-                                {/* 🟢 สถานะ Auto Save แบบใหม่ */}
                                 <div className="flex items-center gap-5 text-[10px] font-bold">
                                     {autoSaveStatus === 'saving' && (
-                                        <span className="text-[10px] font-black text-amber-500 flex items-center gap-1.5 animate-pulse">
-                                            <Loader2 size={12} className="animate-spin" />
-                                            กำลังบันทึก...
+                                        <span className="text-amber-500 flex items-center gap-1">
+                                            <Loader2 size={10} className="animate-spin" /> กำลังบันทึก...
                                         </span>
                                     )}
                                     {autoSaveStatus === 'saved' && (
-                                        <span className="text-[10px] font-black text-emerald-600 flex items-center gap-1.5 animate-in zoom-in duration-300">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
-                                            บันทึกเรียบร้อย
-                                        </span>
-                                    )}
-                                    {autoSaveStatus === 'idle' && (
-                                        <span className="text-[10px] font-bold text-slate-300 flex items-center gap-1.5">
-                                            <Cloud size={12} />
-
+                                        <span className="text-emerald-600 flex items-center gap-1">
+                                            <Cloud size={10} /> บันทึกแล้ว
                                         </span>
                                     )}
                                 </div>
                             </div>
+
                             <p className="text-[13px] font-bold text-slate-400 uppercase tracking-wide truncate opacity-80">
-                                {subject?.subject_code ? `${subject.subject_code} • ` : ''} {subject?.subject_name || subject?.name}
+                                {subject?.subject_code ? `${subject.subject_code} • ` : ''} {subject?.name || subject?.subject_name}
                             </p>
                         </div>
                     </div>
