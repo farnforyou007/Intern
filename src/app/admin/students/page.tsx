@@ -1,6 +1,6 @@
 // ver3 — API Routes Migration
 "use client"
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createBrowserClient } from '@supabase/ssr' // เก็บไว้สำหรับ Realtime เท่านั้น
 import AdminLayout from '@/components/AdminLayout'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -11,7 +11,7 @@ import {
     Search, Edit2, Trash2, GraduationCap, Save,
     Eye, Phone, Mail, MapPin, UserCircle, X, Hospital,
     Calendar, Loader2, Filter, CheckCircle2, ChevronLeft, ChevronRight, Plus, Camera, ChevronDown, Users, Download, Building2
-    , BookOpen, Bike, FileText
+    , BookOpen, Bike, FileText, Upload
 } from "lucide-react"
 import Swal from 'sweetalert2'
 import * as XLSX from 'xlsx'

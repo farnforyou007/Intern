@@ -175,9 +175,49 @@ export default function TeacherDashboard() {
 
     // ✅ KPI นับตามนักศึกษา — ง่ายต่อการเข้าใจสำหรับอาจารย์
     const teacherStats = useMemo(() => {
-        const filtered = selectedSubject === 'all' ? allAssignments : allAssignments.filter(a => a.subject_id === selectedSubject)
+        // const filtered = selectedSubject === 'all' ? allAssignments : allAssignments.filter(a => a.subject_id === selectedSubject)
 
-        // Group assignments by student_id
+        // // Group assignments by student_id
+        // const studentMap: { [studentId: string]: any[] } = {}
+        // filtered.forEach((a: any) => {
+        //     const sid = String(a.student_id)
+        //     if (!studentMap[sid]) studentMap[sid] = []
+        //     studentMap[sid].push(a)
+        // })
+
+        // let evaluated = 0   // นศ. ที่ประเมินเสร็จ "ทุกใบ" แล้ว
+        // let partial = 0     // นศ. ที่ประเมินไปแล้วบางส่วน (มีอย่างน้อย 1 ใบเสร็จ แต่ไม่ครบ)
+        // let waiting = 0     // นศ. ที่ยังไม่ได้รับการประเมินเลย
+
+        // // ✅ ใช้ Number() เพื่อป้องกัน type mismatch (string "2" vs number 2)
+        // Object.values(studentMap).forEach((assignments: any[]) => {
+        //     const allDone = assignments.every((a: any) => {
+        //         const svs = a.assignment_supervisors || []
+        //         return svs.length > 0 && svs.every((sv: any) => Number(sv.evaluation_status) === 2)
+        //     })
+        //     const someDone = assignments.some((a: any) => {
+        //         const svs = a.assignment_supervisors || []
+        //         return svs.some((sv: any) => Number(sv.evaluation_status) === 2 || Number(sv.evaluation_status) === 1)
+        //     })
+
+        //     if (allDone) evaluated++
+        //     else if (someDone) partial++
+        //     else waiting++
+        // })
+
+        // const totalStudents = Object.keys(studentMap).length
+        // return { total: totalStudents, evaluated, partial, pending: waiting }
+
+        // 1. กรองตามวิชาก่อน
+        const subjectFiltered = selectedSubject === 'all'
+            ? allAssignments
+            : allAssignments.filter(a => a.subject_id === selectedSubject);
+
+        // 2. กรองตามรุ่นรหัส (Batch) เพิ่มเติม
+        const filtered = selectedBatch === 'all'
+            ? subjectFiltered
+            : subjectFiltered.filter((a: any) => a.students?.student_code?.substring(0, 2) === selectedBatch);
+
         const studentMap: { [studentId: string]: any[] } = {}
         filtered.forEach((a: any) => {
             const sid = String(a.student_id)
@@ -185,11 +225,8 @@ export default function TeacherDashboard() {
             studentMap[sid].push(a)
         })
 
-        let evaluated = 0   // นศ. ที่ประเมินเสร็จ "ทุกใบ" แล้ว
-        let partial = 0     // นศ. ที่ประเมินไปแล้วบางส่วน (มีอย่างน้อย 1 ใบเสร็จ แต่ไม่ครบ)
-        let waiting = 0     // นศ. ที่ยังไม่ได้รับการประเมินเลย
+        let evaluated = 0; let partial = 0; let waiting = 0;
 
-        // ✅ ใช้ Number() เพื่อป้องกัน type mismatch (string "2" vs number 2)
         Object.values(studentMap).forEach((assignments: any[]) => {
             const allDone = assignments.every((a: any) => {
                 const svs = a.assignment_supervisors || []
@@ -205,15 +242,28 @@ export default function TeacherDashboard() {
             else waiting++
         })
 
-        const totalStudents = Object.keys(studentMap).length
-        return { total: totalStudents, evaluated, partial, pending: waiting }
-    }, [allAssignments, selectedSubject])
+        return { total: Object.keys(studentMap).length, evaluated, partial, pending: waiting }
+    }, [allAssignments, selectedSubject, selectedBatch])
 
     // --- ข้อมูลสำหรับกราฟ/KPI จาก analytics ---
     const filteredAnalyticsData = useMemo(() => {
-        if (selectedSubject === 'all') return analyticsData
-        return analyticsData.filter(d => d.subject_id === selectedSubject)
-    }, [analyticsData, selectedSubject])
+        // if (selectedSubject === 'all') return analyticsData
+        // return analyticsData.filter(d => d.subject_id === selectedSubject)
+
+        let data = analyticsData;
+
+        // กรองตามวิชา
+        if (selectedSubject !== 'all') {
+            data = data.filter(d => d.subject_id === selectedSubject);
+        }
+
+        // กรองตามรุ่นรหัส (Batch)
+        if (selectedBatch !== 'all') {
+            data = data.filter(d => d.student?.student_code?.substring(0, 2) === selectedBatch);
+        }
+
+        return data;
+    }, [analyticsData, selectedSubject, selectedBatch])
 
     // const analyticsStudentScores = useMemo(() => {
     //     return filteredAnalyticsData.map((item: any) => {
@@ -259,7 +309,7 @@ export default function TeacherDashboard() {
                 isFullyDone // สถานะว่าเสร็จสมบูรณ์หรือยัง
             }
         }).sort((a: any, b: any) => b.netScore - a.netScore)
-    }, [filteredAnalyticsData, allAssignments])
+    }, [filteredAnalyticsData, allAssignments, selectedBatch])
 
 
 
@@ -605,7 +655,11 @@ export default function TeacherDashboard() {
                                 return acc;
                             }, []);
                             return unique.map((s: any, i: number) => {
-                                const subAssignments = allAssignments.filter((a: any) => a.subject_id === s.subject_id)
+                                // const subAssignments = allAssignments.filter((a: any) => a.subject_id === s.subject_id)
+                                const subAssignments = allAssignments.filter((a: any) =>
+                                    a.subject_id === s.subject_id &&
+                                    (selectedBatch === 'all' || a.students?.student_code?.substring(0, 2) === selectedBatch)
+                                )
                                 const total = subAssignments.length
                                 const done = subAssignments.filter((a: any) => a.assignment_supervisors?.some((sv: any) => Number(sv.evaluation_status) === 2)).length
                                 const pct = total > 0 ? Math.round((done / total) * 100) : 0

@@ -247,11 +247,34 @@ export default function EvaluationSummary() {
         data.map(item => (item.student?.student_code || '').substring(0, 2)).filter(Boolean)
     )).sort()
 
+    // const filteredData = data.filter(item => {
+    //     const matchSearch = `${item.student?.first_name} ${item.student?.last_name} ${item.student?.student_code}`.toLowerCase().includes(searchTerm.toLowerCase())
+    //     const matchBatch = selectedBatch === 'all' || (item.student?.student_code || '').startsWith(selectedBatch)
+    //     return matchSearch && matchBatch
+    // })
+    // 1. กรองข้อมูลตาม Search และ Batch
     const filteredData = data.filter(item => {
-        const matchSearch = `${item.student?.first_name} ${item.student?.last_name} ${item.student?.student_code}`.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchBatch = selectedBatch === 'all' || (item.student?.student_code || '').startsWith(selectedBatch)
-        return matchSearch && matchBatch
-    })
+        const studentName = `${item.student?.first_name} ${item.student?.last_name}`.toLowerCase();
+        const studentCode = (item.student?.student_code || '').toLowerCase();
+        const siteName = (item.place?.site_name || '').toLowerCase();
+        const province = (item.place?.province || '').toLowerCase();
+        const search = searchTerm.toLowerCase();
+
+        const matchSearch =
+            studentName.includes(search) ||
+            studentCode.includes(search) ||
+            siteName.includes(search) ||
+            province.includes(search);
+
+        const matchBatch = selectedBatch === 'all' || (item.student?.student_code || '').startsWith(selectedBatch);
+
+        return matchSearch && matchBatch;
+    }).sort((a, b) => {
+        // 2. จัดกลุ่มโดยการเรียงลำดับตามชื่อสถานที่ฝึก (Site Name)
+        const siteA = a.place?.site_name || '';
+        const siteB = b.place?.site_name || '';
+        return siteA.localeCompare(siteB, 'th');
+    });
 
     // Pagination helpers
     const totalPages = Math.ceil(filteredData.length / itemsPerPage)
