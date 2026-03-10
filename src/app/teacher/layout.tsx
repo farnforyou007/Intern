@@ -115,8 +115,8 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     const menuItems = [
         { name: 'แดชบอร์ด', desc: 'ภาพรวม KPI และสถิติ', icon: <LayoutDashboard size={20} />, href: '/teacher/dashboard' },
         { name: 'รายชื่อนักศึกษา', desc: 'ข้อมูลติดต่อ นศ.', icon: <Users size={20} />, href: '/teacher/students' },
-        { name: 'ผลการประเมิน', desc: 'คะแนนและส่งออก Excel', icon: <BookOpen size={20} />, href: '/teacher/subjects' },
         { name: 'จัดการเกณฑ์ประเมิน', desc: 'ตั้งค่าหมวดและข้อคำถาม', icon: <ListChecks size={20} />, href: '/teacher/criteria' },
+        { name: 'ผลการประเมิน', desc: 'คะแนนและส่งออก Excel', icon: <BookOpen size={20} />, href: '/teacher/evaluations' },
         { name: 'ข้อมูลส่วนตัว', desc: 'ข้อมูลส่วนตัวและวิชาที่ดูแล', icon: <Settings size={20} />, href: '/teacher/profile' },
     ]
 

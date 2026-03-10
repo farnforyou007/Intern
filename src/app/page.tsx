@@ -107,10 +107,28 @@ export default function SplitHomePage() {
     }, [])
 
     if (isChecking) return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
-            <div className="relative flex items-center justify-center">
-                <div className="absolute animate-ping h-12 w-12 rounded-full bg-indigo-400 opacity-20"></div>
-                <div className="relative animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-600"></div>
+        // <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        //     <div className="relative flex items-center justify-center">
+        //         <div className="absolute animate-ping h-12 w-12 rounded-full bg-indigo-400 opacity-20"></div>
+        //         <div className="relative animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-indigo-600"></div>
+        //     </div>
+        // </div>
+
+        <div className="h-screen flex flex-col items-center justify-center bg-white overflow-hidden relative font-sans">
+            <div className="absolute top-0 left-0 w-full h-full opacity-[0.03] pointer-events-none">
+                <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-indigo-600 rounded-full blur-[100px]"></div>
+                <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-blue-500 rounded-full blur-[100px]"></div>
+            </div>
+            <div className="relative flex flex-col items-center">
+                <div className="relative w-20 h-20 mb-8">
+                    <div className="absolute inset-0 rounded-full border-[3px] border-slate-100 border-t-indigo-600 animate-spin"></div>
+                    <div className="absolute inset-2 rounded-full border-[2px] border-transparent border-t-blue-400 animate-[spin_0.8s_linear_infinite]"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-2 h-2 bg-indigo-600 rounded-full animate-ping"></div>
+                    </div>
+                </div>
+                <h2 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em]">กำลังโหลด...</h2>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">กรุณารอซักครู่...</span>
             </div>
         </div>
     )

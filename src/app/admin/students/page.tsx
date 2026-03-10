@@ -48,17 +48,21 @@ export default function StudentManagement() {
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
 
+
     // --- Pagination & Filter States ---
     const [selectedRotationFilter, setSelectedRotationFilter] = useState<string>('all')
     const [currentPage, setCurrentPage] = useState(1)
     const [rowsPerPage, setRowsPerPage] = useState(10)
+    const [totalCount, setTotalCount] = useState(0)
+    const [availableRotations, setAvailableRotations] = useState<any[]>([])
+    const [availableTracks, setAvailableTracks] = useState<string[]>([])
+
 
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isAddModalOpen, setIsAddModalOpen] = useState(false)
     const [selectedStudent, setSelectedStudent] = useState<any>(null)
-    // const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all') // ค่าเริ่มต้นแสดงทั้งหมด หรือระบุปีปัจจุบัน
     const [selectedYearFilter, setSelectedYearFilter] = useState<string>(currentYearBS);
-    const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('all');       // รุ่นรหัส (65, 67)
+    const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('all');
     const [availableYears, setAvailableYears] = useState<string[]>([]);
     const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
@@ -70,20 +74,35 @@ export default function StudentManagement() {
     const fetchData = useCallback(async (silent = false) => {
         if (!silent) setLoading(true)
         try {
-            const res = await fetch(`/api/admin/students?year=${selectedYearFilter}`)
+            const params = new URLSearchParams({
+                year: selectedYearFilter,
+                batch: selectedBatchFilter === 'all' ? '' : selectedBatchFilter,
+                rotationId: selectedRotationFilter === 'all' ? '' : selectedRotationFilter,
+                search: searchTerm,
+                page: currentPage.toString(),
+                limit: rowsPerPage.toString()
+            })
+
+
+            const res = await fetch(`/api/admin/students?${params.toString()}`)
             const result = await res.json()
             if (!result.success) throw new Error(result.error)
 
             setStudents(result.data.students || [])
+            setTotalCount(result.data.totalCount || 0)
             setSites(result.data.sites || [])
             setMentors(result.data.mentors || [])
             setAvailableYears(result.data.availableYears || [])
+            setAvailableRotations(result.data.availableRotations || [])
+            if (result.data.tracks) setAvailableTracks(result.data.tracks) // Only if returned in GET
+
         } catch (err: any) {
             console.error("Fetch Data Error:", err.message);
         } finally {
             setLoading(false);
         }
-    }, [selectedYearFilter]);
+    }, [selectedYearFilter, selectedBatchFilter, selectedRotationFilter, searchTerm, currentPage, rowsPerPage]);
+
 
 
 
@@ -216,6 +235,7 @@ export default function StudentManagement() {
             s.student_assignments?.some((as: any) => String(as.rotation_id) === String(selectedRotationFilter));
 
         return matchesBasicInfo && matchesBatch && matchesRotation;
+
     });
 
     // ดึงรุ่นนักศึกษาทั้งหมด (2 ตัวแรกของรหัส) มาสร้างตัวเลือก
@@ -223,10 +243,9 @@ export default function StudentManagement() {
         new Set(students.map(s => s.student_code?.substring(0, 2)))
     ).filter(year => year).sort((a, b) => b.localeCompare(a)); // เรียงจากปีล่าสุดลงไป
 
-    // Pagination logic
-    const totalPages = Math.ceil(filteredStudents.length / rowsPerPage)
-    const startIndex = (currentPage - 1) * rowsPerPage
-    const paginatedStudents = filteredStudents.slice(startIndex, startIndex + rowsPerPage)
+    // Pagination logic (Server-side now, so we just calculate total pages)
+    const totalPages = Math.ceil(totalCount / rowsPerPage)
+    const paginatedStudents = students // Backend already paginated
 
     const uniqueRotations = Array.from(
         new Map(
@@ -431,7 +450,7 @@ export default function StudentManagement() {
                         <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
                             <GraduationCap className="text-blue-600" size={32} /> จัดการข้อมูลนักศึกษา
                         </h1>
-                        <p className="text-slate-500 mt-1 font-medium text-sm">จัดการข้อมูลนักศึกษาและแผนการฝึกปฏิบัติงานปรีคลินิก</p>
+                        <p className="text-slate-500 mt-1 font-medium text-sm">จัดการข้อมูลนักศึกษาและแผนการฝึกปฏิบัติงาน</p>
                     </div>
 
                     <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">
@@ -502,18 +521,20 @@ export default function StudentManagement() {
                                 }}
                             >
                                 <option value="all">แสดงผลัดปัจจุบัน</option>
-                                {uniqueRotations.map((r: any) => (
-                                    <option key={r.id} value={r.id}>แสดง: {r.name}</option>
+                                {availableRotations.map((r: any) => (
+                                    <option key={r.id} value={r.id}>แสดง: {r.name} (สาย {r.track || '-'})</option>
                                 ))}
+
                             </select>
+
                             <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" size={16} />
                         </div>
 
                         {/* ช่องค้นหาอิสระ */}
-                        <div className="relative flex-1 w-full">
+                        <div className="relative flex-1 w-full min-w-[300px]">
                             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                             <input
-                                placeholder="ค้นหาชื่อ หรือ รหัสนักศึกษา..."
+                                placeholder="ค้นหา ชื่อ-นามสกุล, รหัสนักศึกษา หรือ โรงพยาบาล..."
                                 className="w-full h-14 pl-14 pr-6 rounded-[1.5rem] border-2 border-slate-50 bg-white font-bold text-sm focus:border-blue-500 focus:ring-0 outline-none transition-all placeholder:text-slate-300"
                                 value={searchTerm}
                                 onChange={(e) => {
@@ -523,23 +544,29 @@ export default function StudentManagement() {
                             />
                         </div>
 
-                        {/* ปุ่มรีเซ็ต (ทางเลือก) */}
+
+
+                        {/* ปุ่มรีเซ็ต */}
                         <Button
                             variant="ghost"
                             onClick={() => {
                                 setSearchTerm('');
-                                setSelectedYearFilter('all');
+                                setSelectedYearFilter(currentYearBS);
                                 setSelectedRotationFilter('all');
+                                setSelectedBatchFilter('all');
+                                setCurrentPage(1);
                             }}
                             className="h-14 px-6 rounded-[1.5rem] text-slate-400 hover:text-blue-600 font-bold text-xs uppercase tracking-widest"
                         >
                             Reset
                         </Button>
+
+
                     </div>
                 </div>
 
                 {/* Table */}
-                <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-6">
+                <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden mb-8">
                     <Table>
                         <TableHeader className="bg-slate-50/50">
                             <TableRow className="border-none">
@@ -557,7 +584,7 @@ export default function StudentManagement() {
                                 // 1. สถานะกำลังโหลด (Skeleton)
                                 Array(5).fill(0).map((_, i) => (
                                     <TableRow key={i}>
-                                        <TableCell colSpan={4} className="p-8">
+                                        <TableCell colSpan={5} className="p-8">
                                             <Skeleton className="h-12 w-full rounded-xl" />
                                         </TableCell>
                                     </TableRow>
@@ -566,9 +593,14 @@ export default function StudentManagement() {
                                 // 2. สถานะมีข้อมูล: แสดงรายการนักศึกษา
                                 paginatedStudents.map((s) => {
                                     const assignment = getDisplayAssignment(s);
-                                    // const rotIdx = s.student_assignments?.findIndex((a: any) => a.id === assignment?.id);
-                                    const rotIdx = uniqueRotations.findIndex((r: any) => r.id === assignment?.rotation_id);
+
+                                    // หาผลัดปัจจุบันของนักศึกษานี้ว่าอยู่ลำดับที่เท่าไหร่ในสาย (Track) ของตัวเอง
+                                    const currentRot = availableRotations.find((r: any) => r.id === assignment?.rotation_id);
+                                    const trackRots = availableRotations.filter((r: any) => r.track === currentRot?.track);
+                                    const rotIdx = trackRots.findIndex((r: any) => r.id === assignment?.rotation_id);
+
                                     const theme = getRotationTheme(rotIdx !== -1 ? rotIdx : 0);
+
                                     return (
                                         <TableRow key={s.id} className="hover:bg-blue-50/20 transition-colors border-b border-slate-50">
                                             <TableCell className="px-8 py-5">
@@ -588,6 +620,7 @@ export default function StudentManagement() {
                                                     <p className="text-[10px] font-bold text-slate-400 flex items-center gap-2 truncate max-w-[150px] italic underline decoration-blue-100 text-blue-400"><Mail size={12} className="text-slate-400" /> {s.email || '-'}</p>
                                                 </div>
                                             </TableCell>
+
                                             <TableCell>
                                                 {assignment ? (
                                                     <div className="flex flex-col gap-1.5 animate-in fade-in duration-300">
@@ -627,9 +660,9 @@ export default function StudentManagement() {
                                     );
                                 })
                             ) : (
-                                // ✅ 3. สถานะไม่พบข้อมูล: ใส่ตรงนี้ครับ
+                                // ✅ 3. สถานะไม่พบข้อมูล
                                 <TableRow>
-                                    <TableCell colSpan={4} className="py-20 text-center border-none">
+                                    <TableCell colSpan={5} className="py-20 text-center border-none">
                                         <div className="flex flex-col items-center gap-3 text-slate-300 animate-in fade-in duration-500">
                                             <div className="p-5 bg-slate-50 rounded-full">
                                                 <Search size={48} strokeWidth={1.5} />
@@ -638,57 +671,61 @@ export default function StudentManagement() {
                                         </div>
                                     </TableCell>
                                 </TableRow>
+
                             )}
                         </TableBody>
                     </Table>
                     <div className="px-8 py-6 bg-slate-50/30 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs font-black text-slate-400 uppercase tracking-widest">แสดงแถว:</span>
-                            <select
-                                value={rowsPerPage}
-                                onChange={(e) => {
-                                    setRowsPerPage(Number(e.target.value));
-                                    setCurrentPage(1);
-                                }}
-                                className="bg-white border-none shadow-lg shadow-slate-100 rounded-xl px-3 py-2 text-xs font-black text-blue-600 outline-none focus:ring-2 ring-blue-500"
-                            >
-                                {[5, 10, 20, 50].map(val => <option key={val} value={val}>{val}</option>)}
-                            </select>
-                            <p className="text-xs font-bold text-slate-400 ml-4">
-                                แสดง {startIndex + 1} - {Math.min(startIndex + rowsPerPage, filteredStudents.length)} จากทั้งหมด  {filteredStudents.length}
+                        <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">แสดงแถว:</span>
+                                <select
+                                    value={rowsPerPage}
+                                    onChange={(e) => {
+                                        setRowsPerPage(Number(e.target.value));
+                                        setCurrentPage(1);
+                                    }}
+                                    className="bg-white border border-slate-200 rounded-lg text-xs font-black px-2 py-1 outline-none text-slate-600 focus:ring-2 ring-blue-500/20"
+                                >
+                                    {[10, 20, 50, 100].map(v => (
+                                        <option key={v} value={v}>{v}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                ทั้งหมด <span className="text-blue-600">{totalCount}</span> รายการ
                             </p>
                         </div>
 
                         <div className="flex items-center gap-2">
                             <Button
-                                variant="ghost"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                 disabled={currentPage === 1}
-                                onClick={() => setCurrentPage(prev => prev - 1)}
-                                className="w-10 h-10 rounded-xl bg-white shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30"
+                                className="w-10 h-10 rounded-xl border border-slate-200 text-slate-400 hover:text-blue-600 disabled:opacity-30"
                             >
                                 <ChevronLeft size={18} />
                             </Button>
-                            <div className="flex items-center gap-1">
-                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                    <Button
-                                        key={page}
-                                        onClick={() => setCurrentPage(page)}
-                                        className={`w-10 h-10 rounded-xl font-black text-xs transition-all ${currentPage === page ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 scale-110' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                                    >
-                                        {page}
-                                    </Button>
-                                ))}
+
+                            <div className="flex items-center gap-1 px-4 py-2 bg-white rounded-xl border border-slate-200">
+                                <span className="text-xs font-black text-blue-600">{currentPage}</span>
+                                <span className="text-xs font-black text-slate-300">/</span>
+                                <span className="text-xs font-black text-slate-400">{totalPages || 1}</span>
                             </div>
+
                             <Button
-                                variant="ghost"
-                                disabled={currentPage === totalPages}
-                                onClick={() => setCurrentPage(prev => prev + 1)}
-                                className="w-10 h-10 rounded-xl bg-white shadow-md text-slate-400 hover:text-blue-600 disabled:opacity-30"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage >= totalPages}
+                                className="w-10 h-10 rounded-xl border border-slate-200 text-slate-400 hover:text-blue-600 disabled:opacity-30"
                             >
                                 <ChevronRight size={18} />
                             </Button>
                         </div>
                     </div>
+
                 </div>
 
                 {/* Pagination Controls */}
@@ -710,7 +747,9 @@ export default function StudentManagement() {
                 sites={sites}
                 mentors={mentors}
                 fetchData={fetchData}
+                availableTracks={availableTracks}
             />
+
         </AdminLayout>
     )
 }
@@ -1277,19 +1316,25 @@ function StudentDetailModal({ isOpen, onClose, data, sites, mentors, fetchData }
 
 
 
-function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
+function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData, availableTracks }: any) {
     const [loading, setLoading] = useState(false);
     const [siteSearch, setSiteSearch] = useState("");
     const [activeEditIdx, setActiveEditIdx] = useState<number | null>(null);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [pdfFile, setPdfFile] = useState<File | null>(null);
+    const [pdfPreview, setPdfPreview] = useState<string | null>(null);
+    const [tracks, setTracks] = useState<string[]>(availableTracks?.length > 0 ? availableTracks : ['A', 'B', 'C']);
+
+
 
     const [form, setForm] = useState<any>({
         student_code: '', prefix: 'นางสาว', first_name: '', last_name: '', nickname: '',
         phone: '', email: '', training_year: '', track: 'A',
+        has_motorcycle: false,
         assignments: []
     });
-    const TRACKS = ['A', 'B', 'C'];
+
 
     useEffect(() => {
         if (isOpen) {
@@ -1303,7 +1348,9 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                 const result = await res.json()
                 if (!result.success) return
 
-                const { currentYear, rotations: rotationsData } = result.data
+                const { currentYear, rotations: rotationsData, tracks: tracksData } = result.data
+                if (tracksData && tracksData.length > 0) setTracks(tracksData)
+
 
                 setForm((prev: any) => ({
                     ...prev,
@@ -1355,6 +1402,9 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
             initData();
             setAvatarPreview(null);
             setAvatarFile(null);
+            setPdfFile(null);
+            setPdfPreview(null);
+
         }
     }, [isOpen, form.track]);
 
@@ -1445,12 +1495,26 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
     const handleSave = async () => {
         // 1. ตรวจสอบฟิลด์พื้นฐาน
         if (!form.student_code || !form.first_name) {
-            return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
+            // return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
+            return Swal.fire({
+                icon: 'warning',
+                title: 'ข้อมูลไม่ครบ',
+                text: 'กรุณากรอกรหัสและชื่อนักศึกษา',
+                timer: 1500,
+                showConfirmButton: false
+            });
         }
 
         const fileToUpload = avatarFile;
         if (!fileToUpload) {
-            return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษา', 'warning');
+            // return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษา', 'warning');
+            return Swal.fire({
+                icon: 'warning',
+                title: 'กรุณาเลือกรูปภาพ',
+                text: 'ต้องมีรูปโปรไฟล์นักศึกษา',
+                timer: 1500,
+                showConfirmButton: false
+            });
         }
 
         setLoading(true);
@@ -1468,10 +1532,31 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                 phone: form.phone,
                 email: form.email,
                 training_year: form.training_year,
-                track: form.track
+                track: form.track,
+                has_motorcycle: form.has_motorcycle
             }))
+            formData.append('has_motorcycle', form.has_motorcycle.toString())
+
+            // Handle PDF Upload first
+            if (pdfFile) {
+                const pdfExt = pdfFile.name.split('.').pop()
+                const pdfName = `${form.student_code}_consent_${Date.now()}.${pdfExt}`
+                const { error: pdfError } = await (supabase as any).storage
+                    .from('parental_consents')
+                    .upload(pdfName, pdfFile)
+
+                if (pdfError) throw pdfError
+
+                const { data: pdfUrl } = (supabase as any).storage
+                    .from('parental_consents')
+                    .getPublicUrl(pdfName)
+
+                formData.append('parental_consent_url', pdfUrl.publicUrl)
+            }
+
             formData.append('assignments', JSON.stringify(form.assignments))
             formData.append('mentorsData', JSON.stringify(mentors))
+
 
             const res = await fetch('/api/admin/students', {
                 method: 'POST',
@@ -1482,8 +1567,16 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
             if (!result.success) {
                 if (res.status === 409) {
                     setLoading(false);
-                    return Swal.fire('ข้อมูลซ้ำ', result.error || 'รหัสนี้ลงทะเบียนแล้ว', 'error');
+                    return Swal.fire({
+                        icon: 'error',
+                        title: 'ข้อมูลซ้ำ',
+                        text: result.error || 'รหัสนี้ลงทะเบียนแล้ว',
+                        timer: 3000,
+                        showConfirmButton: false,
+                        customClass: { popup: 'rounded-[2rem]' }
+                    });
                 }
+
                 throw new Error(result.error)
             }
 
@@ -1491,16 +1584,25 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                 icon: 'success',
                 title: 'สำเร็จ',
                 text: 'เพิ่มข้อมูลนักศึกษาเรียบร้อยแล้ว',
-                timer: 1500,
+                timer: 2000,
                 showConfirmButton: false,
                 customClass: { popup: 'rounded-[2rem]' }
             });
+
 
             fetchData();
             onClose();
         } catch (e: any) {
             console.error('Error saving student:', e);
-            Swal.fire('เกิดข้อผิดพลาด', e.message || 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+            Swal.fire({
+                icon: 'error',
+                title: 'เกิดข้อผิดพลาด',
+                text: e.message || 'ไม่สามารถบันทึกข้อมูลได้',
+                timer: 3000,
+                showConfirmButton: false,
+                customClass: { popup: 'rounded-[2rem]' }
+            });
+
         } finally {
             setLoading(false);
         }
@@ -1568,10 +1670,11 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                                             onChange={e => handleTrackChange(e.target.value)}
                                             className="w-full h-14 rounded-2xl bg-emerald-50 border-none font-black text-base px-6 focus:ring-2 ring-emerald-500 outline-none text-emerald-700"
                                         >
-                                            {TRACKS.map(t => (
+                                            {tracks.map(t => (
                                                 <option key={t} value={t}>สาย {t}</option>
                                             ))}
                                         </select>
+
                                     </div>
                                 </div>
 
@@ -1614,8 +1717,58 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData }: any) {
                                             placeholder="เช่น 2569"
                                         />
                                     </div>
-                                    <p className="text-[10px] text-slate-400 mt-1 italic pl-1">* กรองข้อมูลตามปีการศึกษาที่แอดมินเซตไว้ (current_training_year)</p>
                                 </div>
+
+                                {/* Motorcycle & PDF Section (NEW) */}
+                                <div className="bg-slate-50 p-6 rounded-[2rem] space-y-6 border border-slate-100 shadow-sm">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${form.has_motorcycle ? 'bg-orange-500 text-white shadow-lg' : 'bg-white text-slate-300'}`}>
+                                            <Bike size={24} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm font-black text-slate-700 uppercase tracking-tight">นำรถจักรยานยนต์ไปด้วยตนเอง</span>
+                                                <button
+                                                    onClick={() => setForm({ ...form, has_motorcycle: !form.has_motorcycle })}
+                                                    className={`w-12 h-6 rounded-full transition-all relative ${form.has_motorcycle ? 'bg-orange-500' : 'bg-slate-200'}`}
+                                                >
+                                                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${form.has_motorcycle ? 'left-7' : 'left-1'}`} />
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 italic">หากนำรถไปเองต้องแนบเอกสารยินยอม</p>
+                                        </div>
+                                    </div>
+
+                                    {form.has_motorcycle && (
+                                        <div className="animate-in slide-in-from-top-2 duration-300">
+                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">เอกสารยินยอมจากผู้ปกครอง (PDF)</label>
+                                            <div className={`relative group transition-all`}>
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) {
+                                                            setPdfFile(file);
+                                                            setPdfPreview(file.name);
+                                                        }
+                                                    }}
+                                                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                                                />
+                                                <div className={`h-14 w-full rounded-2xl border-2 border-dashed flex items-center justify-between px-6 transition-all ${pdfFile ? 'bg-emerald-50 border-emerald-400' : 'bg-white border-slate-200'}`}>
+                                                    <div className="flex items-center gap-3">
+                                                        <FileText size={20} className={pdfFile ? 'text-emerald-500' : 'text-slate-300'} />
+                                                        <span className={`text-xs font-black truncate max-w-[180px] ${pdfFile ? 'text-emerald-600' : 'text-slate-300 uppercase tracking-widest'}`}>
+                                                            {pdfFile ? pdfFile.name : 'เลือกไฟล์ PDF'}
+                                                        </span>
+                                                    </div>
+                                                    <Upload size={18} className={pdfFile ? 'text-emerald-500' : 'text-slate-300'} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
                             </div>
                         </div>
 

@@ -288,8 +288,15 @@ export default function StudentRegisterPage() {
 
         // 1. เช็คว่าเลือกรูปภาพหรือยัง
         if (!avatarFile) {
-            return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษาเพื่อลงทะเบียน', 'warning');
+            return Swal.fire({
+                icon: 'warning',
+                title: 'กรุณาเลือกรูปภาพ',
+                text: 'ต้องมีรูปโปรไฟล์นักศึกษาเพื่อลงทะเบียน',
+                timer: 3000,
+                showConfirmButton: false
+            });
         }
+
 
         setLoading(true);
         try {
@@ -302,8 +309,15 @@ export default function StudentRegisterPage() {
 
             if (check) {
                 setLoading(false);
-                return Swal.fire('ข้อมูลซ้ำ', 'รหัสนี้ลงทะเบียนแล้ว', 'error');
+                return Swal.fire({
+                    icon: 'error',
+                    title: 'ข้อมูลซ้ำ',
+                    text: 'รหัสนี้ลงทะเบียนแล้ว',
+                    timer: 3000,
+                    showConfirmButton: false
+                });
             }
+
 
             // 3. จัดการอัปโหลดไฟล์รูปภาพ
             const fileExt = avatarFile!.name.split('.').pop();
@@ -610,7 +624,14 @@ export default function StudentRegisterPage() {
 
         } catch (error: any) {
             console.error('Registration Error:', error);
-            Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+            Swal.fire({
+                icon: 'error',
+                title: 'เกิดข้อผิดพลาด',
+                text: error.message,
+                timer: 3000,
+                showConfirmButton: false
+            });
+
         } finally {
             setLoading(false);
         }

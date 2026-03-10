@@ -30,8 +30,20 @@ function AdminEvaluationContent() {
     const [subjects, setSubjects] = useState<any[]>([])
     const [data, setData] = useState<any[]>([])
     const [searchTerm, setSearchTerm] = useState('')
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+    const [totalCount, setTotalCount] = useState(0)
+
+    // Debounce Search Term
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm)
+        }, 500)
+        return () => clearTimeout(timer)
+    }, [searchTerm])
+
 
     // Pagination & Batch Filter
+
     const [currentPage, setCurrentPage] = useState(1)
     const [itemsPerPage, setItemsPerPage] = useState(10)
     const [selectedBatch, setSelectedBatch] = useState('all')
@@ -39,6 +51,11 @@ function AdminEvaluationContent() {
     // 🔒 Year Filter
     const [selectedTrainingYear, setSelectedTrainingYear] = useState<string>('')
     const [trainingYearOptions, setTrainingYearOptions] = useState<string[]>([])
+
+    // 🏹 Sorting
+    const [sortField, setSortField] = useState<string>('site_name') // 'student', 'site_name', 'score'
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+
 
     // Modal States
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -70,12 +87,20 @@ function AdminEvaluationContent() {
                 }
             }
 
-            const yearParam = selectedTrainingYear ? `&selectedTrainingYear=${encodeURIComponent(selectedTrainingYear)}` : ''
-            const subjectParam = subjectId ? `subjectId=${encodeURIComponent(subjectId)}` : ''
-
             try {
-                const res = await fetch(`/api/admin/evaluations?${subjectParam}${yearParam}`)
+                const params = new URLSearchParams()
+                if (subjectId) params.append('subjectId', subjectId)
+                if (selectedTrainingYear) params.append('selectedTrainingYear', selectedTrainingYear)
+                if (debouncedSearchTerm) params.append('search', debouncedSearchTerm)
+                if (selectedBatch !== 'all') params.append('batch', selectedBatch)
+                params.append('sortField', sortField)
+                params.append('sortOrder', sortOrder)
+                params.append('page', currentPage.toString())
+                params.append('limit', itemsPerPage.toString())
+
+                const res = await fetch(`/api/admin/evaluations?${params.toString()}`)
                 const result = await res.json()
+                // console.log('Fetch result:', result)
 
                 if (!result.success) {
                     setLoading(false)
@@ -86,7 +111,6 @@ function AdminEvaluationContent() {
                 const d = result.data
                 if (!selectedTrainingYear && d.defaultYear) {
                     setSelectedTrainingYear(d.defaultYear)
-                    // Don't set isFirstLoad to false yet, wait for the actual data fetch with year
                     return
                 }
 
@@ -99,7 +123,9 @@ function AdminEvaluationContent() {
                 }
 
                 setData(d.data || [])
+                setTotalCount(d.totalCount || 0)
                 setIsFirstLoad(false)
+
             } catch (error) {
                 console.error("Fetch data error:", error)
             } finally {
@@ -110,6 +136,7 @@ function AdminEvaluationContent() {
             }
         }
         fetchData()
+
 
         // Realtime subscription — อัปเดตเมื่อพี่เลี้ยงส่งผลประเมิน
         const supabase = createBrowserClient(
@@ -135,7 +162,19 @@ function AdminEvaluationContent() {
             supabase.removeChannel(channel)
             if (debounceTimer.current) clearTimeout(debounceTimer.current)
         }
-    }, [subjectId, selectedTrainingYear])
+    }, [subjectId, selectedTrainingYear, debouncedSearchTerm, selectedBatch, sortField, sortOrder, currentPage, itemsPerPage])
+
+
+
+    const handleSort = (field: string) => {
+        if (sortField === field) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortOrder('asc');
+        }
+        setCurrentPage(1);
+    };
 
     // ฟังก์ชันเปิด Modal รายละเอียด พร้อมดึงข้อคำถามจริง
     // const openDetailModal = async (student: any) => {
@@ -232,22 +271,17 @@ function AdminEvaluationContent() {
     };
 
     // Reset page on filter change
-    useEffect(() => { setCurrentPage(1) }, [searchTerm, selectedBatch, subjectId])
+    useEffect(() => { setCurrentPage(1) }, [searchTerm, selectedBatch, subjectId, selectedTrainingYear])
 
-    // Derive unique batch codes from data
+    // Derive unique batch codes from data (Only for dropdown options)
     const batchCodes = Array.from(new Set(
         data.map(item => (item.student?.student_code || '').substring(0, 2)).filter(Boolean)
     )).sort()
 
-    const filteredData = data.filter(item => {
-        const matchSearch = `${item.student?.first_name} ${item.student?.last_name} ${item.student?.student_code}`.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchBatch = selectedBatch === 'all' || (item.student?.student_code || '').startsWith(selectedBatch)
-        return matchSearch && matchBatch
-    })
+    // Server-side values
+    const totalPages = Math.ceil(totalCount / itemsPerPage)
+    const paginatedData = data
 
-    // Pagination helpers
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage)
-    const paginatedData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
     const handleExportExcel = () => {
         const workbook = XLSX.utils.book_new();
@@ -808,7 +842,13 @@ function AdminEvaluationContent() {
                             </div>
                             <div className="relative flex-1 w-full">
                                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                                <input type="text" placeholder="ค้นหาชื่อ หรือ รหัสนักศึกษา..." className="w-full h-14 pl-14 pr-6 rounded-[1.5rem] border-2 border-slate-50 bg-white font-bold text-sm focus:border-indigo-500 focus:ring-0 outline-none transition-all placeholder:text-slate-300" onChange={(e) => setSearchTerm(e.target.value)} />
+                                <input type="text" placeholder="ค้นหาชื่อ, รหัส, รพ. หรือ จังหวัด..." className="w-full h-14 pl-14 pr-6 rounded-[1.5rem] border-2 border-slate-50 bg-white font-bold text-sm focus:border-indigo-500 focus:ring-0 outline-none transition-all placeholder:text-slate-300"
+                                    onChange={(e) => {
+                                        setSearchTerm(e.target.value);
+                                        setCurrentPage(1);
+                                    }}
+                                />
+
                             </div>
                             <button onClick={handleExportExcel} className="h-14 px-6 bg-emerald-600 text-white rounded-[1.5rem] font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-100 hover:bg-emerald-700 active:scale-95 transition-all shrink-0">
                                 <FileSpreadsheet size={18} />
@@ -824,14 +864,36 @@ function AdminEvaluationContent() {
                                 <thead>
                                     <tr className="bg-slate-50/50 border-b border-slate-100">
                                         <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center w-14">#</th>
-                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">นักศึกษา</th>
+                                        <th
+                                            className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] cursor-pointer hover:text-indigo-600 transition-colors"
+                                            onClick={() => handleSort('student')}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                นักศึกษา {sortField === 'student' && (sortOrder === 'asc' ? <ChevronDown size={14} /> : <div className="rotate-180"><ChevronDown size={14} /></div>)}
+                                            </div>
+                                        </th>
                                         <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">รายวิชา</th>
-                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">สถานที่ฝึก</th>
-                                        <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">คะแนนสุทธิ</th>
+                                        <th
+                                            className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] cursor-pointer hover:text-indigo-600 transition-colors"
+                                            onClick={() => handleSort('site_name')}
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                สถานที่ฝึก {sortField === 'site_name' && (sortOrder === 'asc' ? <ChevronDown size={14} /> : <div className="rotate-180"><ChevronDown size={14} /></div>)}
+                                            </div>
+                                        </th>
+                                        <th
+                                            className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center cursor-pointer hover:text-indigo-600 transition-colors"
+                                            onClick={() => handleSort('score')}
+                                        >
+                                            <div className="flex items-center justify-center gap-1">
+                                                คะแนนสุทธิ {sortField === 'score' && (sortOrder === 'asc' ? <ChevronDown size={14} /> : <div className="rotate-180"><ChevronDown size={14} /></div>)}
+                                            </div>
+                                        </th>
                                         <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">สถานะ</th>
                                         <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">จัดการ</th>
                                     </tr>
                                 </thead>
+
                                 <tbody className="divide-y divide-slate-50">
                                     {isTabLoading ? (
                                         /* Table Skeleton while switching tabs */
@@ -933,8 +995,9 @@ function AdminEvaluationContent() {
                         )}
 
                         {/* Pagination Footer */}
-                        {filteredData.length > 0 && (
+                        {totalCount > 0 && (
                             <div className="px-8 py-5 bg-slate-50/30 border-t flex flex-col sm:flex-row justify-between items-center gap-4 rounded-b-[2.5rem]">
+
                                 <div className="flex items-center gap-3">
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">แสดงแถว:</span>
                                     <select
@@ -945,10 +1008,11 @@ function AdminEvaluationContent() {
                                         {[5, 10, 20, 50].map(val => <option key={val} value={val}>{val}</option>)}
                                     </select>
                                     <p className="text-xs font-bold text-slate-400 ml-2">
-                                        {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, filteredData.length)} จาก {filteredData.length} รายการ
+                                        {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, totalCount)} จาก {totalCount} รายการ
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2">
+
                                     <button
                                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                                         disabled={currentPage === 1}

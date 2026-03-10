@@ -18,6 +18,14 @@ export async function GET(req: Request) {
 
         const { searchParams } = new URL(req.url)
         const selectedYear = searchParams.get('year') || ''
+        const search = searchParams.get('search') || ''
+        const batch = searchParams.get('batch') || ''
+        const rotationId = searchParams.get('rotationId') || ''
+        const page = parseInt(searchParams.get('page') || '1')
+        const limit = parseInt(searchParams.get('limit') || '10') // Default to 10
+
+        const from = (page - 1) * limit
+        const to = from + limit - 1
 
         // ดึง available years
         const { data: yearsData } = await supabase.from('students').select('training_year')
@@ -28,8 +36,56 @@ export async function GET(req: Request) {
             availableYears = years.length === 0 ? [currentYearBS] : years.sort((a, b) => b.localeCompare(a))
         }
 
-        // ดึงนักศึกษาพร้อม deep joins
-        let query = supabase.from('students').select(`
+        // --- STEP 1: หารายชื่อนักศึกษาที่เรียงตามโรงพยาบาล ---
+        // เราต้องดึง Student IDs ทั้งหมดที่ผ่าน Filter แล้วเรียงตาม Site Name
+        let baseFilterQuery = supabase
+            .from('student_assignments')
+            .select(`
+                student_id,
+                training_sites!inner(site_name),
+                students!inner(student_code, first_name, last_name, training_year)
+            `, { count: 'exact' })
+
+        if (selectedYear) baseFilterQuery = baseFilterQuery.eq('students.training_year', selectedYear)
+        if (rotationId) baseFilterQuery = baseFilterQuery.eq('rotation_id', rotationId)
+        if (batch) baseFilterQuery = baseFilterQuery.like('students.student_code', `${batch}%`)
+
+        if (search) {
+            // ค้นหาโรงพยาบาล
+            const { data: matchedSites } = await supabase.from('training_sites').select('id').ilike('site_name', `%${search}%`)
+            const siteIds = matchedSites?.map(s => s.id) || []
+
+            const searchConditions = [
+                `students.student_code.ilike.%${search}%`,
+                `students.first_name.ilike.%${search}%`,
+                `students.last_name.ilike.%${search}%`
+            ]
+            if (siteIds.length > 0) searchConditions.push(`site_id.in.(${siteIds.join(',')})`)
+
+            baseFilterQuery = baseFilterQuery.or(searchConditions.join(','))
+        }
+
+        // ดึง IDs ทั้งหมดเพื่อทำ Pagination และ Sorting ที่แม่นยำ
+        // เรียงตามชื่อ รพ. (Site Name) และตามด้วยรหัสนักศึกษา
+        const { data: allMemberIds, count } = await baseFilterQuery
+            .order('site_name', { foreignTable: 'training_sites', ascending: true })
+            .order('student_code', { foreignTable: 'students', ascending: true })
+
+        if (!allMemberIds || allMemberIds.length === 0) {
+            // Master data for empty response
+            const [sitesRes, mentorsRes, rotRes] = await Promise.all([
+                supabase.from('training_sites').select('id, site_name, province').order('site_name'),
+                supabase.from('supervisors').select('id, full_name, site_id, supervisor_subjects(subject_id, sub_subject_id)').order('full_name'),
+                supabase.from('rotations').select('id, name, track, round_number').eq('academic_year', selectedYear || currentYearBS).order('track', { ascending: true }).order('round_number', { ascending: true })
+            ])
+            return apiSuccess({ students: [], totalCount: 0, sites: sitesRes.data || [], mentors: mentorsRes.data || [], availableYears, availableRotations: rotRes.data || [] })
+        }
+
+        // ทำ Pagination บน Memory (หรือจะใช้ IDs ชุดนี้ไป Query ต่อ)
+        const pagedIds = [...new Set(allMemberIds.map(m => m.student_id))].slice(from, to + 1)
+
+        // --- STEP 2: ดึงข้อมูลเต็มของนักศึกษาตามรายชื่อ ID ที่ผ่านการกรองและเรียงลำดับมาแล้ว ---
+        const { data: students, error: stError } = await supabase.from('students').select(`
             id, student_code, prefix, first_name, last_name, nickname, phone, email, avatar_url, training_year,
             has_motorcycle, parental_consent_url,
             student_assignments (
@@ -43,32 +99,39 @@ export async function GET(req: Request) {
                     supervisors (full_name)
                 )
             )
-        `).order('student_code', { ascending: true })
+        `).in('id', pagedIds)
+            .order('rotation_id', { foreignTable: 'student_assignments', ascending: true })
 
-        if (selectedYear) {
-            query = query.eq('training_year', selectedYear)
-        }
-
-        const { data: students, error: stError } = await query
         if (stError) throw stError
 
+        // ต้อง Re-sort ตัวแปร students ให้เรียงตามลำดับ pagedIds ที่เราเตรียมไว้ (เพื่อรักษาลำดับ รพ.)
+        const sortedStudents = pagedIds.map(id => students.find(s => s.id === id)).filter(Boolean)
+
         // ดึง master data
-        const [sitesRes, mentorsRes] = await Promise.all([
+        const [sitesRes, mentorsRes, rotRes] = await Promise.all([
             supabase.from('training_sites').select('id, site_name, province').order('site_name'),
-            supabase.from('supervisors').select('id, full_name, site_id, supervisor_subjects(subject_id, sub_subject_id)').order('full_name')
+            supabase.from('supervisors').select('id, full_name, site_id, supervisor_subjects(subject_id, sub_subject_id)').order('full_name'),
+            supabase.from('rotations').select('id, name, track, round_number').eq('academic_year', selectedYear || currentYearBS).order('track', { ascending: true }).order('round_number', { ascending: true })
+
         ])
 
+
         return apiSuccess({
-            students: students || [],
+            students: sortedStudents || [],
+            totalCount: count || 0,
             sites: sitesRes.data || [],
             mentors: mentorsRes.data || [],
-            availableYears
+            availableYears,
+            availableRotations: rotRes.data || []
         })
+
+
     } catch (error: any) {
         console.error('Admin Students GET Error:', error)
         return apiError(error.message || 'Internal Server Error', 500)
     }
 }
+
 
 /**
  * POST /api/admin/students
@@ -132,7 +195,9 @@ export async function POST(req: Request) {
                     .from('students')
                     .insert([{
                         ...studentData,
-                        avatar_url: publicUrl
+                        avatar_url: publicUrl,
+                        has_motorcycle: formData.get('has_motorcycle') === 'true',
+                        parental_consent_url: formData.get('parental_consent_url') || null
                     }])
                     .select()
                     .single()
@@ -334,10 +399,20 @@ export async function POST(req: Request) {
 
             const { data: rotationsData } = await rotQuery
 
+            // ดึงรายการสายที่มีในระบบ
+            const { data: tracksData } = await supabase
+                .from('rotations')
+                .select('track')
+                .eq('academic_year', currentYear)
+
+            const tracks = Array.from(new Set(tracksData?.map(t => t.track))).filter(Boolean).sort()
+
             return apiSuccess({
                 currentYear: currentYear.toString(),
-                rotations: rotationsData || []
+                rotations: rotationsData || [],
+                tracks: tracks.length > 0 ? tracks : ['A', 'B', 'C']
             })
+
         }
 
         return apiError('Unknown action', 400)
