@@ -142,42 +142,43 @@ function RegisterForm() {
     useEffect(() => {
         const initLiff = async () => {
             try {
-                // 1. ตรวจสอบก่อนว่า init ไปหรือยัง
-                if (!liff.id) {
-                    await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+                // 1. ตรวจสอบว่ามี LIFF ID หรือไม่
+                if (!process.env.NEXT_PUBLIC_LIFF_ID) {
+                    console.error("LIFF ID is missing");
+                    return;
                 }
 
-                // 2. ถ้าไม่ได้ Login ให้สั่ง Login ทันที
+                // 2. Init LIFF
+                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID });
+
+                // 3. ถ้าไม่ได้เปิดผ่าน LINE (เช่น เปิดใน Chrome ธรรมดา) ให้สั่ง Login
                 if (!liff.isLoggedIn()) {
                     liff.login({ redirectUri: window.location.href });
                     return;
                 }
 
-                // 3. ดึงข้อมูลโปรไฟล์มาแสดงผลเบื้องต้น (ฝั่ง Client)
-                const profile = await liff.getProfile();
-                setLineDisplayName(profile.displayName);
-                setLineUserId(profile.userId);
-
-                // 4. ส่ง ID Token ไปให้ Supabase Auth Bridge (ตาม Logic เดิมของคุณ)
+                // 4. เมื่อ Login แล้ว ดึง ID Token ส่งไปให้ Supabase Bridge
                 const idToken = liff.getIDToken();
-                if (idToken) {
-                    const res = await fetch('/api/auth/line', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ idToken })
-                    });
+                const res = await fetch('/api/auth/line', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idToken })
+                });
 
-                    if (res.ok) {
-                        const { data: { user } } = await supabase.auth.getUser();
-                        if (user) {
-                            // อัปเดต State อีกครั้งจาก Supabase User
-                            setLineUserId(user.user_metadata.line_user_id || profile.userId);
-                        }
+                if (res.ok) {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (user) {
+                        setLineDisplayName(user.user_metadata.full_name || user.user_metadata.display_name);
+                        setLineUserId(user.user_metadata.line_user_id);
                     }
+                } else {
+                    // ถ้า API Bridge พ่น 401/500
+                    const errorData = await res.json();
+                    console.error("Auth Bridge Error:", errorData.error);
                 }
+
             } catch (err) {
-                console.error("LIFF Initialization failed", err);
-                // ถ้าพังในคอมพิวเตอร์ (ไม่ใช่ LINE) อาจจะไม่ผ่านขั้นตอนล่าง
+                console.error("LIFF System Error:", err);
             }
         }
         initLiff();
