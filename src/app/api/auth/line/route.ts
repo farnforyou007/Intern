@@ -9,7 +9,8 @@ export async function POST(req: Request) {
 
         // 1. Verify LINE Token
         // The LIFF ID starts with the Channel ID
-        const channelId = process.env.NEXT_PUBLIC_LIFF_ID?.split('-')[0]
+        const channelId = process.env.NEXT_PUBLIC_LIFF_ID
+        // .split('-')[0]
         if (!channelId) throw new Error('NEXT_PUBLIC_LIFF_ID is not configured')
 
         const lineRes = await fetch('https://api.line.me/oauth2/v2.1/verify', {
