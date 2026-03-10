@@ -59,130 +59,129 @@ function RegisterForm() {
 
     const searchParams = useSearchParams();
 
-    // useEffect(() => {
-    //     const initLiff = async () => {
-    //         try {
-    //             // 1. Check for User (Debug or Existing)
-    //             const lineId = await getLineUserId(searchParams);
-
-    //             if (lineId) {
-    //                 const { data: { user } } = await supabase.auth.getUser();
-    //                 const sessionLineId = user?.user_metadata?.line_user_id || user?.app_metadata?.line_user_id;
-
-    //                 // ✅ ถ้ามี Session เดิมแต่ ID ไม่ตรงกัน (สลับการเทส) ให้ล้างก่อน
-    //                 if (user && sessionLineId && sessionLineId !== lineId) {
-    //                     console.log("Identity mismatch, signing out...", { sessionLineId, lineId });
-    //                     await supabase.auth.signOut();
-    //                     window.location.reload();
-    //                     return;
-    //                 }
-
-    //                 if (!user) {
-    //                     const isDebug = searchParams.get('debug') || localStorage.getItem('debug_mode');
-    //                     const debugName = searchParams.get('name') || `DEBUG_USER_${lineId.slice(-4)}`;
-
-    //                     if (isDebug && isDebug !== 'clear') {
-    //                         // Debug Bridge
-    //                         const res = await fetch('/api/auth/debug', {
-    //                             method: 'POST',
-    //                             headers: { 'Content-Type': 'application/json' },
-    //                             body: JSON.stringify({
-    //                                 lineUserId: lineId,
-    //                                 name: debugName
-    //                             })
-    //                         });
-    //                         if (res.ok) {
-    //                             const { data: { user: newUser } } = await supabase.auth.getUser();
-    //                             if (newUser) {
-    //                                 setLineDisplayName(newUser.user_metadata.full_name || debugName);
-    //                                 setLineUserId(newUser.user_metadata.line_user_id || lineId);
-    //                             }
-    //                         }
-    //                     } else {
-    //                         // Real LINE Bridge
-    //                         await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
-    //                         if (liff.isLoggedIn()) {
-    //                             const idToken = liff.getIDToken();
-    //                             const res = await fetch('/api/auth/line', {
-    //                                 method: 'POST',
-    //                                 headers: { 'Content-Type': 'application/json' },
-    //                                 body: JSON.stringify({ idToken })
-    //                             });
-    //                             if (res.ok) {
-    //                                 const { data: { user: newUser } } = await supabase.auth.getUser();
-    //                                 if (newUser) {
-    //                                     setLineDisplayName(newUser.user_metadata.full_name || '');
-    //                                     setLineUserId(newUser.user_metadata.line_user_id || null);
-    //                                 }
-    //                             }
-    //                         } else {
-    //                             liff.login({ redirectUri: window.location.href });
-    //                         }
-    //                     }
-    //                 } else {
-    //                     // Session already established
-    //                     setLineDisplayName(user.user_metadata.full_name || user.user_metadata.display_name || 'User');
-    //                     setLineUserId(user.user_metadata.line_user_id || lineId);
-    //                 }
-    //             } else {
-    //                 // No ID found and not logged in - trigger LIFF
-    //                 await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
-    //                 if (!liff.isLoggedIn()) {
-    //                     liff.login({ redirectUri: window.location.href });
-    //                 }
-    //             }
-    //         } catch (err) {
-    //             console.error("Auth Init Error", err)
-    //         }
-    //     }
-    //     initLiff()
-    // }, [searchParams])
-
-    // ปรับปรุง useEffect สำหรับ Init LIFF
     useEffect(() => {
         const initLiff = async () => {
             try {
-                // 1. ตรวจสอบว่ามี LIFF ID หรือไม่
-                if (!process.env.NEXT_PUBLIC_LIFF_ID) {
-                    console.error("LIFF ID is missing");
-                    return;
-                }
+                // 1. Check for User (Debug or Existing)
+                const lineId = await getLineUserId(searchParams);
 
-                // 2. Init LIFF
-                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID });
-
-                // 3. ถ้าไม่ได้เปิดผ่าน LINE (เช่น เปิดใน Chrome ธรรมดา) ให้สั่ง Login
-                if (!liff.isLoggedIn()) {
-                    liff.login({ redirectUri: window.location.href });
-                    return;
-                }
-
-                // 4. เมื่อ Login แล้ว ดึง ID Token ส่งไปให้ Supabase Bridge
-                const idToken = liff.getIDToken();
-                const res = await fetch('/api/auth/line', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ idToken })
-                });
-
-                if (res.ok) {
+                if (lineId) {
                     const { data: { user } } = await supabase.auth.getUser();
-                    if (user) {
-                        setLineDisplayName(user.user_metadata.full_name || user.user_metadata.display_name);
-                        setLineUserId(user.user_metadata.line_user_id);
+                    const sessionLineId = user?.user_metadata?.line_user_id || user?.app_metadata?.line_user_id;
+
+                    // ✅ ถ้ามี Session เดิมแต่ ID ไม่ตรงกัน (สลับการเทส) ให้ล้างก่อน
+                    if (user && sessionLineId && sessionLineId !== lineId) {
+                        console.log("Identity mismatch, signing out...", { sessionLineId, lineId });
+                        await supabase.auth.signOut();
+                        window.location.reload();
+                        return;
+                    }
+
+                    if (!user) {
+                        const isDebug = searchParams.get('debug') || localStorage.getItem('debug_mode');
+                        const debugName = searchParams.get('name') || `DEBUG_USER_${lineId.slice(-4)}`;
+
+                        if (isDebug && isDebug !== 'clear') {
+                            // Debug Bridge
+                            const res = await fetch('/api/auth/debug', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    lineUserId: lineId,
+                                    name: debugName
+                                })
+                            });
+                            if (res.ok) {
+                                const { data: { user: newUser } } = await supabase.auth.getUser();
+                                if (newUser) {
+                                    setLineDisplayName(newUser.user_metadata.full_name || debugName);
+                                    setLineUserId(newUser.user_metadata.line_user_id || lineId);
+                                }
+                            }
+                        } else {
+                            // Real LINE Bridge
+                            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+                            if (liff.isLoggedIn()) {
+                                const idToken = liff.getIDToken();
+                                const res = await fetch('/api/auth/line', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ idToken })
+                                });
+                                if (res.ok) {
+                                    const { data: { user: newUser } } = await supabase.auth.getUser();
+                                    if (newUser) {
+                                        setLineDisplayName(newUser.user_metadata.full_name || '');
+                                        setLineUserId(newUser.user_metadata.line_user_id || null);
+                                    }
+                                }
+                            } else {
+                                liff.login({ redirectUri: window.location.href });
+                            }
+                        }
+                    } else {
+                        // Session already established
+                        setLineDisplayName(user.user_metadata.full_name || user.user_metadata.display_name || 'User');
+                        setLineUserId(user.user_metadata.line_user_id || lineId);
                     }
                 } else {
-                    // ถ้า API Bridge พ่น 401/500
-                    const errorData = await res.json();
-                    console.error("Auth Bridge Error:", errorData.error);
+                    // No ID found and not logged in - trigger LIFF
+                    await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+                    if (!liff.isLoggedIn()) {
+                        liff.login({ redirectUri: window.location.href });
+                    }
                 }
-
             } catch (err) {
-                console.error("LIFF System Error:", err);
+                console.error("Auth Init Error", err)
             }
         }
-        initLiff();
-    }, []);
+        initLiff()
+    }, [searchParams])
+
+    // ปรับปรุง useEffect สำหรับ Init LIFF
+    // useEffect(() => {
+    //     const initLiff = async () => {
+    //         try {
+    //             // 1. ตรวจสอบก่อนว่า init ไปหรือยัง
+    //             if (!liff.id) {
+    //                 await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+    //             }
+
+    //             // 2. ถ้าไม่ได้ Login ให้สั่ง Login ทันที
+    //             if (!liff.isLoggedIn()) {
+    //                 liff.login({ redirectUri: window.location.href });
+    //                 return;
+    //             }
+
+    //             // 3. ดึงข้อมูลโปรไฟล์มาแสดงผลเบื้องต้น (ฝั่ง Client)
+    //             const profile = await liff.getProfile();
+    //             setLineDisplayName(profile.displayName);
+    //             setLineUserId(profile.userId);
+
+    //             // 4. ส่ง ID Token ไปให้ Supabase Auth Bridge (ตาม Logic เดิมของคุณ)
+    //             const idToken = liff.getIDToken();
+    //             if (idToken) {
+    //                 const res = await fetch('/api/auth/line', {
+    //                     method: 'POST',
+    //                     headers: { 'Content-Type': 'application/json' },
+    //                     body: JSON.stringify({ idToken })
+    //                 });
+
+    //                 if (res.ok) {
+    //                     const { data: { user } } = await supabase.auth.getUser();
+    //                     if (user) {
+    //                         // อัปเดต State อีกครั้งจาก Supabase User
+    //                         setLineUserId(user.user_metadata.line_user_id || profile.userId);
+    //                     }
+    //                 }
+    //             }
+    //         } catch (err) {
+    //             console.error("LIFF Initialization failed", err);
+    //             // ถ้าพังในคอมพิวเตอร์ (ไม่ใช่ LINE) อาจจะไม่ผ่านขั้นตอนล่าง
+    //         }
+    //     }
+    //     initLiff();
+    // }, []);
 
     useEffect(() => {
         const fetchMasterData = async () => {
