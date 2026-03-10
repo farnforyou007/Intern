@@ -448,7 +448,7 @@ export default function RotationSchedule() {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rotation Summary</p>
                         {/* 🔒 Badge ปีการศึกษา */}
                         {configYear && (
-                            <span className="inline-flex items-center gap-1.5 mt-1 bg-purple-50 text-purple-700 text-[10px] font-black px-3 py-1 rounded-full border border-purple-100">
+                            <span className="inline-flex items-center gap-1.5 mt-1 bg-emerald-50 text-emerald-700 text-[10px] font-black px-3 py-1 rounded-full border border-emerald-100">
                                 <CalendarDays size={10} />
                                 ปีการศึกษา {configYear}
                             </span>

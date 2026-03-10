@@ -39,13 +39,17 @@ export default function EvaluationHistory() {
         init()
     }, [])
 
-    // ฟังก์ชันตรวจสอบว่า "หมดเขตหรือยัง"
+    // ฟังก์ชันตรวจสอบว่า "หมดเขตหรือยัง" (ขยายเวลา 14 วันหลังจบผลัด)
     const checkIsEditable = (endDateStr: string) => {
         if (!endDateStr) return false
         const today = new Date()
         const endDate = new Date(endDateStr)
-        endDate.setHours(23, 59, 59, 999)
-        return today <= endDate
+        // บวกเพิ่มไป 14 วัน
+        const gracePeriodEnd = new Date(endDate)
+        gracePeriodEnd.setDate(gracePeriodEnd.getDate() + 14)
+        gracePeriodEnd.setHours(23, 59, 59, 999)
+
+        return today <= gracePeriodEnd
     }
 
     const handleCardClick = (item: any, isEditable: boolean) => {
@@ -54,7 +58,7 @@ export default function EvaluationHistory() {
         } else {
             Swal.fire({
                 title: 'หมดเวลาแก้ไข',
-                text: 'รายการนี้สิ้นสุดระยะเวลาผลัดการฝึกแล้ว',
+                text: 'รายการนี้เกินระยะเวลา 14 วันหลังจากสิ้นสุดผลัดการฝึกแล้ว',
                 icon: 'warning',
                 confirmButtonText: 'ตกลง',
                 confirmButtonColor: '#0f172a',
@@ -94,7 +98,7 @@ export default function EvaluationHistory() {
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">History Log</p>
                         {/* 🔒 Badge ปีการศึกษา */}
                         {configYear && (
-                            <span className="inline-flex items-center gap-1.5 mt-1 bg-blue-50 text-blue-700 text-[10px] font-black px-3 py-1 rounded-full border border-blue-100">
+                            <span className="inline-flex items-center gap-1.5 mt-1 bg-emerald-50 text-emerald-700 text-[10px] font-black px-3 py-1 rounded-full border border-emerald-100">
                                 <CalendarDays size={10} />
                                 ปีการศึกษา {configYear}
                             </span>

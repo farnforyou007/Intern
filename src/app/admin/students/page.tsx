@@ -42,6 +42,11 @@ const getRotationTheme = (index: number) => {
 
 
 export default function StudentManagement() {
+    const supabase = useMemo(() => createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    ), []);
+
     const [students, setStudents] = useState<any[]>([])
     const [sites, setSites] = useState<any[]>([])
     const [mentors, setMentors] = useState<any[]>([])
@@ -111,12 +116,6 @@ export default function StudentManagement() {
         fetchData();
     }, [fetchData, fetchAvailableYears]);
 
-    // --- ส่วนที่แก้ไขให้เป็น REAL-TIME ---
-    // เก็บ supabase client ไว้สำหรับ Realtime subscription เท่านั้น
-    const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
 
     useEffect(() => {
         fetchData()
@@ -1433,63 +1432,6 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData, available
     };
 
 
-    // const handleSave = async () => {
-    //     if (!form.student_code || !form.first_name) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกรหัสและชื่อนักศึกษา', 'warning');
-
-    //     // เช็คหน้าประตูก่อน
-    //     if (!avatarFile) {
-    //         return Swal.fire('กรุณาเลือกรูปภาพ', 'ต้องมีรูปโปรไฟล์นักศึกษา', 'warning');
-    //     }
-
-    //     setLoading(true);
-    //     try {
-    //         let publicUrl = null;
-
-    //         // บรรทัดเจ้าปัญหา แก้โดยใช้ ! หรือ as any
-    //         // บรรทัด 908 แก้เป็น:
-    //         const fileToUpload = avatarFile as File;
-
-    //         const fileExt = fileToUpload!.name.split('.').pop();
-    //         const fileName = `${form.student_code}_${Date.now()}.${fileExt}`;
-
-    //         const { error: uploadError } = await supabase.storage
-    //             .from('avatars')
-    //             .upload(fileName, fileToUpload);
-
-    //         if (uploadError) throw uploadError;
-
-    //         const { data: urlData } = supabase.storage
-    //             .from('avatars')
-    //             .getPublicUrl(fileName);
-
-    //         publicUrl = urlData.publicUrl;
-    //         const { data: student, error: stError } = await supabase.from('students').insert([{
-    //             student_code: form.student_code, prefix: form.prefix,
-    //             first_name: form.first_name, last_name: form.last_name,
-    //             phone: form.phone, email: form.email, avatar_url: publicUrl
-    //         }]).select().single();
-    //         if (stError) throw stError;
-
-    //         for (const as of form.assignments) {
-    //             if (as.site_id) {
-    //                 const { data: assignment } = await supabase.from('student_assignments').insert([{
-    //                     student_id: student.id, rotation_id: as.rotation_id,
-    //                     site_id: as.site_id, status: 'active'
-    //                 }]).select().single();
-
-    //                 if (as.supervisor_ids.length > 0) {
-    //                     const mentorRecords = as.supervisor_ids.map((sId: any) => ({
-    //                         assignment_id: assignment.id, supervisor_id: sId
-    //                     }));
-    //                     await supabase.from('assignment_supervisors').insert(mentorRecords);
-    //                 }
-    //             }
-    //         }
-    //         Swal.fire({ icon: 'success', title: 'สำเร็จ', timer: 1500, showConfirmButton: false });
-    //         fetchData(); onClose();
-    //     } catch (e: any) { Swal.fire('Error', e.message, 'error'); }
-    //     finally { setLoading(false); }
-    // };
 
 
     const handleSave = async () => {
@@ -1537,21 +1479,9 @@ function StudentAddModal({ isOpen, onClose, sites, mentors, fetchData, available
             }))
             formData.append('has_motorcycle', form.has_motorcycle.toString())
 
-            // Handle PDF Upload first
+            // 2. Handle PDF File (Append to formData for server-side upload)
             if (pdfFile) {
-                const pdfExt = pdfFile.name.split('.').pop()
-                const pdfName = `${form.student_code}_consent_${Date.now()}.${pdfExt}`
-                const { error: pdfError } = await (supabase as any).storage
-                    .from('parental_consents')
-                    .upload(pdfName, pdfFile)
-
-                if (pdfError) throw pdfError
-
-                const { data: pdfUrl } = (supabase as any).storage
-                    .from('parental_consents')
-                    .getPublicUrl(pdfName)
-
-                formData.append('parental_consent_url', pdfUrl.publicUrl)
+                formData.append('consent_pdf', pdfFile)
             }
 
             formData.append('assignments', JSON.stringify(form.assignments))

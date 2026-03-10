@@ -180,7 +180,7 @@ const TaskButton = ({ task, isMine, onAction, label, icon, styleType }: any) => 
                     ) : (
                         !isClaimed && (
                             <p className="text-[9px] text-amber-600 font-bold flex items-center gap-1">
-                                <PlusCircle size={10} /> กดรับดูแลเพื่อประเมิน
+                                <PlusCircle size={10} /> กดรับเป็นพี่เลี้ยงเพื่อประเมิน
                             </p>
                         )
                     )}
@@ -387,7 +387,7 @@ export default function SupervisorStudentList() {
                 const myTask = myStudents.find(ms => ms.student_assignments?.id === tData.id);
                 if (myTask) router.push(`/supervisor/evaluate/${myTask.id}`);
             } else {
-                const showName = tData.sub_subjects?.name || tData.subjects?.name || "เล่มรายงาน/Portfolio";
+                const showName = tData.sub_subjects?.name || tData.subjects?.name || "เล่ม";
                 const studentName = `${tData.students?.first_name || ''} ${tData.students?.last_name || ''}`.trim() || 'ไม่ระบุชื่อ';
                 handleClaimStudent(tData.id, studentName, showName);
             }
@@ -396,11 +396,11 @@ export default function SupervisorStudentList() {
 
     const handleClaimStudent = async (assignmentId: number, name: string, subject: string) => {
         const { isConfirmed } = await Swal.fire({
-            title: 'ยืนยันรับดูแล?',
+            title: 'ยืนยันรับเป็นพี่เลี้ยง?',
             html: `<div class="text-left text-sm text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-100"><p class="mb-1">คุณต้องการรับผิดชอบ:</p><p class="text-lg font-black text-emerald-700 mb-2">${subject}</p><p>ของนักศึกษา: <b>${name}</b> ใช่หรือไม่?</p></div>`,
             icon: 'question',
             showCancelButton: true,
-            confirmButtonText: 'ใช่, รับดูแล', confirmButtonColor: '#064e3b',
+            confirmButtonText: 'ยืนยัน', confirmButtonColor: '#064e3b',
             cancelButtonText: 'ยกเลิก', cancelButtonColor: '#94a3b8',
             customClass: { popup: 'rounded-[2.5rem] p-6 font-sans' }
         })
@@ -419,7 +419,7 @@ export default function SupervisorStudentList() {
                 const result = await res.json()
                 if (!result.success) throw new Error(result.error)
 
-                Swal.fire({ icon: 'success', title: 'เรียบร้อย!', text: 'เพิ่มรายการลงใน "ทีมฉัน" แล้ว', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem]' } })
+                Swal.fire({ icon: 'success', title: 'เรียบร้อย!', text: 'เพิ่มรายการลงใน "เป็นพี่เลี้ยง" แล้ว', timer: 1500, showConfirmButton: false, customClass: { popup: 'rounded-[2.5rem]' } })
                 fetchData(supervisorInfo.line_user_id)
             } catch (error: any) {
                 Swal.fire('Error', error.message, 'error')
@@ -460,8 +460,14 @@ export default function SupervisorStudentList() {
                     <input type="text" placeholder="ค้นหา..." className="w-full h-12 pl-12 pr-4 rounded-2xl bg-slate-100 outline-none font-bold" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 </div>
                 <div className="flex p-1.5 bg-slate-100 rounded-2xl shadow-inner">
-                    <button onClick={() => setActiveTab('mine')} className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${activeTab === 'mine' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-400'}`}>ทีมฉัน ({groupedMine.length})</button>
-                    <button onClick={() => setActiveTab('all')} className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${activeTab === 'all' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-400'}`}>ทั้งหมด ({groupedAll.length})</button>
+                    <button onClick={() => setActiveTab('mine')} 
+                    className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${activeTab === 'mine' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-400'}`}>
+                        นักศึกษาที่รับผิดชอบ ({groupedMine.length})
+                    </button>
+                    <button onClick={() => setActiveTab('all')} 
+                    className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${activeTab === 'all' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-400'}`}>
+                        นักศึกษาทั้งหมด ({groupedAll.length})
+                    </button>
                 </div>
             </div>
 

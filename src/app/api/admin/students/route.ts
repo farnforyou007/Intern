@@ -81,8 +81,12 @@ export async function GET(req: Request) {
             return apiSuccess({ students: [], totalCount: 0, sites: sitesRes.data || [], mentors: mentorsRes.data || [], availableYears, availableRotations: rotRes.data || [] })
         }
 
+        // --- FIXED: Count unique student IDs instead of rows ---
+        const uniqueStudentIds = [...new Set(allMemberIds.map(m => m.student_id))]
+        const totalCount = uniqueStudentIds.length
+
         // ทำ Pagination บน Memory (หรือจะใช้ IDs ชุดนี้ไป Query ต่อ)
-        const pagedIds = [...new Set(allMemberIds.map(m => m.student_id))].slice(from, to + 1)
+        const pagedIds = uniqueStudentIds.slice(from, to + 1)
 
         // --- STEP 2: ดึงข้อมูลเต็มของนักศึกษาตามรายชื่อ ID ที่ผ่านการกรองและเรียงลำดับมาแล้ว ---
         const { data: students, error: stError } = await supabase.from('students').select(`
@@ -118,7 +122,7 @@ export async function GET(req: Request) {
 
         return apiSuccess({
             students: sortedStudents || [],
-            totalCount: count || 0,
+            totalCount: totalCount,
             sites: sitesRes.data || [],
             mentors: mentorsRes.data || [],
             availableYears,
@@ -159,6 +163,7 @@ export async function POST(req: Request) {
                 const studentData = JSON.parse(studentDataStr)
                 const assignments = JSON.parse(formData.get('assignments') as string || '[]')
                 const mentorsData = JSON.parse(formData.get('mentorsData') as string || '[]')
+                const pdfFile = formData.get('consent_pdf') as File | null
 
                 // 1. ตรวจสอบรหัสซ้ำ
                 const { data: check } = await supabase
@@ -190,6 +195,25 @@ export async function POST(req: Request) {
                     publicUrl = urlData.publicUrl
                 }
 
+                // 2.5 Upload parental consent PDF
+                let parentalConsentUrl = null
+                if (pdfFile) {
+                    const pdfExt = pdfFile.name.split('.').pop()
+                    const pdfName = `${studentData.student_code}_consent_${Date.now()}.${pdfExt}`
+
+                    const { error: pdfError } = await supabase.storage
+                        .from('parental_consents')
+                        .upload(pdfName, pdfFile)
+
+                    if (pdfError) throw pdfError
+
+                    const { data: pdfUrlData } = supabase.storage
+                        .from('parental_consents')
+                        .getPublicUrl(pdfName)
+
+                    parentalConsentUrl = pdfUrlData.publicUrl
+                }
+
                 // 3. Insert student
                 const { data: student, error: stError } = await supabase
                     .from('students')
@@ -197,7 +221,7 @@ export async function POST(req: Request) {
                         ...studentData,
                         avatar_url: publicUrl,
                         has_motorcycle: formData.get('has_motorcycle') === 'true',
-                        parental_consent_url: formData.get('parental_consent_url') || null
+                        parental_consent_url: parentalConsentUrl || null
                     }])
                     .select()
                     .single()
