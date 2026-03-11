@@ -61,7 +61,7 @@ function EvaluationProgressBar({ evaluated, total }: { evaluated: number; total:
     if (total === 0) {
         return (
             <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-300 italic">ไม่มีงาน</span>
+                <span className="text-[10px] font-bold text-slate-300 italic">ไม่มีแบบประเมิน</span>
             </div>
         )
     }

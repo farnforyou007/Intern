@@ -9,12 +9,13 @@ import {
     PhoneCall, BookOpen, FolderOpen, FileSignature, PlusCircle,
     UserPlus, ClipboardPenLine, Mail, Send,
     Users, SendHorizonal, SquareActivity, SquareUserRound,
-    Clock, CheckCircle, AlertCircle, CalendarDays,
+    Clock, CheckCircle, AlertCircle, CalendarDays, HelpCircle
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Swal from 'sweetalert2'
 import liff from '@line/liff'
 import { getLineUserId } from '@/utils/auth';
+import SupervisorTour from '@/components/supervisor/SupervisorTour'
 
 // --- 1. Component ย่อย: SmartSubjectGroup ---
 const SmartSubjectGroup = ({ subjectName, tasks, isMine, onAction }: any) => {
@@ -255,6 +256,7 @@ export default function SupervisorStudentList() {
     const [allSiteStudents, setAllSiteStudents] = useState<any[]>([])
     const [supervisorInfo, setSupervisorInfo] = useState<any>(null)
     const [configYear, setConfigYear] = useState<string>('') // 🔒 ปีการศึกษาปัจจุบัน
+    const [showTour, setShowTour] = useState(false)
     const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
     // Supabase client — จำเป็นเฉพาะ Realtime subscriptions เท่านั้น
@@ -442,7 +444,6 @@ export default function SupervisorStudentList() {
                     <div className="text-center">
                         <h1 className="text-xl font-black text-slate-900 tracking-tight">รายชื่อนักศึกษา</h1>
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Students List</p>
-                        {/* 🔒 Badge ปีการศึกษา */}
                         {configYear && (
                             <span className="inline-flex items-center gap-1.5 mt-1 bg-emerald-50 text-emerald-700 text-[10px] font-black px-3 py-1 rounded-full border border-emerald-100">
                                 <CalendarDays size={10} />
@@ -450,8 +451,14 @@ export default function SupervisorStudentList() {
                             </span>
                         )}
                     </div>
-                    <div className="w-11 h-11 flex items-center justify-center text-slate-300 bg-slate-50 rounded-2xl border border-slate-100">
-                        <GraduationCap size={20} />
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setShowTour(true)}
+                            className="w-11 h-11 rounded-2xl bg-[#064e3b] shadow-lg shadow-emerald-900/20 flex items-center justify-center text-white hover:bg-[#043e2f] transition-all active:scale-95"
+                            title="แนะนำการใช้งาน"
+                        >
+                            <HelpCircle size={20} />
+                        </button>
                     </div>
                 </div>
 
@@ -460,86 +467,124 @@ export default function SupervisorStudentList() {
                     <input type="text" placeholder="ค้นหา..." className="w-full h-12 pl-12 pr-4 rounded-2xl bg-slate-100 outline-none font-bold" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                 </div>
                 <div className="flex p-1.5 bg-slate-100 rounded-2xl shadow-inner">
-                    <button onClick={() => setActiveTab('mine')} 
-                    className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${activeTab === 'mine' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-400'}`}>
+                    <button id="tab-mine-students" onClick={() => setActiveTab('mine')}
+                        className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${activeTab === 'mine' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-400'}`}>
                         นักศึกษาที่รับผิดชอบ ({groupedMine.length})
                     </button>
-                    <button onClick={() => setActiveTab('all')} 
-                    className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${activeTab === 'all' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-400'}`}>
+                    <button id="tab-all-students" onClick={() => setActiveTab('all')}
+                        className={`flex-1 py-3 rounded-xl font-black text-xs transition-all ${activeTab === 'all' ? 'bg-white shadow-sm text-emerald-700' : 'text-slate-400'}`}>
                         นักศึกษาทั้งหมด ({groupedAll.length})
                     </button>
                 </div>
+                {/* Tour Component */}
+                <SupervisorTour startTour={showTour} onComplete={() => setShowTour(false)} />
             </div>
 
             <div className="p-6 space-y-5">
-                {loading ? <><SkeletonCard /><SkeletonCard /></> : filteredList.length > 0 ? (
-                    filteredList.map((group: any) => {
-                        const isMine = activeTab === 'mine';
-                        const { student, tasks, id: groupKey } = group;
-                        const isExpanded = expandedIds.includes(groupKey);
+                {/* 🧪 Mockup Card for Tour (If no students) */}
+                {activeTab === 'mine' && !loading && filteredList.length === 0 && (
+                    <div id="tour-mockup-placeholder" className="hidden">Mockup Active</div>
+                )}
 
-                        const toggleExpand = () => {
-                            if (isExpanded) {
-                                setExpandedIds(prev => prev.filter(id => id !== groupKey));
-                            } else {
-                                setExpandedIds(prev => [...prev, groupKey]);
-                            }
-                        };
+                {loading ? (
+                    <><SkeletonCard /><SkeletonCard /></>
+                ) : (filteredList.length > 0 || (activeTab === 'mine' && typeof window !== 'undefined' && localStorage.getItem('supervisor_tour_mockup') === 'true')) ? (
+                    (() => {
+                        let listToRender = [...filteredList];
+                        if (activeTab === 'mine' && listToRender.length === 0 && typeof window !== 'undefined' && localStorage.getItem('supervisor_tour_mockup') === 'true') {
+                            listToRender = [{
+                                id: 'mock-1',
+                                student: {
+                                    student_code: '6520xxxx',
+                                    first_name: 'นักศึกษา',
+                                    last_name: '(ตัวอย่างสำหรับแนะนำการใช้งาน)',
+                                    nickname: 'ตัวอย่าง',
+                                    email: 'sample@student.com',
+                                    phone: '081-234-5678',
+                                    avatar_url: null
+                                },
+                                tasks: [{
+                                    is_evaluated: false,
+                                    has_eval_logs: false,
+                                    student_assignments: {
+                                        subjects: { id: 'subj-1', name: 'รายวิชาตัวอย่าง' }
+                                    }
+                                }]
+                            }];
+                        }
 
-                        const tasksBySubject: { [key: string]: any[] } = {};
-                        tasks.forEach((t: any) => {
-                            const tData = isMine ? t.student_assignments : t;
-                            const subjId = tData.subjects?.id || 'unknown';
-                            if (!tasksBySubject[subjId]) tasksBySubject[subjId] = [];
-                            tasksBySubject[subjId].push(t);
-                        });
+                        return listToRender.map((group: any, idx: number) => {
+                            const isMine = activeTab === 'mine';
+                            const { student, tasks, id: groupKey } = group;
+                            const isExpanded = expandedIds.includes(groupKey);
 
-                        return (
-                            <div key={groupKey} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden transition-all">
-                                <div className="p-6 cursor-pointer" onClick={toggleExpand}>
-                                    <div className="flex items-start gap-5">
-                                        <div onClick={(e) => { e.stopPropagation(); student?.avatar_url && handlePreviewImage(student.avatar_url); }} className="relative mt-2 w-23 h-23 rounded-[2rem] bg-slate-100 shrink-0 border-4 border-slate-50 overflow-hidden cursor-pointer">
-                                            {student?.avatar_url ? <img src={student.avatar_url} className="w-full h-full object-cover" /> : <User size={28} className="m-auto mt-7 text-slate-300" />}
+                            const toggleExpand = () => {
+                                if (isExpanded) {
+                                    setExpandedIds(prev => prev.filter(id => id !== groupKey));
+                                } else {
+                                    setExpandedIds(prev => [...prev, groupKey]);
+                                }
+                            };
+
+                            const tasksBySubject: { [key: string]: any[] } = {};
+                            tasks.forEach((t: any) => {
+                                const tData = isMine ? t.student_assignments : t;
+                                const subjId = tData.subjects?.id || 'unknown';
+                                if (!tasksBySubject[subjId]) tasksBySubject[subjId] = [];
+                                tasksBySubject[subjId].push(t);
+                            });
+
+                            return (
+                                <div key={groupKey} id={idx === 0 ? 'first-student-card' : undefined} className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden transition-all">
+                                    <div className="p-6 cursor-pointer" onClick={toggleExpand}>
+                                        <div className="flex items-start gap-5">
+                                            <div onClick={(e) => { e.stopPropagation(); student?.avatar_url && handlePreviewImage(student.avatar_url); }} className="relative mt-2 w-23 h-23 rounded-[2rem] bg-slate-100 shrink-0 border-4 border-slate-50 overflow-hidden cursor-pointer">
+                                                {student?.avatar_url ? <img src={student.avatar_url} className="w-full h-full object-cover" /> : <User size={28} className="m-auto mt-7 text-slate-300" />}
+                                            </div>
+                                            <div className="min-w-0 flex-1 space-y-1">
+                                                <span className="inline-block px-2 py-0.5 rounded-lg bg-slate-100 text-[9px] font-black text-slate-500 mb-1">#{student.student_code}</span>
+                                                <h3 className="text-[15px] font-bold text-slate-900">{student.first_name} {student.last_name}</h3>
+                                                <p className="text-slate-700 font-black text-xs flex items-center gap-1"><User size={12} />{student.nickname || '-'}</p>
+                                                <p className="text-slate-700 font-black text-xs flex items-center gap-1"><Mail size={10} />{student.email || '-'}</p>
+                                                <a href={`tel:${student.phone}`} onClick={(e) => e.stopPropagation()} className="text-[11px] text-slate-600 font-black underline flex items-center gap-1"><PhoneCall size={10} /> {student.phone}</a>
+                                            </div>
+                                            <div className={`p-3 rounded-2xl transition-all shadow-lg shrink-0 ${isExpanded ? 'bg-slate-900 text-white rotate-180' : 'bg-[#064e3b] text-white'}`}>
+                                                {isExpanded ? <ChevronDown size={20} /> : (isMine ? <ClipboardPenLine size={20} /> : <UserPlus size={20} />)}
+                                            </div>
                                         </div>
-                                        <div className="min-w-0 flex-1 space-y-1">
-                                            <span className="inline-block px-2 py-0.5 rounded-lg bg-slate-100 text-[9px] font-black text-slate-500 mb-1">#{student.student_code}</span>
-                                            <h3 className="text-[15px] font-bold text-slate-900">{student.first_name} {student.last_name}</h3>
-                                            <p className="text-slate-700 font-black text-xs flex items-center gap-1"><User size={12} />{student.nickname || '-'}</p>
-                                            <p className="text-slate-700 font-black text-xs flex items-center gap-1"><Mail size={10} />{student.email || '-'}</p>
-                                            <a href={`tel:${student.phone}`} onClick={(e) => e.stopPropagation()} className="text-[11px] text-slate-600 font-black underline flex items-center gap-1"><PhoneCall size={10} /> {student.phone}</a>
-                                        </div>
-                                        <div className={`p-3 rounded-2xl transition-all shadow-lg shrink-0 ${isExpanded ? 'bg-slate-900 text-white rotate-180' : 'bg-[#064e3b] text-white'}`}>
-                                            {isExpanded ? <ChevronDown size={20} /> : (isMine ? <ClipboardPenLine size={20} /> : <UserPlus size={20} />)}
-                                        </div>
+
+                                        {isExpanded && (
+                                            <div className="mt-6 pt-5 border-t border-slate-50" onClick={(e) => e.stopPropagation()}>
+                                                <div className="flex justify-between items-center mb-4 px-1">
+                                                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                        <ClipboardCheck size={14} className="text-emerald-600" />
+                                                        {isMine ? 'รายการประเมิน' : 'รายวิชาที่สามารถรับเป็นพี่เลี้ยง'}
+                                                    </p>
+                                                    {isMine && (
+                                                        <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1">
+                                                            <CheckCircle size={10} className="text-emerald-500" />{tasks.filter((t: any) => isMine ? t.is_evaluated : false).length}{tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length > 0 && <span className="text-amber-600 flex items-center gap-0.5 ml-1"><Clock size={9} />{tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length}</span>}/{tasks.length}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-1">
+                                                    {Object.keys(tasksBySubject).map((subjId, sIdx) => {
+                                                        const subjectTasks = tasksBySubject[subjId];
+                                                        const tData = isMine ? subjectTasks[0].student_assignments : subjectTasks[0];
+                                                        const subjectName = tData.subjects?.name || 'วิชาทั่วไป';
+                                                        return (
+                                                            <div key={subjId} id={(!isMine && idx === 0 && sIdx === 0) ? 'first-subject-claim' : (isMine && idx === 0 && sIdx === 0) ? 'evaluation-highlight' : undefined}>
+                                                                <SmartSubjectGroup key={subjId} subjectName={subjectName} tasks={subjectTasks} isMine={isMine} onAction={handleAction} />
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-
-                                    {isExpanded && (
-                                        <div className="mt-6 pt-5 border-t border-slate-50" onClick={(e) => e.stopPropagation()}>
-                                            <div className="flex justify-between items-center mb-4 px-1">
-                                                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                                    <ClipboardCheck size={14} className="text-emerald-600" />
-                                                    {isMine ? 'รายการประเมิน' : 'รายวิชาที่สามารถรับเป็นพี่เลี้ยง'}
-                                                </p>
-                                                {isMine && (
-                                                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1">
-                                                        <CheckCircle size={10} className="text-emerald-500" />{tasks.filter((t: any) => isMine ? t.is_evaluated : false).length}{tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length > 0 && <span className="text-amber-600 flex items-center gap-0.5 ml-1"><Clock size={9} />{tasks.filter((t: any) => isMine ? (!t.is_evaluated && t.has_eval_logs) : false).length}</span>}/{tasks.length}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="space-y-1">
-                                                {Object.keys(tasksBySubject).map(subjId => {
-                                                    const subjectTasks = tasksBySubject[subjId];
-                                                    const tData = isMine ? subjectTasks[0].student_assignments : subjectTasks[0];
-                                                    const subjectName = tData.subjects?.name || 'วิชาทั่วไป';
-                                                    return <SmartSubjectGroup key={subjId} subjectName={subjectName} tasks={subjectTasks} isMine={isMine} onAction={handleAction} />
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
-                            </div>
-                        )
-                    })
+                            )
+                        })
+                    })()
                 ) : (
                     <div className="text-center py-16">
                         {configYear ? (

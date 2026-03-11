@@ -323,8 +323,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { name: 'แดชบอร์ด', icon: <LayoutDashboard size={20} />, href: '/admin' },
         { name: 'จัดการแหล่งฝึกงาน', icon: <Hospital size={20} />, href: '/admin/sites' },
         { name: 'จัดการผลัดการฝึก', icon: <CalendarClock size={20} />, href: '/admin/rotations' },
-        { name: 'จัดการรายวิชา', icon: <BookOpen size={20} />, href: '/admin/subjects' },
-        { name: 'จัดการแบบประเมิน', icon: <ClipboardPen size={20} />, href: '/admin/templates' },
+        { name: 'จัดการแบบประเมิน', icon: <BookOpen size={20} />, href: '/admin/subjects' },
+        { name: 'จัดการเทมเพลต', icon: <ClipboardPen size={20} />, href: '/admin/templates' },
         { name: 'จัดการบุคลากร', icon: <UserRoundCheck size={20} />, href: '/admin/supervisors' },
         { name: 'จัดการนักศึกษา', icon: <Users size={20} />, href: '/admin/students' },
         { name: 'ผลการประเมิน', icon: <FileBarChart2 size={20} />, href: '/admin/evaluations' },
@@ -392,7 +392,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         if (timerRef.current) clearTimeout(timerRef.current)
         // ตั้งเวลา 30 วินาทีสำหรับทดสอบ (30000 ms) 
         // เปลี่ยนเป็น 1800000 เมื่อใช้งานจริง (30 นาที)
-        timerRef.current = setTimeout(() => performLogout(true), 3600000)
+        timerRef.current = setTimeout(() => performLogout(true), 30000)
     }
 
     useEffect(() => {

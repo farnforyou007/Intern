@@ -117,7 +117,7 @@ export default function SubjectsPage() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
                     <div>
                         <h1 className="text-3xl font-black flex items-center gap-3 text-slate-900 tracking-tight">
-                            <BookOpen className="text-blue-600" size={32} /> จัดการรายวิชา
+                            <BookOpen className="text-blue-600" size={32} /> จัดการแบบประเมินรายวิชา
                         </h1>
                         <p className="text-slate-500 mt-1 font-medium text-sm">กำหนดรายวิชาหลัก วิชาย่อย และเกณฑ์การประเมินมาตรฐาน</p>
                     </div>
