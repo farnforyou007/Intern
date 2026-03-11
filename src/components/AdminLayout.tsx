@@ -360,7 +360,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         if (isAuto) {
             // กรณีหมดเวลา: แสดง Swal ก่อน แล้วค่อย SignOut
-            const result = await Swal.fire({
+            await Swal.fire({
                 title: 'เซสชั่นหมดอายุ',
                 text: 'คุณไม่มีการเคลื่อนไหวนานเกินไป กรุณาเข้าสู่ระบบใหม่',
                 icon: 'warning',
@@ -370,29 +370,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 allowEscapeKey: false,
                 customClass: { popup: 'rounded-[2rem] font-sans' }
             });
-
-            // เมื่อกดตกลง หรือ Swal ปิดลง ค่อยล้างข้อมูลและเด้งออก
-            await supabase.auth.signOut();
-            localStorage.clear();
-            localStorage.removeItem('debug_mode');
-            sessionStorage.clear();
-            window.location.href = '/';
-        } else {
-            // กรณีตั้งใจกด Logout เอง: ล้างข้อมูลแล้วเด้งออกทันที
-            await supabase.auth.signOut();
-            localStorage.clear();
-            localStorage.removeItem('debug_mode');
-            sessionStorage.clear();
-            window.location.href = '/';
         }
+
+        // ล้าง storage ก่อนเลย เพื่อป้องกัน initAuth วนลูป
+        localStorage.clear();
+        sessionStorage.clear();
+
+        // signOut แบบ timeout — ถ้า session หมดอายุแล้ว signOut อาจค้าง
+        try {
+            await Promise.race([
+                supabase.auth.signOut(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('signOut timeout')), 3000))
+            ]);
+        } catch (e) {
+            console.warn('signOut skipped (session likely expired):', e);
+        }
+
+        // บังคับเปลี่ยนหน้าเสมอ
+        window.location.href = '/';
     };
 
     // ฟังก์ชันรีเซ็ตเวลา (Timer)
     const resetTimer = () => {
         if (timerRef.current) clearTimeout(timerRef.current)
-        // ตั้งเวลา 30 วินาทีสำหรับทดสอบ (30000 ms) 
-        // เปลี่ยนเป็น 1800000 เมื่อใช้งานจริง (30 นาที)
-        timerRef.current = setTimeout(() => performLogout(true), 30000)
+        // ตั้งเวลา 30 นาที (1800000 ms)
+        timerRef.current = setTimeout(() => performLogout(true), 1800000)
     }
 
     useEffect(() => {
@@ -405,21 +407,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 return
             }
 
-            const { data: { session } } = await supabase.auth.getSession()
+            try {
+                // Timeout protection — ป้องกัน getSession ค้างเมื่อ session หมดอายุ
+                const sessionResult = await Promise.race([
+                    supabase.auth.getSession(),
+                    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('getSession timeout')), 5000))
+                ]) as { data: { session: any } }
 
-            if (!session) {
+                if (!sessionResult?.data?.session) {
+                    window.location.href = '/'
+                    return
+                }
+
+                // ✅ บันทึก Cache เมื่อผ่านการตรวจสอบจริง
+                sessionStorage.setItem('admin_auth_status', 'authorized')
+                setIsLoading(false)
+                resetTimer() // เริ่มนับเวลาถอยหลัง
+
+                // ดักจับเหตุการณ์การเคลื่อนไหวเพื่อรีเซ็ต Timer
+                const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
+                events.forEach(event => window.addEventListener(event, resetTimer))
+            } catch (e) {
+                console.warn('Auth check failed, redirecting to login:', e)
+                sessionStorage.clear()
                 window.location.href = '/'
-                return
             }
-
-            // ✅ บันทึก Cache เมื่อผ่านการตรวจสอบจริง
-            sessionStorage.setItem('admin_auth_status', 'authorized')
-            setIsLoading(false)
-            resetTimer() // เริ่มนับเวลาถอยหลัง
-
-            // ดักจับเหตุการณ์การเคลื่อนไหวเพื่อรีเซ็ต Timer
-            const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
-            events.forEach(event => window.addEventListener(event, resetTimer))
         }
 
         initAuth()
