@@ -160,6 +160,13 @@
   100% { transform: translateX(100%); }
 }
 
+@layer base {
+  html {
+    /* ป้องกัน iOS/LINE Browser ปรับขนาดฟอนต์เองตามใจชอบ */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
 .shimmer-wrapper {
   position: relative;
   overflow: hidden;
