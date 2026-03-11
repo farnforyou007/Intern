@@ -165,6 +165,14 @@
     /* ป้องกัน iOS/LINE Browser ปรับขนาดฟอนต์เองตามใจชอบ */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    touch-action: manipulation;
+  }
+
+  /* ป้องกัน LINE/iOS WebView auto-zoom เมื่อ focus input ที่ font < 16px */
+  @supports (-webkit-touch-callout: none) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
   }
 }
 .shimmer-wrapper {
