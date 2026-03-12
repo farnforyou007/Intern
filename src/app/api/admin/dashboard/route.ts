@@ -19,76 +19,71 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url)
         let selectedYear = searchParams.get('year') || ''
 
-        // 0. ถ้าไม่ได้ส่งปี → ดึง default จาก system_configs
-        if (!selectedYear) {
-            const { data: configData } = await supabase
-                .from('system_configs')
-                .select('key_value')
-                .eq('key_name', 'current_training_year')
-                .single()
-            selectedYear = configData?.key_value || ''
-        }
+        // 🚀 Group 1: Config + Years + Master Data พร้อมกัน
+        const [configResult, yearsDataResult, subjectsRes, subSubjectsRes] = await Promise.all([
+            !selectedYear 
+                ? supabase.from('system_configs').select('key_value').eq('key_name', 'current_training_year').single()
+                : Promise.resolve({ data: { key_value: selectedYear } }),
+            supabase.from('students').select('training_year').not('training_year', 'is', null),
+            supabase.from('subjects').select('id, name'),
+            supabase.from('sub_subjects').select('id, name, parent_subject_id')
+        ])
 
-        // ดึง year options
-        const { data: yearsData } = await supabase
-            .from('students')
-            .select('training_year')
-            .not('training_year', 'is', null)
-        const yearOptions = yearsData
-            ? Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a))
+        if (!selectedYear) selectedYear = configResult.data?.key_value || ''
+        const yearOptions = yearsDataResult.data
+            ? Array.from(new Set(yearsDataResult.data.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a))
             : []
+        const subjectsList = subjectsRes.data || []
+        const subSubjectsList = subSubjectsRes.data || []
 
-        // ดึง student IDs ในปีที่เลือก
-        let yearStudentIds: string[] | null = null
-        if (selectedYear) {
-            const { data: yearStudents } = await supabase
-                .from('students')
-                .select('id')
-                .eq('training_year', selectedYear)
-            yearStudentIds = (yearStudents || []).map((s: any) => String(s.id))
-        }
-
-        // 1. KPI Stats
+        // 🚀 Group 2: ทุกอย่างที่เหลือ (KPI, Eval, Activities, Assignments) พร้อมกัน
         let studentCountQuery = supabase.from('students').select('*', { count: 'exact', head: true })
         if (selectedYear) studentCountQuery = studentCountQuery.eq('training_year', selectedYear)
 
+        let evalQuery = supabase.from('assignment_supervisors').select(`
+            evaluation_status, assignment_id,
+            student_assignments!inner (students!inner (training_year))
+        `)
+        if (selectedYear) evalQuery = evalQuery.eq('student_assignments.students.training_year', selectedYear)
+
+        let studentsActivityQuery = supabase.from('students')
+            .select('id, first_name, last_name, created_at')
+            .order('created_at', { ascending: false }).limit(5)
+        if (selectedYear) studentsActivityQuery = studentsActivityQuery.eq('training_year', selectedYear)
+
+        let assignmentQuery = supabase.from('assignment_supervisors').select(`
+            is_evaluated, evaluation_status, assignment_id,
+            student_assignments!inner (subject_id, sub_subject_id, student_id, students!inner(training_year))
+        `)
+        if (selectedYear) assignmentQuery = assignmentQuery.eq('student_assignments.students.training_year', selectedYear)
+
         const [
-            { count: studentCount },
-            { count: siteCount },
-            { count: svCount },
-            { count: pendingSvCount },
-            { count: subjectCount }
+            stdCountRes, siteCountRes, svCountRes, pndSvCountRes, subCountRes,
+            evalRes,
+            svActRes, siteActRes, stdActRes,
+            assignRes
         ] = await Promise.all([
             studentCountQuery,
             supabase.from('training_sites').select('*', { count: 'exact', head: true }),
             supabase.from('supervisors').select('*', { count: 'exact', head: true }),
             supabase.from('supervisors').select('*', { count: 'exact', head: true }).eq('is_verified', false),
-            supabase.from('subjects').select('*', { count: 'exact', head: true })
+            supabase.from('subjects').select('*', { count: 'exact', head: true }),
+            evalQuery,
+            supabase.from('supervisors').select('id, full_name, created_at, is_verified').order('created_at', { ascending: false }).limit(5),
+            supabase.from('training_sites').select('id, site_name, created_at').order('created_at', { ascending: false }).limit(5),
+            studentsActivityQuery,
+            assignmentQuery
         ])
 
         const stats = {
-            students: studentCount || 0,
-            sites: siteCount || 0,
-            supervisors: svCount || 0,
-            pendingSupervisors: pendingSvCount || 0,
-            subjects: subjectCount || 0
+            students: stdCountRes.count || 0,
+            sites: siteCountRes.count || 0,
+            supervisors: svCountRes.count || 0,
+            pendingSupervisors: pndSvCountRes.count || 0,
+            subjects: subCountRes.count || 0
         }
 
-        // 2. Evaluation Stats (with inner join year filter)
-        let evalQuery = supabase
-            .from('assignment_supervisors')
-            .select(`
-                evaluation_status,
-                assignment_id,
-                student_assignments!inner (
-                    students!inner (training_year)
-                )
-            `)
-        if (selectedYear) {
-            evalQuery = evalQuery.eq('student_assignments.students.training_year', selectedYear)
-        }
-        const { data: evalData } = await evalQuery
-
+        const evalData = evalRes.data
         const completed = evalData?.filter(item => item.evaluation_status === 2).length || 0
         const inProgress = evalData?.filter(item => item.evaluation_status === 1).length || 0
         const pending = evalData?.filter(item => item.evaluation_status === 0).length || 0
@@ -102,66 +97,20 @@ export async function GET(req: Request) {
             percent: evalTotal ? Math.round((completed / evalTotal) * 100) : 0
         }
 
-        // 3. Recent Activities (latest 5 each)
-        let studentsActivityQuery = supabase.from('students')
-            .select('id, first_name, last_name, created_at')
-            .order('created_at', { ascending: false }).limit(5)
-        if (selectedYear) studentsActivityQuery = studentsActivityQuery.eq('training_year', selectedYear)
-
-        const [newSupervisors, newSites, newStudents] = await Promise.all([
-            supabase.from('supervisors').select('id, full_name, created_at, is_verified').order('created_at', { ascending: false }).limit(5),
-            supabase.from('training_sites').select('id, site_name, created_at').order('created_at', { ascending: false }).limit(5),
-            studentsActivityQuery
-        ])
-
         const activities = {
-            supervisors: (newSupervisors.data || []).map((item: any) => ({
-                id: `sv-${item.id}`,
-                type: 'supervisor',
-                name: item.full_name,
-                is_verified: item.is_verified,
-                created_at: item.created_at
+            supervisors: (svActRes.data || []).map((item: any) => ({
+                id: `sv-${item.id}`, type: 'supervisor', name: item.full_name, is_verified: item.is_verified, created_at: item.created_at
             })),
-            sites: (newSites.data || []).map((item: any) => ({
-                id: `st-${item.id}`,
-                type: 'site',
-                name: item.site_name,
-                created_at: item.created_at
+            sites: (siteActRes.data || []).map((item: any) => ({
+                id: `st-${item.id}`, type: 'site', name: item.site_name, created_at: item.created_at
             })),
-            students: (newStudents.data || []).map((item: any) => ({
-                id: `std-${item.id}`,
-                type: 'student',
-                name: `${item.first_name} ${item.last_name}`,
-                created_at: item.created_at
+            students: (stdActRes.data || []).map((item: any) => ({
+                id: `std-${item.id}`, type: 'student', name: `${item.first_name} ${item.last_name}`, created_at: item.created_at
             }))
         }
 
-        // 4. Chart Data — subjects + sub_subjects + assignments
-        const [subjectsRes, subSubjectsRes] = await Promise.all([
-            supabase.from('subjects').select('id, name'),
-            supabase.from('sub_subjects').select('id, name, parent_subject_id')
-        ])
+        const assignments = assignRes.data
 
-        const subjectsList = subjectsRes.data || []
-        const subSubjectsList = subSubjectsRes.data || []
-
-        let assignmentQuery = supabase
-            .from('assignment_supervisors')
-            .select(`
-                is_evaluated,
-                evaluation_status,
-                assignment_id,
-                student_assignments!inner (
-                    subject_id,
-                    sub_subject_id,
-                    student_id,
-                    students!inner(training_year)
-                )
-            `)
-        if (selectedYear) {
-            assignmentQuery = assignmentQuery.eq('student_assignments.students.training_year', selectedYear)
-        }
-        const { data: assignments } = await assignmentQuery
 
         let chartData = { main: [] as any[], sub: [] as any[] }
         let summaryData: any[] = []
