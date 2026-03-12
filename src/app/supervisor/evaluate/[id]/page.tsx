@@ -276,9 +276,9 @@ export default function EvaluationPage() {
                                         <CheckCircle2 size={12} /> {!canEdit ? 'Locked (Time Expired)' : 'Completed'}
                                     </span>
                                 ) : (
-                                    <span className="px-3 py-1 bg-amber-50 text-amber-600 border border-amber-100 rounded-full text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> In-Progress
-                                    </span>
+                                    <div className="flex items-center justify-center w-6 h-6 bg-amber-50 border border-amber-100 rounded-full shadow-sm" title="In-Progress">
+                                        <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                                    </div>
                                 )}
 
                                 {canEdit && gracePeriodEnd && (

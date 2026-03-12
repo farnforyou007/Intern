@@ -458,15 +458,15 @@ export default function TeacherManageCriteria() {
                     <div className="flex flex-wrap items-center gap-3 mt-1.5 ml-10">
                         {subject ? (
                             <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
+                                {/* <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
                                     <BookOpen className="text-indigo-600" size={18} />
-                                </div>
-                                <div>
-                                    <h2 className="text-slate-900 font-black text-lg leading-none">{subject.name}</h2>
+                                </div> */}
+                                <div className="flex items-baseline gap-2">
+                                    <h2 className="text-slate-900 font-medium text-lg leading-none">{subject.name}</h2>
                                     {subSubject && (
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                                            {subSubject.name}
-                                        </p>
+                                        <span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">
+                                            ({subSubject.name})
+                                        </span>
                                     )}
                                 </div>
                             </div>
@@ -478,9 +478,8 @@ export default function TeacherManageCriteria() {
                                 <span className="font-bold">ไม่พบข้อมูลรายวิชา</span>
                             </div>
                         )}
-                        <span className={`text-[11px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${totalWeight === 1 ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider ${totalWeight === 1 ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
                             Weight รวม: {Math.round(totalWeight * 100)}%
-                            {/* {totalWeight !== 1 && "(ควรให้ครบ 100%)"} */}
                         </span>
                     </div>
                 </div>

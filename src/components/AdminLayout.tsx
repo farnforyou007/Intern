@@ -409,32 +409,62 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
             try {
                 // Timeout protection — ป้องกัน getSession ค้างเมื่อ session หมดอายุ
+                // ใช้อาจจะรอซักครู่เผื่อ Cookie/Session กำลังถูก Hydrate
                 const sessionResult = await Promise.race([
                     supabase.auth.getSession(),
-                    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('getSession timeout')), 5000))
+                    new Promise<{ data: { session: any } }>((_, reject) => setTimeout(() => reject(new Error('getSession timeout')), 4000))
                 ]) as { data: { session: any } }
 
-                if (!sessionResult?.data?.session) {
-                    window.location.href = '/'
+                if (sessionResult?.data?.session) {
+                    // ✅ ผ่านการตรวจสอบ
+                    sessionStorage.setItem('admin_auth_status', 'authorized')
+                    setIsLoading(false)
+                    resetTimer()
+                    
+                    // ดักจับเหตุการณ์การเคลื่อนไหวเพื่อรีเซ็ต Timer
+                    const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
+                    events.forEach(event => window.addEventListener(event, resetTimer))
                     return
                 }
 
-                // ✅ บันทึก Cache เมื่อผ่านการตรวจสอบจริง
-                sessionStorage.setItem('admin_auth_status', 'authorized')
-                setIsLoading(false)
-                resetTimer() // เริ่มนับเวลาถอยหลัง
+                // กรณี getSession ไม่ได้ (อาจจะ Client-side ยังไม่พร้อม) ให้ลอง getUser ที่เป็น Network-based ทันที
+                const { data: { user }, error: userError } = await supabase.auth.getUser()
+                
+                if (user && !userError) {
+                    sessionStorage.setItem('admin_auth_status', 'authorized')
+                    setIsLoading(false)
+                    resetTimer()
 
-                // ดักจับเหตุการณ์การเคลื่อนไหวเพื่อรีเซ็ต Timer
-                const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
-                events.forEach(event => window.addEventListener(event, resetTimer))
-            } catch (e) {
-                console.warn('Auth check failed, redirecting to login:', e)
+                    const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
+                    events.forEach(event => window.addEventListener(event, resetTimer))
+                    return
+                }
+
+                // ถ้าไม่มีทั้ง Session และ User จริงๆ
+                console.warn('Authentication definitively failed.')
                 sessionStorage.clear()
-                window.location.href = '/'
+                window.location.href = '/auth/login'
+            } catch (e) {
+                console.warn('Auth check encounter error or timeout:', e)
+                if (cachedAuth === 'authorized') {
+                    setIsLoading(false)
+                    // ถ้าเคย authorized มาก่อน ก็เริ่มดักจับ event เลย
+                    const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
+                    events.forEach(event => window.addEventListener(event, resetTimer))
+                    return
+                }
+                sessionStorage.clear()
+                window.location.href = '/auth/login'
             }
         }
 
         initAuth()
+
+        // กรณีใช้ Cache ทันที ก็ต้องดักจับ event ด้วย (เช็คที่ initAuth บรรทัดบนสุด)
+        if (sessionStorage.getItem('admin_auth_status') === 'authorized') {
+             const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
+             events.forEach(event => window.addEventListener(event, resetTimer))
+        }
 
         // ติดตามการเปลี่ยนแปลง Auth (เช่น มีการ Logout จาก Tab อื่น)
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {

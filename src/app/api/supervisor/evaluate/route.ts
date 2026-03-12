@@ -48,7 +48,7 @@ export async function GET(req: Request) {
 
         if (assignErr || !assign) return apiError('ไม่พบรายการประเมิน', 404)
 
-        // 2. ดึงกลุ่มการประเมิน
+        // 2. ดึงกลุ่มการประเมิน + คะแนนเก่า พร้อมกัน 🚀
         const subjectId = assign.student_assignments.subjects.id
         const subSubjectId = assign.student_assignments.sub_subject_id
 
@@ -63,18 +63,14 @@ export async function GET(req: Request) {
             query = query.is('sub_subject_id', null)
         }
 
-        const { data: allGroups, error: groupsErr } = await query
-            .order('group_name', { ascending: true })
-            .order('order_index', { foreignTable: 'evaluation_items', ascending: true })
+        const [groupsResult, logsResult] = await Promise.all([
+            query.order('group_name', { ascending: true }).order('order_index', { foreignTable: 'evaluation_items', ascending: true }),
+            supabase.from('evaluation_logs').select(`*, evaluation_answers(*)`).eq('assignment_id', assign.student_assignments.id).eq('supervisor_id', supervisor.id)
+        ])
 
-        if (groupsErr) throw groupsErr
-
-        // 3. ดึงคะแนนเก่า (เพื่อดูว่ามีประวัติไหม และเตรียมส่งกลับ)
-        const { data: logs } = await supabase
-            .from('evaluation_logs')
-            .select(`*, evaluation_answers(*)`)
-            .eq('assignment_id', assign.student_assignments.id)
-            .eq('supervisor_id', supervisor.id)
+        if (groupsResult.error) throw groupsResult.error
+        const allGroups = groupsResult.data
+        const logs = logsResult.data
 
         // 4. กรองกลุ่มที่จะแสดง: แสดงถ้า (Active) หรือ (มีประวัติการประเมินใน Assignment นี้)
         const usedInThisAssignmentIds = new Set((logs || []).map(l => l.group_id))

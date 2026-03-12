@@ -17,23 +17,16 @@ export async function GET(req: Request) {
             return apiError('Unauthorized', 401)
         }
 
-        // 0. ดึงปีการศึกษาปัจจุบันจาก system_configs
-        const { data: configData } = await supabase
-            .from('system_configs')
-            .select('key_value')
-            .eq('key_name', 'current_training_year')
-            .single()
-        const currentYear = configData?.key_value || ''
+        // 🚀 Group 1: ดึง system_configs + supervisors พร้อมกัน (ไม่พึ่งพากัน)
+        const [configResult, svResult] = await Promise.all([
+            supabase.from('system_configs').select('key_value').eq('key_name', 'current_training_year').single(),
+            supabase.from('supervisors').select('*, training_sites(site_name)').eq('user_id', authUser.id).eq('role', 'supervisor').maybeSingle()
+        ])
 
-        // 1. ดึงข้อมูลพี่เลี้ยง (บังคับเช็ค role เพื่อความปลอดภัย)
-        const { data: svData, error: svError } = await supabase
-            .from('supervisors')
-            .select('*, training_sites(site_name)')
-            .eq('user_id', authUser.id)
-            .eq('role', 'supervisor') // 🛡️ Hardened RBAC
-            .maybeSingle()
+        const currentYear = configResult.data?.key_value || ''
+        const svData = svResult.data
 
-        if (svError || !svData) {
+        if (svResult.error || !svData) {
             return apiError('Supervisor not found or Permission denied', 403)
         }
 
@@ -45,31 +38,13 @@ export async function GET(req: Request) {
 
         const supervisorData = { ...svData, avatar_url: publicUrl }
 
-        // 2.5 ดึงวิชาที่พี่เลี้ยงรับผิดชอบ (รองรับวิชาย่อย)
-        const { data: subjectData } = await supabase
-            .from('supervisor_subjects')
-            .select(`
-                id,
-                subjects(name),
-                sub_subjects(name)
-            `)
-            .eq('supervisor_id', svData.id)
-        const subjectNames = (subjectData || []).map((s: any) => s.sub_subjects?.name || s.subjects?.name).filter(Boolean)
-
-        // 2. ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
-        let yearStudentIds: Set<string> = new Set()
-        if (currentYear) {
-            const { data: yearStudents } = await supabase
-                .from('students')
-                .select('id')
-                .eq('training_year', currentYear)
-            yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)))
-        }
-
-        // 3. ดึงข้อมูลงานที่ได้รับมอบหมาย
-        const { data: rawAssignments, error: assignError } = await supabase
-            .from('assignment_supervisors')
-            .select(`
+        // 🚀 Group 2: ดึง subjects + yearStudentIds + assignments พร้อมกัน (ต้องการ svData.id + currentYear)
+        const [subjectResult, yearStudentsResult, assignResult] = await Promise.all([
+            supabase.from('supervisor_subjects').select('id, subjects(name), sub_subjects(name)').eq('supervisor_id', svData.id),
+            currentYear
+                ? supabase.from('students').select('id').eq('training_year', currentYear)
+                : Promise.resolve({ data: [] as any[] }),
+            supabase.from('assignment_supervisors').select(`
                 evaluation_status,
                 is_evaluated,
                 student_assignments:assignment_id (
@@ -79,12 +54,16 @@ export async function GET(req: Request) {
                     sub_subjects ( name ),
                     rotations ( end_date, name )
                 )
-            `)
-            .eq('supervisor_id', svData.id)
+            `).eq('supervisor_id', svData.id)
+        ])
 
-        if (assignError) throw assignError
+        const subjectNames = (subjectResult.data || []).map((s: any) => s.sub_subjects?.name || s.subjects?.name).filter(Boolean)
+        const yearStudentIds: Set<string> = new Set((yearStudentsResult.data || []).map((s: any) => String(s.id)))
+
+        if (assignResult.error) throw assignResult.error
 
         // กรองเฉพาะนักศึกษาในปีปัจจุบัน
+        const rawAssignments = assignResult.data
         const assignments = (rawAssignments || []).filter((a: any) => {
             const studentId = String(a.student_assignments?.students?.id || a.student_assignments?.student_id || '')
             return yearStudentIds.has(studentId)

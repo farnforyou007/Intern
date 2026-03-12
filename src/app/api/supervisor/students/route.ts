@@ -16,37 +16,45 @@ export async function GET(req: Request) {
             return apiError('Unauthorized', 401)
         }
 
-        // 0. ดึงปีการศึกษาปัจจุบัน
-        const { data: configData } = await supabase
-            .from('system_configs')
-            .select('key_value')
-            .eq('key_name', 'current_training_year')
-            .single()
-        const currentYear = configData?.key_value || ''
+        // 🚀 Group 1: system_configs + supervisor พร้อมกัน
+        const [configResult, supervisorResult] = await Promise.all([
+            supabase.from('system_configs').select('key_value').eq('key_name', 'current_training_year').single(),
+            supabase.from('supervisors').select('*').eq('user_id', authUser.id).single()
+        ])
 
-        // 1. ดึงข้อมูล Supervisor - Use user_id from Auth Session
-        const { data: supervisor } = await supabase
-            .from('supervisors')
-            .select('*')
-            .eq('user_id', authUser.id)
-            .single()
+        const currentYear = configResult.data?.key_value || ''
+        const supervisor = supervisorResult.data
         if (!supervisor) return apiError('Supervisor not found', 404)
 
-        // 1.5 ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
-        let yearStudentIds: Set<string> = new Set()
-        if (currentYear) {
-            const { data: yearStudents } = await supabase
-                .from('students')
-                .select('id')
-                .eq('training_year', currentYear)
-            yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)))
-        }
+        // 🚀 Group 2: yearStudentIds + permissions + mine + allSiteStudents พร้อมกัน
+        const [yearStudentsResult, permissionsResult, mineResult, allResult] = await Promise.all([
+            currentYear
+                ? supabase.from('students').select('id').eq('training_year', currentYear)
+                : Promise.resolve({ data: [] as any[] }),
+            supabase.from('supervisor_subjects').select('subject_id, sub_subject_id').eq('supervisor_id', supervisor.id),
+            supabase.from('assignment_supervisors').select(`
+                id, is_evaluated,
+                student_assignments:assignment_id ( 
+                    id, rotation_id, student_id, subject_id, sub_subject_id,
+                    students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone, email ),
+                    subjects:subject_id ( id, name ), 
+                    sub_subjects:sub_subject_id ( id, name ),
+                    rotations:rotation_id ( name )
+                )
+            `).eq('supervisor_id', supervisor.id),
+            supabase.from('student_assignments').select(`
+                id, rotation_id, student_id, subject_id, sub_subject_id,
+                students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone, email ),
+                subjects:subject_id ( id, name ), 
+                sub_subjects:sub_subject_id ( id, name ),
+                rotations:rotation_id ( name )
+            `).eq('site_id', supervisor.site_id)
+        ])
 
-        // 2. ดึงสิทธิ์ (Permissions)
-        const { data: permissions } = await supabase
-            .from('supervisor_subjects')
-            .select('subject_id, sub_subject_id')
-            .eq('supervisor_id', supervisor.id)
+        const yearStudentIds: Set<string> = new Set((yearStudentsResult.data || []).map((s: any) => String(s.id)))
+        const permissions = permissionsResult.data
+        const mine = mineResult.data
+        const allSiteData = allResult.data
 
         // Helper: ตรวจสอบสิทธิ์
         const checkPerm = (assign: any) => {
@@ -60,18 +68,6 @@ export async function GET(req: Request) {
             return permissions.some((p: any) => p.subject_id === assign.subject_id)
         }
 
-        // 3. ดึงงานทีมฉัน (My Students)
-        const { data: mine } = await supabase.from('assignment_supervisors').select(`
-            id, is_evaluated,
-            student_assignments:assignment_id ( 
-                id, rotation_id, student_id, subject_id, sub_subject_id,
-                students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone, email ),
-                subjects:subject_id ( id, name ), 
-                sub_subjects:sub_subject_id ( id, name ),
-                rotations:rotation_id ( name )
-            )
-        `).eq('supervisor_id', supervisor.id)
-
         // กรอง 'ทีมฉัน' ตามสิทธิ์ + ปีการศึกษา
         const filteredMine = (mine || []).filter((item: any) => {
             const assign = item.student_assignments
@@ -81,42 +77,37 @@ export async function GET(req: Request) {
             return checkPerm(assign)
         })
 
-        // 3.5 ดึง evaluation_logs + evaluation_groups + answers เพื่อคำนวณ progress แบบละเอียด
+        // 3.5 ดึง evaluation_logs + evaluation_groups เพื่อคำนวณ progress แบบละเอียด
         const assignmentIds = filteredMine.map((item: any) => item.student_assignments?.id).filter(Boolean)
         const subjectIds = [...new Set(filteredMine.map((item: any) => item.student_assignments?.subject_id).filter(Boolean))]
 
+        // 🚀 Group 3: evaluation_logs + evaluation_groups พร้อมกัน
+        const [logsResult, groupsResult] = await Promise.all([
+            assignmentIds.length > 0
+                ? supabase.from('evaluation_logs').select('assignment_id, group_id, evaluation_answers(id)').eq('supervisor_id', supervisor.id).in('assignment_id', assignmentIds)
+                : Promise.resolve({ data: [] as any[] }),
+            subjectIds.length > 0
+                ? supabase.from('evaluation_groups').select('id, subject_id, sub_subject_id, evaluation_items(id)').in('subject_id', subjectIds)
+                : Promise.resolve({ data: [] as any[] })
+        ])
+
         // ดึง logs พร้อมจำนวน answers ต่อ log
-        // key: assignmentId -> { groupId -> answerCount }
         let logsDetailMap = new Map<number, Map<string, number>>()
-        if (assignmentIds.length > 0) {
-            const { data: logs } = await supabase
-                .from('evaluation_logs')
-                .select('assignment_id, group_id, evaluation_answers(id)')
-                .eq('supervisor_id', supervisor.id)
-                .in('assignment_id', assignmentIds)
-            for (const l of (logs || [])) {
-                if (!logsDetailMap.has(l.assignment_id)) logsDetailMap.set(l.assignment_id, new Map())
-                const groupMap = logsDetailMap.get(l.assignment_id)!
-                groupMap.set(l.group_id, (l.evaluation_answers as any[])?.length || 0)
-            }
+        for (const l of (logsResult.data || [])) {
+            if (!logsDetailMap.has(l.assignment_id)) logsDetailMap.set(l.assignment_id, new Map())
+            const groupMap = logsDetailMap.get(l.assignment_id)!
+            groupMap.set(l.group_id, (l.evaluation_answers as any[])?.length || 0)
         }
 
         // ดึง evaluation_groups พร้อมจำนวน items ต่อ group
-        // key: "subjectId-subSubjectId" -> [{ groupId, itemCount }]
         let groupsDetailMap = new Map<string, { groupId: string; itemCount: number }[]>()
-        if (subjectIds.length > 0) {
-            const { data: groups } = await supabase
-                .from('evaluation_groups')
-                .select('id, subject_id, sub_subject_id, evaluation_items(id)')
-                .in('subject_id', subjectIds)
-            for (const g of (groups || [])) {
-                const key = `${g.subject_id}-${g.sub_subject_id || 'null'}`
-                if (!groupsDetailMap.has(key)) groupsDetailMap.set(key, [])
-                groupsDetailMap.get(key)!.push({
-                    groupId: g.id,
-                    itemCount: (g.evaluation_items as any[])?.length || 0
-                })
-            }
+        for (const g of (groupsResult.data || [])) {
+            const key = `${g.subject_id}-${g.sub_subject_id || 'null'}`
+            if (!groupsDetailMap.has(key)) groupsDetailMap.set(key, [])
+            groupsDetailMap.get(key)!.push({
+                groupId: g.id,
+                itemCount: (g.evaluation_items as any[])?.length || 0
+            })
         }
 
         // แปะ progress ลงใน filteredMine
@@ -149,17 +140,8 @@ export async function GET(req: Request) {
             }
         })
 
-        // 4. ดึงงานทั้งหมดในไซต์ (All Students)
-        const { data: all } = await supabase.from('student_assignments').select(`
-            id, rotation_id, student_id, subject_id, sub_subject_id,
-            students:student_id ( id, prefix, first_name, last_name, nickname, student_code, avatar_url, phone, email ),
-            subjects:subject_id ( id, name ), 
-            sub_subjects:sub_subject_id ( id, name ),
-            rotations:rotation_id ( name )
-        `).eq('site_id', supervisor.site_id)
-
-        // กรอง 'ทั้งหมด' ตามสิทธิ์ + ปีการศึกษา
-        const filteredAll = (all || []).filter((assign: any) => {
+        // กรอง 'ทั้งหมด' ตามสิทธิ์ + ปีการศึกษา (ใช้ all จาก Group 2)
+        const filteredAll = (allSiteData || []).filter((assign: any) => {
             const studentId = String(assign.students?.id || assign.student_id || '')
             if (currentYear && !yearStudentIds.has(studentId)) return false
             return checkPerm(assign)

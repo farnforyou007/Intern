@@ -16,21 +16,13 @@ export async function GET(req: Request) {
             return apiError('Unauthorized', 401)
         }
 
-        // 0. ดึงปีการศึกษาปัจจุบัน
-        const { data: configData } = await supabase
-            .from('system_configs')
-            .select('key_value')
-            .eq('key_name', 'current_training_year')
-            .single()
-        const currentYear = configData?.key_value || ''
-
-        // 1. ดึง Supervisor
-        const { data: sv } = await supabase
-            .from('supervisors')
-            .select('id')
-            .eq('user_id', authUser.id)
-            .single()
-
+        // 🚀 config + supervisor พร้อมกัน
+        const [configResult, svResult] = await Promise.all([
+            supabase.from('system_configs').select('key_value').eq('key_name', 'current_training_year').single(),
+            supabase.from('supervisors').select('id').eq('user_id', authUser.id).single()
+        ])
+        const currentYear = configResult.data?.key_value || ''
+        const sv = svResult.data
         if (!sv) return apiError('Unauthorized: Active status required.', 401)
 
         // 2. ดึงประวัติที่ is_evaluated = true

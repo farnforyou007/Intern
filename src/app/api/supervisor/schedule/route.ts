@@ -16,69 +16,45 @@ export async function GET(req: Request) {
             return apiError('Unauthorized', 401)
         }
 
-        // 0. ดึงปีการศึกษาปัจจุบัน
-        const { data: configData } = await supabase
-            .from('system_configs')
-            .select('key_value')
-            .eq('key_name', 'current_training_year')
-            .single()
-        const currentYear = configData?.key_value || ''
-
-        // 1. ดึง Supervisor
-        const { data: sv } = await supabase
-            .from('supervisors')
-            .select('id, site_id')
-            .eq('user_id', authUser.id)
-            .single()
-
+        // 🚀 Group 1: config + supervisor พร้อมกัน
+        const [configResult, svResult] = await Promise.all([
+            supabase.from('system_configs').select('key_value').eq('key_name', 'current_training_year').single(),
+            supabase.from('supervisors').select('id, site_id').eq('user_id', authUser.id).single()
+        ])
+        const currentYear = configResult.data?.key_value || ''
+        const sv = svResult.data
         if (!sv) return apiError('Unauthorized: Active status required.', 401)
 
-        // 1.5 ดึง student IDs ที่อยู่ในปีการศึกษาปัจจุบัน
-        let yearStudentIds: Set<string> = new Set()
-        if (currentYear) {
-            const { data: yearStudents } = await supabase
-                .from('students')
-                .select('id')
-                .eq('training_year', currentYear)
-            yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)))
-        }
+        // 🚀 Group 2: yearStudents + assignments + rotations พร้อมกัน
+        let rotationQuery = supabase.from('rotations').select(`
+            id, name, start_date, end_date, academic_year, track,
+            rotation_subjects ( subjects ( name ) )
+        `).order('track', { ascending: true }).order('start_date', { ascending: true })
+        if (currentYear) rotationQuery = rotationQuery.eq('academic_year', currentYear)
 
-        // 2. ดึง student_assignments ของ site นี้ (เพื่อใช้นับจำนวนนักศึกษาในแต่ละผลัด)
-        const { data: assignments, error: assignError } = await supabase
-            .from('student_assignments')
-            .select('rotation_id, student_id')
-            .eq('site_id', sv.site_id)
+        const [yearStudentsResult, assignmentsResult, rotationsResult] = await Promise.all([
+            currentYear
+                ? supabase.from('students').select('id').eq('training_year', currentYear)
+                : Promise.resolve({ data: [] as any[] }),
+            supabase.from('student_assignments').select('rotation_id, student_id').eq('site_id', sv.site_id),
+            rotationQuery
+        ])
 
-        if (assignError) throw assignError
+        const yearStudentIds: Set<string> = new Set((yearStudentsResult.data || []).map((s: any) => String(s.id)))
+        const assignments = assignmentsResult.data
+        if (assignmentsResult.error) throw assignmentsResult.error
+        const allRotations = rotationsResult.data
+        if (rotationsResult.error) throw rotationsResult.error
 
         // นับจำนวนนักศึกษาแยกตาม rotation_id
         const studentCounts: { [key: number]: Set<string> } = {}
         const filteredAssignments = currentYear
             ? (assignments || []).filter((item: any) => yearStudentIds.has(String(item.student_id)))
             : (assignments || [])
-
         filteredAssignments.forEach((item: any) => {
             if (!studentCounts[item.rotation_id]) studentCounts[item.rotation_id] = new Set()
             studentCounts[item.rotation_id].add(String(item.student_id))
         })
-
-        // 3. ดึง rotations ทั้งหมดของปีปัจจุบัน พร้อมวิชาที่กำหนดในผลัดนั้นๆ
-        let rotationQuery = supabase
-            .from('rotations')
-            .select(`
-                id, name, start_date, end_date, academic_year, track,
-                rotation_subjects (
-                    subjects ( name )
-                )
-            `)
-            .order('track', { ascending: true })
-            .order('start_date', { ascending: true })
-
-        if (currentYear) {
-            rotationQuery = rotationQuery.eq('academic_year', currentYear)
-        }
-        const { data: allRotations, error: rotError } = await rotationQuery
-        if (rotError) throw rotError
 
         // จัดกลุ่มตาม Track (สาย)
         const groupedByTrack: { [key: string]: any[] } = {}

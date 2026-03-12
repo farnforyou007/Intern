@@ -70,21 +70,26 @@ export async function GET(req: Request) {
             .order('order_index', { foreignTable: 'evaluation_items', ascending: true })
         if (groupError) throw groupError
 
-        // 5. ตรวจสอบการใช้งาน (เพื่อล็อคไม่ให้ลบ/แก้ไข)
-        // ดึง IDs ของกลุ่มที่เคยถูกประเมินแล้ว
-        const { data: usedGroupData } = await supabase
-            .from('evaluation_logs')
-            .select('group_id')
-            .in('group_id', (groups || []).map(g => g.id))
-        const usedGroupIds = new Set((usedGroupData || []).map(d => d.group_id))
-
-        // ดึง IDs ของข้อคำถามที่เคยถูกประเมินแล้ว
+        // 5. ตรวจสอบการใช้งาน & ดึง Master Data พร้อมกัน 🚀
         const allItemIds = (groups || []).flatMap(g => (g.evaluation_items || []).map((i: any) => i.id))
-        const { data: usedItemData } = await supabase
-            .from('evaluation_answers')
-            .select('item_id')
-            .in('item_id', allItemIds)
-        const usedItemIds = new Set((usedItemData || []).map(d => d.item_id))
+        
+        const [usedGroupRes, usedItemRes, subjectRes, subSubjectRes, templatesRes] = await Promise.all([
+            supabase.from('evaluation_logs').select('group_id').in('group_id', (groups || []).map(g => g.id)),
+            allItemIds.length > 0 
+                ? supabase.from('evaluation_answers').select('item_id').in('item_id', allItemIds)
+                : Promise.resolve({ data: [] }),
+            supabase.from('subjects').select('*').eq('id', subjectId).single(),
+            subIdStr 
+                ? supabase.from('sub_subjects').select('*').eq('id', parseInt(subIdStr)).single()
+                : Promise.resolve({ data: null }),
+            supabase.from('eval_templates').select('*').order('id', { ascending: true })
+        ])
+
+        const usedGroupIds = new Set((usedGroupRes.data || []).map(d => d.group_id))
+        const usedItemIds = new Set((usedItemRes.data || []).map(d => d.item_id))
+        const subject = subjectRes.data
+        const subSubject = subSubjectRes.data
+        const templates = templatesRes.data || []
 
         // มาร์คข้อมูล
         const processedGroups = (groups || []).map(g => ({
@@ -96,22 +101,11 @@ export async function GET(req: Request) {
             }))
         }))
 
-        // 6. ดึงข้อมูลวิชาหลัก & วิชาย่อย
-        const { data: subject } = await supabase.from('subjects').select('*').eq('id', subjectId).single()
-        let subSubject = null
-        if (subIdStr) {
-            const { data: ss } = await supabase.from('sub_subjects').select('*').eq('id', parseInt(subIdStr)).single()
-            subSubject = ss
-        }
-
-        // 7. ดึงเทมเพลตมาตรฐาน (สำหรับให้ครูกดใช้)
-        const { data: templates } = await supabase.from('eval_templates').select('*').order('id', { ascending: true })
-
         return apiSuccess({
             subject,
             subSubject,
             groups: processedGroups,
-            templates: templates || []
+            templates
         })
 
     } catch (error: any) {

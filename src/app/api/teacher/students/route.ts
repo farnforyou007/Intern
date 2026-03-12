@@ -19,33 +19,20 @@ export async function GET(req: Request) {
             return apiError('Unauthorized', 401)
         }
 
-        // Verify active supervisor status
-        const { data: sv } = await supabase
-            .from('supervisors')
-            .select('id')
-            .eq('user_id', authUser.id)
-            .single()
+        // 🚀 Verifying person, Config Year, and Year Options พร้อมกัน
+        const [svResult, configResult, yearsResult] = await Promise.all([
+            supabase.from('supervisors').select('id').eq('user_id', authUser.id).single(),
+            !selectedTrainingYear 
+                ? supabase.from('system_configs').select('key_value').eq('key_name', 'current_training_year').single()
+                : Promise.resolve({ data: { key_value: selectedTrainingYear } }),
+            supabase.from('students').select('training_year').not('training_year', 'is', null)
+        ])
 
-        if (!sv) return apiError('Unauthorized: Access restricted to active personnel.', 401)
-
-        // 0. ดึงปีการศึกษา default (ถ้าไม่ส่งมา)
-        let defaultYear = selectedTrainingYear
-        if (!defaultYear) {
-            const { data: configData } = await supabase
-                .from('system_configs')
-                .select('key_value')
-                .eq('key_name', 'current_training_year')
-                .single()
-            defaultYear = configData?.key_value || ''
-        }
-
-        // 1. ดึง Year Options
-        const { data: yearsData } = await supabase
-            .from('students')
-            .select('training_year')
-            .not('training_year', 'is', null)
-        const trainingYearOptions = yearsData
-            ? Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a))
+        if (!svResult.data) return apiError('Unauthorized: Access restricted to active personnel.', 401)
+        
+        const defaultYear = configResult.data?.key_value || ''
+        const trainingYearOptions = yearsResult.data
+            ? Array.from(new Set(yearsResult.data.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a))
             : []
 
         // 2. ดึง Students ตามปี

@@ -19,81 +19,55 @@ export async function GET(req: Request) {
             return apiError('Unauthorized', 401)
         }
 
-        // 0. ดึงปีการศึกษา default + options
-        let defaultYear = selectedYear
-        if (!defaultYear) {
-            const { data: configData } = await supabase
-                .from('system_configs')
-                .select('key_value')
-                .eq('key_name', 'current_training_year')
-                .single()
-            defaultYear = configData?.key_value || ''
-        }
+        // 🚀 Group 1: ดึง default year + year options + teacher info พร้อมกัน
+        const [configResult, yearsResult, userResult] = await Promise.all([
+            !selectedYear
+                ? supabase.from('system_configs').select('key_value').eq('key_name', 'current_training_year').single()
+                : Promise.resolve({ data: { key_value: selectedYear } }),
+            supabase.from('students').select('training_year').not('training_year', 'is', null),
+            supabase.from('supervisors').select('id, full_name, avatar_url, role, supervisor_subjects(id)').eq('user_id', authUser.id).or('role.eq.teacher,role.eq.both').maybeSingle()
+        ])
 
-        const { data: yearsData } = await supabase
-            .from('students')
-            .select('training_year')
-            .not('training_year', 'is', null)
-        const yearOptions = yearsData
-            ? Array.from(new Set(yearsData.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a))
+        const defaultYear = configResult.data?.key_value || ''
+        const yearOptions = yearsResult.data
+            ? Array.from(new Set(yearsResult.data.map((y: any) => y.training_year))).sort((a: string, b: string) => b.localeCompare(a))
             : []
-
-        // 1. ดึง student IDs ในปีที่เลือก
-        let yearStudentIds: Set<string> | null = null
-        if (defaultYear) {
-            const { data: yearStudents } = await supabase
-                .from('students')
-                .select('id')
-                .eq('training_year', defaultYear)
-            yearStudentIds = new Set((yearStudents || []).map((s: any) => String(s.id)))
-        }
-
-        // 2. ดึง Teacher info - 🛡️ Hardened RBAC
-        const { data: user } = await supabase
-            .from('supervisors')
-            .select('id, full_name, avatar_url, role, supervisor_subjects(id)')
-            .eq('user_id', authUser.id)
-            .or('role.eq.teacher,role.eq.both') // Require teacher role
-            .maybeSingle()
-
+        const user = userResult.data
         if (!user) return apiError('Teacher not found or Permission denied', 403)
 
         const hasDoubleRole = user.role === 'supervisor' || user.role === 'both'
 
-        // 3. ดึง Subjects (พร้อม sub_subject_id เพื่อแยกวิชาย่อย)
-        const { data: subData } = await supabase
-            .from('supervisor_subjects')
-            .select('subject_id, sub_subject_id, subjects(name, id), sub_subjects:sub_subject_id(name, id)')
-            .eq('supervisor_id', user.id)
+        // 🚀 Group 2: yearStudentIds + subjects พร้อมกัน (ต้องการ defaultYear + user.id)
+        const [yearStudentsResult, subResult] = await Promise.all([
+            defaultYear
+                ? supabase.from('students').select('id').eq('training_year', defaultYear)
+                : Promise.resolve({ data: null }),
+            supabase.from('supervisor_subjects').select('subject_id, sub_subject_id, subjects(name, id), sub_subjects:sub_subject_id(name, id)').eq('supervisor_id', user.id)
+        ])
 
-        const subjectList = subData || []
+        let yearStudentIds: Set<string> | null = null
+        if (defaultYear && yearStudentsResult.data) {
+            yearStudentIds = new Set(yearStudentsResult.data.map((s: any) => String(s.id)))
+        }
+
+        const subjectList = subResult.data || []
         const subjectIds = [...new Set(subjectList.map((s: any) => s.subject_id))]
 
         let assignments: any[] = []
         let analyticsData: any[] = []
 
         if (subjectIds.length > 0) {
-            // 4. Assignments
-            const { data: rawAssignments } = await supabase
-                .from('student_assignments')
-                .select(`
+            // 🚀 Group 3: assignments + analytics พร้อมกัน (ต้องการ subjectIds)
+            const [assignResult, analyticsResult] = await Promise.all([
+                supabase.from('student_assignments').select(`
                     id, subject_id, student_id,
                     students (first_name, last_name, student_code),
                     subjects (name),
                     training_sites (site_name, province),
                     assignment_supervisors(is_evaluated, evaluation_status),
                     evaluation_logs(id)
-                `)
-                .in('subject_id', subjectIds)
-
-            assignments = yearStudentIds
-                ? (rawAssignments || []).filter((a: any) => yearStudentIds!.has(String(a.student_id)))
-                : (rawAssignments || [])
-
-            // 5. Analytics data
-            const { data: rawAnalyticsRes } = await supabase
-                .from('student_assignments')
-                .select(`
+                `).in('subject_id', subjectIds),
+                supabase.from('student_assignments').select(`
                     id, subject_id, student_id,
                     students (id, first_name, last_name, student_code),
                     subjects (name, id),
@@ -104,12 +78,16 @@ export async function GET(req: Request) {
                         evaluation_groups (id, group_name, weight),
                         evaluation_answers (score, item_id)
                     )
-                `)
-                .in('subject_id', subjectIds)
+                `).in('subject_id', subjectIds)
+            ])
+
+            assignments = yearStudentIds
+                ? (assignResult.data || []).filter((a: any) => yearStudentIds!.has(String(a.student_id)))
+                : (assignResult.data || [])
 
             const analyticsRes = yearStudentIds
-                ? (rawAnalyticsRes || []).filter((a: any) => yearStudentIds!.has(String(a.student_id)))
-                : (rawAnalyticsRes || [])
+                ? (analyticsResult.data || []).filter((a: any) => yearStudentIds!.has(String(a.student_id)))
+                : (analyticsResult.data || [])
 
             // Process analytics — GROUP BY student+subject (เหมือน subjects API)
             // เพื่อให้คะแนน Top 5 / site stats ตรงกับหน้าประเมิน

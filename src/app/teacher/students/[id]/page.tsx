@@ -5,9 +5,57 @@ import {
     ChevronLeft, User, Phone, Mail, MapPin,
     UserCircle2, PhoneCall, Building2, Calendar,
     X, Maximize2, ShieldCheck, GraduationCap,
-    BookOpen, Layers, Info, CheckCircle2
+    BookOpen, Layers, Info, CheckCircle2, Bike, FileText
 } from 'lucide-react'
 import { useRouter, useParams } from 'next/navigation'
+
+function DetailSkeleton() {
+    return (
+        <div className="min-h-screen bg-[#F8FAFC] pb-12 font-sans animate-pulse">
+            <div className="max-w-3xl mx-auto px-4 pt-2 pb-4">
+                <div className="flex justify-between items-center mb-4 gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-indigo-200 rounded-2xl" />
+                        <div className="h-10 w-48 bg-slate-200 rounded-2xl" />
+                    </div>
+                    <div className="w-24 h-11 bg-slate-900/10 rounded-2xl" />
+                </div>
+            </div>
+
+            <div className="max-w-3xl mx-auto px-4 mt-8 space-y-6">
+                {/* Profile Card Skeleton */}
+                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
+                    <div className="w-28 h-28 rounded-[2.5rem] bg-slate-100 mx-auto mb-6" />
+                    <div className="h-8 w-48 bg-slate-200 rounded-xl mx-auto mb-3" />
+                    <div className="h-3 w-32 bg-slate-100 rounded mx-auto" />
+                </div>
+
+                {/* Contact Cards Skeleton */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 h-24" />
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 h-24" />
+                </div>
+
+                {/* Placement History Skeleton */}
+                <div className="space-y-4 pt-4">
+                    <div className="h-3 w-40 bg-slate-200 rounded ml-4 mb-4" />
+                    {[1, 2].map(i => (
+                        <div key={i} className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
+                            <div className="bg-slate-100 h-16" />
+                            <div className="p-8 space-y-6">
+                                <div className="h-20 bg-slate-50 rounded-[2rem]" />
+                                <div className="space-y-3">
+                                    <div className="h-14 bg-slate-50 rounded-[1.5rem]" />
+                                    <div className="h-14 bg-slate-50 rounded-[1.5rem]" />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
+}
 
 export default function StudentDetailPage() {
     const router = useRouter()
@@ -127,6 +175,37 @@ export default function StudentDetailPage() {
                     </a>
                 </div>
 
+                {/* 2.1 Vehicle Info Card (NEW) */}
+                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6 overflow-hidden relative">
+                    <div className="flex items-center gap-4 w-full sm:w-auto">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm ${student?.has_motorcycle ? 'bg-orange-50 text-orange-600 border border-orange-100' : 'bg-slate-50 text-slate-300 border border-slate-100'}`}>
+                            <Bike size={24} />
+                        </div>
+                        <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-widest">การนำรถส่วนตัวมาใช้</p>
+                            <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-black text-slate-700">รถจักรยานยนต์</h4>
+                                {student?.has_motorcycle ? (
+                                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-600 text-[8px] font-black rounded-md border border-emerald-200 uppercase tracking-tighter">มีรถ</span>
+                                ) : (
+                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-400 text-[8px] font-black rounded-md border border-slate-200 uppercase tracking-tighter">ไม่มี</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {student?.has_motorcycle && student?.parental_consent_url && (
+                        <a
+                            href={student.parental_consent_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full sm:w-auto flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
+                        >
+                            <FileText size={16} /> ดูเอกสารยินยอม
+                        </a>
+                    )}
+                </div>
+
                 {/* 3. Placement History (โชว์วิชาย่อย และ จังหวัด) */}
                 <div className="space-y-4">
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-4 flex items-center gap-2">
@@ -213,54 +292,6 @@ export default function StudentDetailPage() {
                     </div>
                 </div>
             )}
-        </div>
-    )
-}
-
-function DetailSkeleton() {
-    return (
-        <div className="min-h-screen bg-[#F8FAFC] pb-12 font-sans animate-pulse">
-            <div className="max-w-3xl mx-auto px-4 pt-2 pb-4">
-                <div className="flex justify-between items-center mb-4 gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 bg-indigo-200 rounded-2xl" />
-                        <div className="h-10 w-48 bg-slate-200 rounded-2xl" />
-                    </div>
-                    <div className="w-24 h-11 bg-slate-900/10 rounded-2xl" />
-                </div>
-            </div>
-
-            <div className="max-w-3xl mx-auto px-4 mt-8 space-y-6">
-                {/* Profile Card Skeleton */}
-                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm text-center">
-                    <div className="w-28 h-28 rounded-[2.5rem] bg-slate-100 mx-auto mb-6" />
-                    <div className="h-8 w-48 bg-slate-200 rounded-xl mx-auto mb-3" />
-                    <div className="h-3 w-32 bg-slate-100 rounded mx-auto" />
-                </div>
-
-                {/* Contact Cards Skeleton */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 h-24" />
-                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 h-24" />
-                </div>
-
-                {/* Placement History Skeleton */}
-                <div className="space-y-4 pt-4">
-                    <div className="h-3 w-40 bg-slate-200 rounded ml-4 mb-4" />
-                    {[1, 2].map(i => (
-                        <div key={i} className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden shadow-sm">
-                            <div className="bg-slate-100 h-16" />
-                            <div className="p-8 space-y-6">
-                                <div className="h-20 bg-slate-50 rounded-[2rem]" />
-                                <div className="space-y-3">
-                                    <div className="h-14 bg-slate-50 rounded-[1.5rem]" />
-                                    <div className="h-14 bg-slate-50 rounded-[1.5rem]" />
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
         </div>
     )
 }
