@@ -24,7 +24,8 @@ export async function GET(request: Request) {
                 avatar_url,
                 supervisor_subjects(
                     id,
-                    subjects(id, name)
+                    subjects(id, name),
+                    sub_subjects(id, name)
                 )
             `)
             .eq('user_id', authUser.id)

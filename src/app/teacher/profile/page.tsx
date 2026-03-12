@@ -38,7 +38,6 @@ export default function TeacherProfilePage() {
         )
     }
 
-    const subjects = user?.supervisor_subjects?.map((s: any) => s.subjects) || []
 
     return (
         <div className="max-w-5xl mx-auto space-y-8 pb-20">
@@ -121,11 +120,16 @@ export default function TeacherProfilePage() {
                         </h3>
 
                         <div className="space-y-3">
-                            {subjects.length > 0 ? subjects.map((sub: any) => (
-                                <div key={sub.id} className="group p-4 bg-slate-50 hover:bg-indigo-50 rounded-2xl transition-all border border-transparent hover:border-indigo-100 flex items-center justify-between">
+                            {user?.supervisor_subjects?.length > 0 ? user.supervisor_subjects.map((s: any) => (
+                                <div key={s.id} className="group p-4 bg-slate-50 hover:bg-indigo-50 rounded-2xl transition-all border border-transparent hover:border-indigo-100 flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="w-2 h-2 rounded-full bg-indigo-400 group-hover:scale-150 transition-transform" />
-                                        <span className="font-bold text-slate-700 text-sm">{sub.name}</span>
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-slate-700 text-sm">{s.subjects?.name}</span>
+                                            {s.sub_subjects?.name && (
+                                                <span className="text-[10px] font-bold text-indigo-400">({s.sub_subjects.name})</span>
+                                            )}
+                                        </div>
                                     </div>
                                     <ArrowRight size={14} className="text-slate-300 group-hover:text-indigo-400 transition-transform group-hover:translate-x-1" />
                                 </div>

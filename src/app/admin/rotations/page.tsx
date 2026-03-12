@@ -586,7 +586,7 @@ export default function RotationsPage() {
                                                 <Calendar size={14} className="text-slate-400" />
                                                 {new Date(rot.start_date).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })} ถึง {new Date(rot.end_date).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}
                                             </div>
-                                            <div className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">ปีการศึกษา {rot.academic_year}</div>
+                                            <div className="text-[10px]  font-bold text-red-400 mt-1 uppercase tracking-wider">ปีการศึกษา {rot.academic_year}</div>
                                         </TableCell>
                                         <TableCell className="px-6 py-5 text-right">
                                             <Button variant="ghost" onClick={() => handleOpenModal(rot)} className="h-9 w-9 p-0 text-slate-400 hover:text-blue-600">
