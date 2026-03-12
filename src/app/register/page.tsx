@@ -215,12 +215,17 @@ function RegisterForm() {
 
     useEffect(() => {
         const fetchMasterData = async () => {
-            const { data: sites } = await supabase.from('training_sites').select('id, site_name, province');
-            const { data: subs } = await supabase.from('subjects').select('*').order('id');
-            const { data: subSubs } = await supabase.from('sub_subjects').select('*').order('id');
-            if (sites) setAllSites(sites);
-            if (subs) setAllSubjects(subs);
-            if (subSubs) setSubSubjects(subSubs);
+            try {
+                const res = await fetch('/api/register/supervisor');
+                const result = await res.json();
+                if (result.success) {
+                    setAllSites(result.data.sites || []);
+                    setAllSubjects(result.data.subjects || []);
+                    setSubSubjects(result.data.subSubjects || []);
+                }
+            } catch (err) {
+                console.error("Failed to fetch master data:", err);
+            }
         }
         fetchMasterData();
 

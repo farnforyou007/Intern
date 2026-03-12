@@ -163,6 +163,15 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, data: student })
     } catch (error: any) {
         console.error('Student registration error:', error)
+        
+        // Handle duplicate student_code error (Postgres error code 23505)
+        if (error.code === '23505' && error.message?.includes('students_student_code_key')) {
+            return NextResponse.json({ 
+                success: false, 
+                error: 'รหัสนักศึกษานี้ได้ลงทะเบียนในระบบเรียบร้อยแล้ว' 
+            }, { status: 400 })
+        }
+
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 }

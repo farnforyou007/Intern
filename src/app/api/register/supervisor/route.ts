@@ -1,6 +1,23 @@
 import { createServerSupabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
+export async function GET(request: Request) {
+    const supabase = await createServerSupabase()
+    try {
+        const { data: sites } = await supabase.from('training_sites').select('id, site_name, province')
+        const { data: subjects } = await supabase.from('subjects').select('*').order('id')
+        const { data: subSubjects } = await supabase.from('sub_subjects').select('*').order('id')
+
+        return NextResponse.json({
+            success: true,
+            data: { sites, subjects, subSubjects }
+        })
+    } catch (error: any) {
+        console.error('Supervisor register init error:', error)
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+}
+
 export async function POST(request: Request) {
     try {
         const body = await request.json()
