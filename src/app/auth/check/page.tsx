@@ -14,9 +14,29 @@ export default function AuthCheckPage() {
     
     // ใช้แค่ loading เพราะหน้านี้ทำหน้าที่เป็น Router เฉยๆ
     const [status, setStatus] = useState<'loading' | 'authorized'>('loading')
+    const [showTroubleshoot, setShowTroubleshoot] = useState(false)
+
+    // ฟังก์ชันเคลียร์คุกกี้และ Storage ทั้งหมด
+    const performFullCleanup = async () => {
+        localStorage.clear();
+        sessionStorage.clear();
+        try {
+            await Promise.race([
+                supabase.auth.signOut({ scope: 'local' }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+            ]);
+        } catch (e) {
+            console.warn("Cleanup signout skipped:", e);
+        }
+        window.location.href = '/';
+    }
 
     useEffect(() => {
+        let hangTimer: NodeJS.Timeout;
         const checkAuth = async () => {
+            // เริ่มนับเวลาถอยหลัง 8 วินาที (หน้านี้อาจจะรวม LIFF เลยให้นานกว่านิดนึง)
+            hangTimer = setTimeout(() => setShowTroubleshoot(true), 8000);
+
             try {
                 // 🚀 1. เช็ก Cache ก่อน ถ้าเคยเข้าแล้วให้ดีดไปหน้า Dashboard เลย
                 const cachedSupervisor = sessionStorage.getItem('supervisor_auth_status');
@@ -31,29 +51,39 @@ export default function AuthCheckPage() {
                     return;
                 }
 
-                // 🌐 2. เริ่มต้น LIFF
-                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+                // 🌐 2. เริ่มต้น LIFF (พร้อม Timeout)
+                await Promise.race([
+                    liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('LIFF init timeout')), 5000))
+                ]);
+
                 if (!liff.isLoggedIn()) {
                     liff.login({ redirectUri: window.location.href });
                     return;
                 }
 
-                const profile = await liff.getProfile();
+                const profile = await Promise.race([
+                    liff.getProfile(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('LIFF profile timeout')), 4000))
+                ]) as any;
                 const lineUserId = profile.userId;
 
-                // 🗄️ 3. ดึงข้อมูลจาก Database
-                const { data: user, error } = await supabase
-                    .from('supervisors')
-                    .select(`
-                        id, role, is_verified,
-                        supervisor_subjects(id)
-                    `)
-                    .eq('line_user_id', lineUserId)
-                    .single();
+                // 🗄️ 3. ดึงข้อมูลจาก Database (พร้อม Timeout)
+                const { data: user, error } = await Promise.race([
+                    supabase
+                        .from('supervisors')
+                        .select(`
+                            id, role, is_verified,
+                            supervisor_subjects(id)
+                        `)
+                        .eq('line_user_id', lineUserId)
+                        .maybeSingle(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('DB Query timeout')), 5000))
+                ]) as any;
 
                 // 🚫 4. กรณีไม่มีข้อมูล User
                 if (!user || error) {
-                    router.replace('/register'); // หรือ /supervisor/register ตามโครงสร้างคุณ
+                    router.replace('/register');
                     return;
                 }
 
@@ -76,11 +106,9 @@ export default function AuthCheckPage() {
                         sessionStorage.setItem('teacher_auth_status', 'authorized');
                         router.replace('/teacher/dashboard');
                     } else {
-                        // อาจารย์ที่ Verified แล้วแต่ยังไม่มีวิชา
                         router.replace('/teacher/unauthorized');
                     }
                 } else {
-                    // กรณีเป็นพี่เลี้ยง (Supervisor)
                     sessionStorage.setItem('supervisor_auth_status', 'authorized');
                     router.replace('/supervisor/dashboard');
                 }
@@ -88,13 +116,15 @@ export default function AuthCheckPage() {
             } catch (err) {
                 console.error("Auth Check Error:", err);
                 router.replace('/register');
+            } finally {
+                clearTimeout(hangTimer);
             }
         };
 
         checkAuth();
+        return () => clearTimeout(hangTimer);
     }, [router, supabase]);
 
-    // แสดงหน้า Loading สวยๆ ที่คุณออกแบบไว้
     return (
         <div className="h-screen flex flex-col items-center justify-center bg-white overflow-hidden relative">
             <div className="absolute top-0 left-0 w-full h-full opacity-[0.03] pointer-events-none">
@@ -103,9 +133,12 @@ export default function AuthCheckPage() {
             </div>
 
             <div className="relative flex flex-col items-center">
-                <div className="relative w-20 h-20 mb-8">
+                <div className="relative w-24 h-24 mb-10">
+                    {/* Ring animation */}
                     <div className="absolute inset-0 rounded-full border-[3px] border-slate-100 border-t-[#064e3b] animate-spin"></div>
                     <div className="absolute inset-2 rounded-full border-[2px] border-transparent border-t-emerald-400 animate-[spin_0.8s_linear_infinite]"></div>
+                    
+                    {/* Center dot */}
                     <div className="absolute inset-0 flex items-center justify-center">
                         <div className="w-2 h-2 bg-[#064e3b] rounded-full animate-ping"></div>
                     </div>
@@ -126,6 +159,34 @@ export default function AuthCheckPage() {
                         </span>
                     </div>
                 </div>
+
+                {/* Troubleshooting Area */}
+                {showTroubleshoot && (
+                    <div className="mt-12 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-1000 px-6">
+                        <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100 max-w-xs w-full text-center shadow-sm">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+                                พบปัญหาในการเชื่อมต่อ?
+                            </p>
+                            <p className="text-[11px] text-slate-400 mb-6 leading-relaxed">
+                                หากค้างหน้านี้นานเกินไป อาจเกิดจากเซสชั่นเดิมหมดอายุหรือการเชื่อมต่อ LINE มีปัญหา
+                            </p>
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all active:scale-95"
+                                >
+                                    ลองโหลดใหม่
+                                </button>
+                                <button
+                                    onClick={performFullCleanup}
+                                    className="w-full py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+                                >
+                                    ออกจากระบบและเริ่มใหม่
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <p className="absolute bottom-10 text-[9px] font-black text-slate-300 uppercase tracking-[0.5em]">
@@ -134,166 +195,3 @@ export default function AuthCheckPage() {
         </div>
     );
 }
-
-// -------------------------------------------------------------------------------
-
-
-// // auth/check/page.tsx - หน้าตรวจสอบสิทธิ์การเข้าถึง (Auth Check) สำหรับพี่เลี้ยงและอาจารย์
-// "use client"
-// import { useEffect, useState } from 'react'
-// import { useRouter } from 'next/navigation'
-// import { createBrowserClient } from '@supabase/ssr'
-// import liff from '@line/liff'
-// export default function AuthCheckPage() {
-//     const router = useRouter()
-//     const supabase = createBrowserClient(
-//         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-//         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-//     )
-//     const [isAuthorized, setIsAuthorized] = useState(false)
-//     const [status, setStatus] = useState<'loading' | 'unregistered' | 'pending' | 'authorized'>('loading')
-
-//     useEffect(() => {
-//         const checkAuth = async () => {
-//             // 🛠️ ช่วง DEV: ใช้ Mock ID ของพี่
-//             // const lineUserId = 'U678862bd992a4cda7aaf972743b585ac'
-//             // const lineUserId = 'test-c'
-
-//             const cachedAuth = sessionStorage.getItem('supervisor_auth_status');
-//             if (cachedAuth === 'authorized') {
-//                 // ถ้ามีบัตรผ่านแล้ว ปรับสถานะเป็นผ่านทันทีและจบฟังก์ชัน
-//                 if (status !== 'authorized') setStatus('authorized');
-//                 return;
-//             }
-//             // 🛠️ ช่วงต่อจริง (Uncomment ส่วนนี้):
-//             // if (!liff.isLoggedIn()) { liff.login(); return; }
-//             // const profile = await liff.getProfile();
-//             // const lineUserId = profile.userId;
-
-
-//             try {
-//                 // 1. ดึงข้อมูล User (ดึง role มาด้วยเพื่อแยกหน้า Pending)
-//                 await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
-//                 if (!liff.isLoggedIn()) {
-//                     liff.login({ redirectUri: window.location.href });
-//                     return;
-//                 }
-
-//                 const profile = await liff.getProfile();
-//                 const lineUserId = profile.userId;
-
-//                 const { data: user, error } = await supabase
-//                     .from('supervisors')
-//                     .select(`
-//                         id, role, is_verified,
-//                         supervisor_subject(id)
-//                         `)
-//                     .eq('line_user_id', lineUserId)
-//                     .single()
-
-//                 // 2. ตรวจสอบสถานะ User
-//                 if (!user) {
-//                     // กรณีไม่มีข้อมูลเลยจริงๆ -> ส่งไปลงทะเบียน
-//                     router.replace('/register')
-//                     return
-//                 }
-
-//                 if (!user.is_verified) {
-//                     // กรณีมีข้อมูลแล้วแต่ "ยังไม่อนุมัติ" -> แยกหน้าตาม Role ที่เขาเลือกตอนสมัคร
-//                     if (user.role === 'teacher') {
-//                         router.replace('/teacher/pending')
-//                     } else {
-//                         router.replace('/supervisor/pending')
-//                     }
-//                     return
-//                 }
-
-//                 // 3. ถ้าอนุมัติแล้ว (Verified: true) -> เช็คสิทธิ์การเข้าถึงหน้า
-//                 const hasSubject = user.supervisor_subject && user.supervisor_subject.length > 0
-//                 const isTeacher = user.role === 'teacher' && hasSubject // เป็นอาจารย์และมีวิชาดูแล
-//                 const isSupervisor = user.role === 'supervisor' && hasSubject
-
-//                 // 4. Redirect ไปหน้า Dashboard ที่ถูกต้อง
-//                 if (isTeacher && isSupervisor) {
-//                     router.replace('/select-role')
-//                 } else if (isTeacher) {
-//                     router.replace('/teacher/dashboard') // เข้า Dashboard อาจารย์
-//                     sessionStorage.setItem('teacher_auth_status', 'authorized');
-//                     setStatus('authorized');
-//                 } else if (isSupervisor) {
-//                     sessionStorage.setItem('supervisor_auth_status', 'authorized');
-//                     setStatus('authorized');
-//                     router.replace('/supervisor/dashboard') // เข้า Dashboard พี่เลี้ยง
-//                 } else {
-//                     // กรณี Verified แล้วแต่ไม่มีวิชา (อาจารย์ที่รอแอดมินผูกวิชาให้)
-//                     // router.replace('/teacher/unauthorized')
-//                     // 4. กรณีที่เหลือ (เช่น เป็นอาจารย์ที่ Verified แล้วแต่แอดมินยังไม่ผูกวิชาให้)
-//                     if (user.role === 'teacher') {
-//                         router.replace('/teacher/unauthorized')
-//                     } else {
-//                         // ถ้าหลุดมาถึงนี่แล้วเป็นพี่เลี้ยง (ซึ่งปกติไม่ควรหลุดมาเพราะเช็ค isSupervisor ไปแล้ว)
-//                         // ให้ส่งไปหน้า dashboard ของเขา หรือหน้าแจ้งเตือนของฝั่งพี่เลี้ยง
-//                         sessionStorage.setItem('supervisor_auth_status', 'authorized');
-//                         setStatus('authorized');
-//                         router.replace('/supervisor/dashboard')
-//                     }
-//                 }
-
-//             } catch (err) {
-//                 console.error("Auth Check Error:", err)
-//                 router.replace('/supervisor/register')
-//                 setStatus('unregistered');
-
-//             }
-//         }
-
-//         checkAuth()
-//     }, [])
-
-//     return (
-//         <div className="h-screen flex flex-col items-center justify-center bg-white overflow-hidden relative">
-//             {/* พื้นหลังจางๆ แบบเดียวกับ Layout พี่เลี้ยง */}
-//             <div className="absolute top-0 left-0 w-full h-full opacity-[0.03] pointer-events-none">
-//                 <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-[#064e3b] rounded-full blur-[100px]"></div>
-//                 <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-emerald-500 rounded-full blur-[100px]"></div>
-//             </div>
-
-//             <div className="relative flex flex-col items-center">
-//                 {/* Loader หลัก: วงโคจรซ้อนกัน (Design พี่เลี้ยง) */}
-//                 <div className="relative w-20 h-20 mb-8">
-//                     {/* วงนอก */}
-//                     <div className="absolute inset-0 rounded-full border-[3px] border-slate-100 border-t-[#064e3b] animate-spin"></div>
-//                     {/* วงใน */}
-//                     <div className="absolute inset-2 rounded-full border-[2px] border-transparent border-t-emerald-400 animate-[spin_0.8s_linear_infinite]"></div>
-//                     {/* จุดกลาง */}
-//                     <div className="absolute inset-0 flex items-center justify-center">
-//                         <div className="w-2 h-2 bg-[#064e3b] rounded-full animate-ping"></div>
-//                     </div>
-//                 </div>
-
-//                 {/* ข้อความสถานะ */}
-//                 <div className="flex flex-col items-center gap-2">
-//                     <h2 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em] ml-[0.3em]">
-//                         กำลังเข้าสู่ระบบ
-//                     </h2>
-//                     <div className="flex items-center gap-1">
-//                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-//                             กรุณารอซักครู่...
-//                         </span>
-//                         {/* จุดไข่ปลาวิ่ง */}
-//                         <span className="flex gap-0.5">
-//                             <span className="w-0.5 h-0.5 bg-slate-400 rounded-full animate-[bounce_1s_infinite_100ms]"></span>
-//                             <span className="w-0.5 h-0.5 bg-slate-400 rounded-full animate-[bounce_1s_infinite_200ms]"></span>
-//                             <span className="w-0.5 h-0.5 bg-slate-400 rounded-full animate-[bounce_1s_infinite_300ms]"></span>
-//                         </span>
-//                     </div>
-//                 </div>
-//             </div>
-
-//             {/* ลายน้ำด้านล่าง */}
-//             <p className="absolute bottom-10 text-[9px] font-black text-slate-300 uppercase tracking-[0.5em]">
-//                 TTMED Internships Management System
-//             </p>
-//         </div>
-//     )
-// }

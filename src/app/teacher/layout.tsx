@@ -91,7 +91,7 @@
 
 // ver3 — Sidebar Layout
 "use client"
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import {
@@ -108,6 +108,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
     const [status, setStatus] = useState<'loading' | 'unregistered' | 'pending' | 'unauthorized' | 'authorized'>('loading')
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [user, setUser] = useState<any>(null);
+    const isLogoutInProgress = useRef(false);
     const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -119,6 +120,39 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         { name: 'ผลการประเมิน', desc: 'คะแนนและส่งออก Excel', icon: <BookOpen size={20} />, href: '/teacher/evaluations' },
         { name: 'ข้อมูลส่วนตัว', desc: 'ข้อมูลส่วนตัวและวิชาที่ดูแล', icon: <Settings size={20} />, href: '/teacher/profile' },
     ]
+
+    const performLogout = async (isAuto = false) => {
+        if (isLogoutInProgress.current) return;
+        isLogoutInProgress.current = true;
+
+        if (isAuto) {
+            await Swal.fire({
+                title: 'เซสชั่นหมดอายุ',
+                text: 'คุณไม่มีการเคลื่อนไหวนานเกินไป กรุณาเข้าสู่ระบบใหม่',
+                icon: 'warning',
+                confirmButtonText: 'ตกลง',
+                confirmButtonColor: '#4f46e5',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                customClass: { popup: 'rounded-[2rem] font-sans' }
+            });
+        }
+
+        // เคลียร์ Storage ทั้งหมด
+        localStorage.clear();
+        sessionStorage.clear();
+
+        try {
+            await Promise.race([
+                supabase.auth.signOut({ scope: 'local' }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('signOut timeout')), 2000))
+            ]);
+        } catch (e) {
+            console.warn('signOut skipped or timed out:', e);
+        }
+
+        window.location.href = '/';
+    };
 
     const handleLogout = async () => {
         const result = await Swal.fire({
@@ -133,26 +167,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
             customClass: { popup: 'rounded-[2rem] font-sans' }
         })
         if (result.isConfirmed) {
-            try {
-                // 1. Clear Supabase Session
-                await supabase.auth.signOut()
-
-                // 2. Clear LINE LIFF
-                if (liff.isLoggedIn()) {
-                    liff.logout()
-                }
-
-                // 3. Clear Storage
-                localStorage.clear()
-                localStorage.removeItem('debug_mode');
-                sessionStorage.clear()
-
-                // 4. Redirect to landing page
-                window.location.replace('/')
-            } catch (error) {
-                console.error("Logout failed:", error)
-                window.location.replace('/')
-            }
+            performLogout();
         }
     }
 
@@ -198,45 +213,40 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
     // Close sidebar on route change
 
+    const [showTroubleshoot, setShowTroubleshoot] = useState(false);
+
     useEffect(() => {
+        let hangTimer: NodeJS.Timeout;
         const checkTeacherAccess = async () => {
             try {
                 const cachedAuth = sessionStorage.getItem('teacher_auth_status')
                 if (cachedAuth === 'authorized') {
                     if (status !== 'authorized') setStatus('authorized')
-                    return // จบทันที ไม่ต้องรอโหลด LINE/DB ใหม่
+                    return
                 }
 
                 setStatus('loading')
-
-                // 🟢 1. เริ่มต้นใช้งาน LIFF (เปิดใช้งานส่วนนี้)
-                // await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! })
-
-                // // 🟢 2. ตรวจสอบการ Login
-                // if (!liff.isLoggedIn()) {
-                //     liff.login({ redirectUri: window.location.href })
-                //     return
-                // }
-
-                // // 🟢 3. ดึง Profile จริงจาก LINE
-                // const profile = await liff.getProfile()
-                // const lineUserId = profile.userId // ใช้ ID จริงจาก LINE
+                hangTimer = setTimeout(() => setShowTroubleshoot(true), 7000);
 
                 const urlParams = new URLSearchParams(window.location.search);
                 const lineUserId = await getLineUserId(urlParams);
 
-                if (!lineUserId) return;
+                if (!lineUserId) {
+                    performLogout();
+                    return;
+                }
 
-                // ❌ 4. คอมเมนต์ หรือลบค่า Mock ID ของเก่าออก
-                // const lineUserId = 'test-c'
-
-                // 🟢 2. Fetch from API (แทนที่ Supabase direct)
-                const res = await fetch(`/api/teacher/profile?lineUserId=${lineUserId}`)
+                // Fetch with timeout
+                const res = await Promise.race([
+                    fetch(`/api/teacher/profile?lineUserId=${lineUserId}`),
+                    new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('Fetch timeout')), 6000))
+                ]);
                 const result = await res.json()
 
                 if (!result.success || !result.data) {
                     setStatus('unregistered')
                     setIsAuthorized(false)
+                    clearTimeout(hangTimer);
                     return
                 }
 
@@ -248,7 +258,6 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                     setIsAuthorized(false)
                     if (pathname !== '/teacher/pending') {
                         router.replace('/teacher/pending')
-                        return <>{children}</>
                     }
                 } else {
                     const hasSubjects = userData.supervisor_subjects && userData.supervisor_subjects.length > 0
@@ -265,10 +274,19 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 }
             } catch (err) {
                 console.error("Teacher access check failed", err)
-                setStatus('unregistered')
+                // ถ้าเคยเป็น authorized มาก่อน อนุโลมให้ใช้ต่อ (อาจจะแค่เน็ตหลุด)
+                if (sessionStorage.getItem('teacher_auth_status') === 'authorized') {
+                    setStatus('authorized');
+                    setIsAuthorized(true);
+                } else {
+                    setStatus('unregistered')
+                }
+            } finally {
+                if (hangTimer) clearTimeout(hangTimer);
             }
         }
         checkTeacherAccess()
+        return () => { if (hangTimer) clearTimeout(hangTimer) }
     }, [pathname])
 
     useEffect(() => { setIsSidebarOpen(false) }, [pathname])
@@ -290,7 +308,22 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                         </div>
                     </div>
                     <h2 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em]">ตรวจสอบสิทธิ์อาจารย์</h2>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">กรุณารอซักครู่...</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 mb-8">กรุณารอซักครู่...</span>
+
+                    {/* Troubleshooting UI */}
+                    {showTroubleshoot && (
+                        <div className="mt-4 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
+                            <p className="text-[10px] text-slate-400 mb-4 max-w-[200px] text-center leading-relaxed">
+                                ใช้เวลานานผิดปกติ? อาจเกิดจากเซสชั่นเดิมค้าง
+                            </p>
+                            <button
+                                onClick={() => performLogout()}
+                                className="px-6 py-2.5 bg-indigo-600 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg active:scale-95"
+                            >
+                                ออกจากระบบเพื่อเริ่มใหม่
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         )

@@ -312,6 +312,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     // ใช้ useRef เพื่อเก็บค่า Timeout ID ป้องกันการสร้าง Timer ซ้อนกันเมื่อ Re-render
     const timerRef = useRef<NodeJS.Timeout | null>(null)
+    const isLogoutInProgress = useRef(false);
 
     // สร้าง Supabase Client
     const supabase = createBrowserClient(
@@ -355,11 +356,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
 
     const performLogout = async (isAuto = false) => {
-        // 1. เคลียร์ Timer ทันทีเพื่อไม่ให้รันซ้อน
+        if (isLogoutInProgress.current) return;
+        isLogoutInProgress.current = true;
+
+        // 1. เคลียร์ Timer ทันที
         if (timerRef.current) clearTimeout(timerRef.current);
 
         if (isAuto) {
-            // กรณีหมดเวลา: แสดง Swal ก่อน แล้วค่อย SignOut
             await Swal.fire({
                 title: 'เซสชั่นหมดอายุ',
                 text: 'คุณไม่มีการเคลื่อนไหวนานเกินไป กรุณาเข้าสู่ระบบใหม่',
@@ -372,21 +375,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             });
         }
 
-        // ล้าง storage ก่อนเลย เพื่อป้องกัน initAuth วนลูป
+        // 2. เคลียร์ Storage ทั้งหมดทันที (ตามที่ผู้ใช้แนะนำ)
         localStorage.clear();
         sessionStorage.clear();
 
-        // signOut แบบ timeout — ถ้า session หมดอายุแล้ว signOut อาจค้าง
+        // 3. signOut แบบ timeout
         try {
             await Promise.race([
-                supabase.auth.signOut(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('signOut timeout')), 3000))
+                supabase.auth.signOut({ scope: 'local' }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('signOut timeout')), 2000))
             ]);
         } catch (e) {
-            console.warn('signOut skipped (session likely expired):', e);
+            console.warn('signOut skipped or timed out:', e);
         }
 
-        // บังคับเปลี่ยนหน้าเสมอ
+        // 4. บังคับเปลี่ยนหน้าและล้าง Cache เบราว์เซอร์
         window.location.href = '/';
     };
 
@@ -397,7 +400,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         timerRef.current = setTimeout(() => performLogout(true), 1800000)
     }
 
+    const [showTroubleshoot, setShowTroubleshoot] = useState(false);
+
     useEffect(() => {
+        let authHangingTimer: NodeJS.Timeout;
+
         const initAuth = async () => {
             // 🚀 เช็ค Cache ก่อนเพื่อความเร็ว
             const cachedAuth = sessionStorage.getItem('admin_auth_status')
@@ -407,32 +414,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 return
             }
 
+            // เริ่มนับเวลาถอยหลัง 7 วินาที ถ้ายังโหลดไม่เสร็จ ให้โชว์ปุ่มช่วยเหลือ
+            authHangingTimer = setTimeout(() => {
+                setShowTroubleshoot(true);
+            }, 7000);
+
             try {
-                // Timeout protection — ป้องกัน getSession ค้างเมื่อ session หมดอายุ
-                // ใช้อาจจะรอซักครู่เผื่อ Cookie/Session กำลังถูก Hydrate
+                // Timeout protection 4 วินาที
                 const sessionResult = await Promise.race([
                     supabase.auth.getSession(),
                     new Promise<{ data: { session: any } }>((_, reject) => setTimeout(() => reject(new Error('getSession timeout')), 4000))
                 ]) as { data: { session: any } }
 
                 if (sessionResult?.data?.session) {
-                    // ✅ ผ่านการตรวจสอบ
                     sessionStorage.setItem('admin_auth_status', 'authorized')
                     setIsLoading(false)
-                    resetTimer()
-                    
-                    // ดักจับเหตุการณ์การเคลื่อนไหวเพื่อรีเซ็ต Timer
-                    const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
-                    events.forEach(event => window.addEventListener(event, resetTimer))
-                    return
-                }
-
-                // กรณี getSession ไม่ได้ (อาจจะ Client-side ยังไม่พร้อม) ให้ลอง getUser ที่เป็น Network-based ทันที
-                const { data: { user }, error: userError } = await supabase.auth.getUser()
-                
-                if (user && !userError) {
-                    sessionStorage.setItem('admin_auth_status', 'authorized')
-                    setIsLoading(false)
+                    clearTimeout(authHangingTimer);
                     resetTimer()
 
                     const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
@@ -440,39 +437,54 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     return
                 }
 
-                // ถ้าไม่มีทั้ง Session และ User จริงๆ
+                // กรณี getSession ไม่ได้ ให้ลอง getUser (Network-based)
+                const userResult = await Promise.race([
+                    supabase.auth.getUser(),
+                    new Promise<{ data: { user: any }, error: any }>((_, reject) => setTimeout(() => reject(new Error('getUser timeout')), 4000))
+                ]) as { data: { user: any }, error: any }
+
+                if (userResult?.data?.user && !userResult?.error) {
+                    sessionStorage.setItem('admin_auth_status', 'authorized')
+                    setIsLoading(false)
+                    clearTimeout(authHangingTimer);
+                    resetTimer()
+
+                    const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
+                    events.forEach(event => window.addEventListener(event, resetTimer))
+                    return
+                }
+
+                // ถ้าไม่มีทั้ง Session และ User
                 console.warn('Authentication definitively failed.')
-                sessionStorage.clear()
-                window.location.href = '/auth/login'
+                performLogout(); // เคลียร์และดีดออก
             } catch (e) {
-                console.warn('Auth check encounter error or timeout:', e)
+                console.warn('Auth check encountered error or timeout:', e)
+                // ถ้าเคย authorized มาก่อน (แต่อาจจะเน็ตหลุด/Timeout) อนุโลมให้ใช้ต่อ แต่ลอง reset timer
                 if (cachedAuth === 'authorized') {
                     setIsLoading(false)
-                    // ถ้าเคย authorized มาก่อน ก็เริ่มดักจับ event เลย
+                    clearTimeout(authHangingTimer);
                     const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
                     events.forEach(event => window.addEventListener(event, resetTimer))
                     return
                 }
-                sessionStorage.clear()
-                window.location.href = '/auth/login'
+                performLogout();
             }
         }
 
         initAuth()
 
-        // กรณีใช้ Cache ทันที ก็ต้องดักจับ event ด้วย (เช็คที่ initAuth บรรทัดบนสุด)
         if (sessionStorage.getItem('admin_auth_status') === 'authorized') {
-             const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
-             events.forEach(event => window.addEventListener(event, resetTimer))
+            const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
+            events.forEach(event => window.addEventListener(event, resetTimer))
         }
 
-        // ติดตามการเปลี่ยนแปลง Auth (เช่น มีการ Logout จาก Tab อื่น)
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-            // if (event === 'SIGNED_OUT') window.location.href = '/'
+            if (event === 'SIGNED_OUT' && !isLogoutInProgress.current) performLogout();
         })
 
         return () => {
             if (timerRef.current) clearTimeout(timerRef.current)
+            if (authHangingTimer) clearTimeout(authHangingTimer)
             subscription.unsubscribe()
             const events = ['mousemove', 'keypress', 'scroll', 'click', 'touchstart']
             events.forEach(event => window.removeEventListener(event, resetTimer))
@@ -521,7 +533,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         </div>
                     </div>
                     <h2 className="text-sm font-black text-slate-800 uppercase tracking-[0.3em]">ตรวจสอบสิทธิ์</h2>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">กรุณารอซักครู่...</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 mb-8">กรุณารอซักครู่...</span>
+
+                    {/* Troubleshooting UI */}
+                    {showTroubleshoot && (
+                        <div className="mt-4 flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
+                            <p className="text-[10px] text-slate-400 mb-4 max-w-[200px] text-center leading-relaxed">
+                                ใช้เวลานานผิดปกติ? อาจเกิดจากเซสชั่นเดิมค้าง
+                            </p>
+                            <button
+                                onClick={() => performLogout()}
+                                className="px-6 py-2.5 bg-slate-900 text-white rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+                            >
+                                ออกจากระบบเพื่อเริ่มใหม่
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         )
