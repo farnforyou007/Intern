@@ -304,7 +304,7 @@
 
 //ver3 — API Routes Migration
 "use client"
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import AdminLayout from '@/components/AdminLayout'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -314,12 +314,43 @@ import { Plus, Edit2, Trash2, Calendar, BookOpen, Hash, Filter } from "lucide-re
 import Swal from 'sweetalert2'
 import { Skeleton } from "@/components/ui/skeleton"
 
+// Date Helpers
+const formatToDDMMYYYY = (isoDate: string) => {
+    if (!isoDate) return '';
+    const date = new Date(isoDate);
+    if (isNaN(date.getTime())) return isoDate;
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+};
+
+const formatToYYYYMMDD = (thaiDate: string) => {
+    if (!thaiDate) return '';
+    const parts = thaiDate.split('/');
+    if (parts.length !== 3) return thaiDate;
+    const [d, m, y] = parts;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+};
+
+const autoFormatDate = (value: string) => {
+    const v = value.replace(/\D/g, '').slice(0, 8);
+    if (v.length >= 5) {
+        return `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`;
+    } else if (v.length >= 3) {
+        return `${v.slice(0, 2)}/${v.slice(2)}`;
+    }
+    return v;
+};
+
 export default function RotationsPage() {
     const [rotations, setRotations] = useState<any[]>([])
     const [subjects, setSubjects] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [selectedRotation, setSelectedRotation] = useState<any>(null)
+    const startDateRef = useRef<HTMLInputElement>(null);
+    const endDateRef = useRef<HTMLInputElement>(null);
 
     // --- Year States ---
     const currentYearBS = (new Date().getFullYear() + 543).toString();
@@ -368,8 +399,8 @@ export default function RotationsPage() {
             setSelectedRotation(rotation)
             setFormData({
                 name: rotation.name,
-                start_date: rotation.start_date,
-                end_date: rotation.end_date,
+                start_date: formatToDDMMYYYY(rotation.start_date),
+                end_date: formatToDDMMYYYY(rotation.end_date),
                 academic_year: rotation.academic_year,
                 round_number: rotation.round_number,
                 track: rotation.track || 'A',
@@ -400,8 +431,8 @@ export default function RotationsPage() {
 
             const payload = {
                 name: formData.name,
-                start_date: formData.start_date,
-                end_date: formData.end_date,
+                start_date: formatToYYYYMMDD(formData.start_date),
+                end_date: formatToYYYYMMDD(formData.end_date),
                 academic_year: formData.academic_year,
                 round_number: formData.round_number,
                 track: formData.track
@@ -640,13 +671,55 @@ export default function RotationsPage() {
                             <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="เช่น ผลัดที่ 1/2569" className="h-12 rounded-xl border-slate-200 font-medium" />
                         </div>
 
-                        <div>
-                            <label className="text-sm font-bold text-slate-700 mb-1.5 block text-emerald-600 tracking-wide">วันที่เริ่มฝึก</label>
-                            <Input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} className="h-12 rounded-xl border-slate-200" />
+                        <div className="relative">
+                            <label className="text-sm font-bold text-slate-700 mb-1.5 block text-emerald-600 tracking-wide">วันที่เริ่มฝึก (วว/ดด/ปปปป)</label>
+                            <div className="relative flex items-center">
+                                <Input 
+                                    type="text"
+                                    placeholder="DD/MM/YYYY"
+                                    value={formData.start_date} 
+                                    onChange={(e) => setFormData({ ...formData, start_date: autoFormatDate(e.target.value) })} 
+                                    className="h-12 rounded-xl border-slate-200 pr-10" 
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={() => startDateRef.current?.showPicker()}
+                                    className="absolute right-3 p-1 text-slate-400 hover:text-blue-500 transition-colors"
+                                >
+                                    <Calendar size={18} />
+                                </button>
+                                <input 
+                                    ref={startDateRef}
+                                    type="date"
+                                    className="absolute opacity-0 pointer-events-none w-0 h-0"
+                                    onChange={(e) => setFormData({ ...formData, start_date: formatToDDMMYYYY(e.target.value) })}
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label className="text-sm font-bold text-slate-700 mb-1.5 block text-red-500 tracking-wide">วันที่สิ้นสุด</label>
-                            <Input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} className="h-12 rounded-xl border-slate-200" />
+                        <div className="relative">
+                            <label className="text-sm font-bold text-slate-700 mb-1.5 block text-red-500 tracking-wide">วันที่สิ้นสุด (วว/ดด/ปปปป)</label>
+                            <div className="relative flex items-center">
+                                <Input 
+                                    type="text"
+                                    placeholder="DD/MM/YYYY"
+                                    value={formData.end_date} 
+                                    onChange={(e) => setFormData({ ...formData, end_date: autoFormatDate(e.target.value) })} 
+                                    className="h-12 rounded-xl border-slate-200 pr-10" 
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={() => endDateRef.current?.showPicker()}
+                                    className="absolute right-3 p-1 text-slate-400 hover:text-blue-500 transition-colors"
+                                >
+                                    <Calendar size={18} />
+                                </button>
+                                <input 
+                                    ref={endDateRef}
+                                    type="date"
+                                    className="absolute opacity-0 pointer-events-none w-0 h-0"
+                                    onChange={(e) => setFormData({ ...formData, end_date: formatToDDMMYYYY(e.target.value) })}
+                                />
+                            </div>
                         </div>
 
                         <div className="col-span-2 bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">

@@ -95,7 +95,7 @@ export async function GET(req: Request) {
             student_assignments (
                 id, rotation_id, site_id, subject_id, sub_subject_id,
                 training_sites (site_name, province),
-                rotations (id, name, start_date, end_date),
+                rotations (id, name, start_date, end_date, track),
                 subjects:subject_id (name),
                 sub_subjects:sub_subject_id (name),
                 assignment_supervisors (

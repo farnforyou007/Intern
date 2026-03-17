@@ -402,6 +402,7 @@ export default function StudentManagement() {
                     .filter(Boolean)
                     .join(', ') || '-';
 
+                row[`${colPrefix} สาย`] = asm?.rotations?.track || '-';
                 row[`${colPrefix} พี่เลี้ยง`] = mentorNames;
             }
 
@@ -412,7 +413,7 @@ export default function StudentManagement() {
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const wscols = [
             { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 30 }, // ข้อมูลส่วนตัว
-            { wch: 35 }, { wch: 25 }, { wch: 25 }, // ผลัด 1
+            { wch: 35 }, { wch: 25 }, { wch: 25 }, // ผลัด 1 (รพ, ช่วงเวลา, พี่เลี้ยง)
             { wch: 35 }, { wch: 25 }, { wch: 25 }, // ผลัด 2
             { wch: 35 }, { wch: 25 }, { wch: 25 }, // ผลัด 3
         ];
@@ -639,14 +640,20 @@ export default function StudentManagement() {
                                                 ) : <span className="text-slate-200 italic text-[10px] font-bold uppercase ml-7">ยังไม่มอบหมาย</span>}
                                             </TableCell>
                                             <TableCell>
-                                                <div className="space-y-1">
+                                                <div className="flex flex-col gap-1.5 min-w-[100px]">
+                                                    {/* ปีการศึกษา */}
+                                                    <span className="bg-emerald-50 text-emerald-600 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-100 uppercase tracking-wider w-fit">
+                                                        ปี {s.training_year || '-'}
+                                                    </span>
 
-                                                    <div className="flex items-center gap-2">
-                                                        {/* Badge แสดงปีการศึกษาที่ฝึกงาน */}
-                                                        <span className="bg-emerald-50 text-emerald-600 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-100 uppercase tracking-wider">
-                                                            {s.training_year || '-'}
+                                                    {/* สาย (Track) - ปรับสไตล์ให้เรียบง่ายเท่ากับปีการศึกษา */}
+                                                    {assignment?.rotations?.track ? (
+                                                        <span className="bg-amber-50 text-amber-600 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-wider w-fit">
+                                                            สาย {assignment.rotations.track}
                                                         </span>
-                                                    </div>
+                                                    ) : (
+                                                        <span className="text-[10px] font-bold text-slate-300 italic px-2">ยังไม่มีสาย</span>
+                                                    )}
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-right px-8">

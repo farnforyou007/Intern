@@ -112,7 +112,7 @@ export default function StudentDetailPage() {
                             <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200">
                                 <GraduationCap size={32} className="text-white" />
                             </div>
-                            <span>STUDENT <span className="text-indigo-600">Profile</span></span>
+                            <span>โปรไฟล์ <span className="text-indigo-600">นักศึกษา</span></span>
                         </h1>
                         <p className="text-slate-400 font-bold mt-2 ml-1 text-xs uppercase tracking-[0.2em]">ข้อมูลนักศึกษาและแผนฝึกปฏิบัติ</p>
                     </div>

@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         if (existingSupervisor) {
             return NextResponse.json({
                 success: false,
-                error: 'บัญชี LINE นี้ถูกใช้งานลงทะเบียนไปแล้ว หากต้องการแก้ไขข้อมูลหรือเปลี่ยนบทบาท กรุณาติดต่อแอดมิน'
+                error: 'บัญชี LINE นี้ถูกใช้งานลงทะเบียนไปแล้ว'
             }, { status: 400 })
         }
 
