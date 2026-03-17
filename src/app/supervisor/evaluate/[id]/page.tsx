@@ -58,7 +58,7 @@ export default function EvaluationPage() {
     const fetchData = async () => {
         setLoading(true)
         try {
-            const res = await fetch(`/api/supervisor/evaluate?id=${id}`)
+            const res = await fetch(`/api/supervisor/evaluate?id=${id}&t=${Date.now()}`)
             const result = await res.json()
             if (!result.success) {
                 Swal.fire('Error', result.error || 'ไม่พบรายการประเมิน', 'error')

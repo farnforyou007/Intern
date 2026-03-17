@@ -235,10 +235,46 @@ export default function ManageCriteriaPage() {
                 if (result.success) {
                     fetchData()
                 } else {
-                    Swal.fire({ icon: 'error', title: 'ลบไม่สำเร็จ', text: result.message })
+                    Swal.fire({ 
+                        target: document.getElementById('item-modal-content') || document.body,
+                        icon: 'error', 
+                        title: 'ลบไม่สำเร็จ', 
+                        text: result.message,
+                        confirmButtonText: 'ตกลง',
+                        confirmButtonColor: '#3b82f6',
+                        customClass: {
+                            popup: 'rounded-[2rem] font-sans'
+                        }
+                    })
                 }
             }
         })
+    }
+
+    const handleToggleItemStatus = async (item: any) => {
+        const res = await fetch('/api/admin/criteria', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'toggle-item-status',
+                subjectId: id,
+                itemId: item.id,
+                is_active: !item.is_active
+            })
+        });
+        if ((await res.json()).success) {
+            fetchData()
+            Swal.fire({ 
+                target: document.getElementById('item-modal-content') || document.body,
+                icon: 'success', 
+                title: item.is_active ? 'ซ่อนคำถามเรียบร้อย' : 'เปิดใช้งานคำถามเรียบร้อย', 
+                timer: 1500, 
+                showConfirmButton: false,
+                customClass: {
+                    popup: 'rounded-[2rem] font-sans'
+                }
+            })
+        }
     }
 
     const handleApplyTemplate = async (templateId: number) => {
@@ -667,13 +703,13 @@ export default function ManageCriteriaPage() {
                                 {editingItem?.is_used && (
                                     <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl text-[11px] font-bold text-amber-700 flex items-center gap-2 mb-6">
                                         <AlertCircle size={14} />
-                                        ข้อนี้มีการประเมินแล้ว ไม่สามารถเปลี่ยนหัวข้อหรือน้ำหนัก (Factor) ได้
+                                        ข้อนี้มีการประเมินแล้ว แก้ไขหัวข้อได้แต่ไม่สามารถเปลี่ยนน้ำหนัก (Factor) ได้
                                     </div>
                                 )}
                                 <div className="space-y-6">
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">หัวข้อการประเมิน</label>
-                                        <Input disabled={editingItem?.is_used} placeholder="เช่น ความสะอาด..." value={itemForm.question_text} onChange={e => setItemForm({ ...itemForm, question_text: e.target.value })} onKeyDown={(e) => handleKeyDown(e, handleSaveItem)} className="h-11 bg-white border border-slate-200 rounded-xl text-[15px] px-4 font-bold shadow-sm focus:border-blue-500 disabled:opacity-50" />
+                                        <Input placeholder="เช่น ความสะอาด..." value={itemForm.question_text} onChange={e => setItemForm({ ...itemForm, question_text: e.target.value })} onKeyDown={(e) => handleKeyDown(e, handleSaveItem)} className="h-11 bg-white border border-slate-200 rounded-xl text-[15px] px-4 font-bold shadow-sm focus:border-blue-500 disabled:opacity-50" />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">คำอธิบายรายละเอียด</label>
@@ -710,7 +746,7 @@ export default function ManageCriteriaPage() {
                                     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                                         <SortableContext items={items} strategy={verticalListSortingStrategy}>
                                             {items.map((item, idx) => (
-                                                <SortableItem key={item.id} item={item} idx={idx} editingItemId={editingItem?.id} setEditingItem={setEditingItem} setItemForm={setItemForm} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} />
+                                                <SortableItem key={item.id} item={item} idx={idx} editingItemId={editingItem?.id} setEditingItem={setEditingItem} setItemForm={setItemForm} handleEditClick={handleEditClick} handleDeleteItem={handleDeleteItem} handleToggleItemStatus={handleToggleItemStatus} />
                                             ))}
                                         </SortableContext>
                                     </DndContext>
@@ -859,7 +895,7 @@ export default function ManageCriteriaPage() {
 //     );
 // }
 
-function SortableItem({ item, idx, editingItemId, handleEditClick, handleDeleteItem, setEditingItem, setItemForm }: any) {
+function SortableItem({ item, idx, editingItemId, handleEditClick, handleDeleteItem, setEditingItem, setItemForm, handleToggleItemStatus }: any) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
 
     const style = {
@@ -880,7 +916,9 @@ function SortableItem({ item, idx, editingItemId, handleEditClick, handleDeleteI
                     ? 'shadow-2xl ring-2 ring-blue-600 bg-white border-blue-600 scale-[1.01]'
                     : isEditing
                         ? 'bg-indigo-50 border-blue-500 ring-2 ring-blue-100 shadow-lg'
-                        : 'bg-white border border-slate-100 shadow-sm hover:border-blue-300'
+                        : !item.is_active
+                            ? 'bg-slate-50 border-slate-100 opacity-60 italic'
+                            : 'bg-white border border-slate-100 shadow-sm hover:border-blue-300'
                 }
             `}
         >
@@ -913,6 +951,11 @@ function SortableItem({ item, idx, editingItemId, handleEditClick, handleDeleteI
                                     <Lock size={8} /> มีการประเมินแล้ว
                                 </span>
                             )}
+                            {!item.is_active && (
+                                <span className="px-2 py-0.5 text-[9px] font-black rounded-md bg-slate-900 text-white border border-slate-900 flex items-center gap-1 uppercase">
+                                    <EyeOff size={8} /> Hidden
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -922,6 +965,10 @@ function SortableItem({ item, idx, editingItemId, handleEditClick, handleDeleteI
                 <Button variant="ghost" size="icon" className={`h-8 w-8 rounded-full transition-all ${isEditing ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:text-blue-600 hover:bg-blue-50'}`}
                     onClick={() => isEditing ? (setEditingItem(null), setItemForm({ question_text: '', description: '', allow_na: true, factor: 1.0 })) : handleEditClick(item)}>
                     {isEditing ? <X size={14} /> : <Edit2 size={14} />}
+                </Button>
+                <Button variant="ghost" size="icon" className={`h-8 w-8 rounded-full transition-all ${!item.is_active ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-300 hover:text-blue-600 hover:bg-blue-50'}`}
+                    onClick={() => handleToggleItemStatus(item)}>
+                    {item.is_active ? <Eye size={14} /> : <EyeOff size={14} />}
                 </Button>
                 {!item.is_used && (
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-full transition-all" onClick={() => handleDeleteItem(item)}>

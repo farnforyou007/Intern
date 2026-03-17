@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase-server'
 import { apiSuccess, apiError } from '@/lib/api-helpers'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 /**
  * GET /api/supervisor/evaluate?id=xxx
  * ดึงข้อมูล assignment + evaluation groups + คะแนนเก่า
@@ -72,9 +75,16 @@ export async function GET(req: Request) {
         const allGroups = groupsResult.data
         const logs = logsResult.data
 
-        // 4. กรองกลุ่มที่จะแสดง: แสดงถ้า (Active) หรือ (มีประวัติการประเมินใน Assignment นี้)
-        const usedInThisAssignmentIds = new Set((logs || []).map(l => l.group_id))
-        const evalGroups = (allGroups || []).filter(g => g.is_active || usedInThisAssignmentIds.has(g.id))
+        // 4. กรองกลุ่มและข้อคำถามที่จะแสดง
+        const usedInThisAssignmentGroupIds = new Set((logs || []).map(l => l.group_id))
+        
+        // เก็บ item_ids ที่เคยตอบไปแล้วเพื่อเตรียมกรองรายข้อ
+        const answeredItemIds = new Set((logs || []).flatMap(l => (l.evaluation_answers || []).map((a: any) => a.item_id)))
+
+        const evalGroups = (allGroups || []).filter(g => g.is_active !== false || usedInThisAssignmentGroupIds.has(g.id)).map(g => ({
+            ...g,
+            evaluation_items: (g.evaluation_items || []).filter((i: any) => (i.is_active !== false) || answeredItemIds.has(i.id))
+        })).filter(g => g.evaluation_items.length > 0) // Hide empty groups
 
         // 5. คำนวณสิทธิ์การแก้ไข (Grace Period 14 วัน หลังจบผลัด)
         const endDateStr = assign.student_assignments.rotations?.end_date

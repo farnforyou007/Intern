@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase-server'
 import { apiSuccess, apiError } from '@/lib/api-helpers'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 /**
  * GET /api/admin/criteria
  * Query Params: subjectId, subId (optional)
@@ -65,7 +68,8 @@ export async function GET(req: Request) {
             is_used: usedGroupIds.has(g.id),
             evaluation_items: (g.evaluation_items || []).map((i: any) => ({
                 ...i,
-                is_used: usedItemIds.has(i.id)
+                is_used: usedItemIds.has(i.id),
+                is_active: i.is_active !== false // Ensure default is true if column added
             }))
         }))
 
@@ -138,8 +142,9 @@ export async function POST(req: Request) {
                 const { data: used } = await supabase.from('evaluation_answers').select('id').eq('item_id', itemId).limit(1)
                 if (used && used.length > 0) {
                     const { data: current } = await supabase.from('evaluation_items').select('*').eq('id', itemId).single()
-                    if (current.question_text !== itemData.question_text || current.factor !== itemData.factor) {
-                        return apiError('ไม่สามารถแก้ไขหัวข้อหรือน้ำหนักได้ เนื่องจากถูกใช้ประเมินแล้ว', 400)
+                    // Allow question_text and description edits, but block factor changes
+                    if (current.factor !== itemData.factor) {
+                        return apiError('ไม่สามารถแก้ไขน้ำหนัก (Factor) ได้ เนื่องจากถูกใช้ประเมินแล้ว', 400)
                     }
                 }
                 const { is_used, ...rest } = itemData
@@ -166,7 +171,7 @@ export async function POST(req: Request) {
         if (action === 'delete-item') {
             const { itemId } = body
             const { data: used } = await supabase.from('evaluation_answers').select('id').eq('item_id', itemId).limit(1)
-            if (used && used.length > 0) return apiError('ไม่สามารถลบได้ เนื่องจากถูกใช้ประเมินแล้ว', 400)
+            if (used && used.length > 0) return apiError('ไม่สามารถลบได้ เนื่องจากถูกใช้ประเมินแล้ว กรุณาใช้การ "ซ่อน" แทน', 400)
 
             const { error } = await supabase.from('evaluation_items').delete().eq('id', itemId)
             if (error) throw error
@@ -178,6 +183,13 @@ export async function POST(req: Request) {
             const { error } = await supabase.from('evaluation_items').upsert(updates)
             if (error) throw error
             return apiSuccess({ reordered: true })
+        }
+
+        if (action === 'toggle-item-status') {
+            const { itemId, is_active } = body
+            const { error } = await supabase.from('evaluation_items').update({ is_active }).eq('id', itemId)
+            if (error) throw error
+            return apiSuccess({ updated: true })
         }
 
         if (action === 'toggle-group-status') {
