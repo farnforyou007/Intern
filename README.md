@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🌿 Thai Traditional Medicine Personnel System (TTMED)
 
 ระบบจัดการบุคลากร คณะการแพทย์แผนไทย มหาวิทยาลัยสงขลานครินทร์
@@ -43,3 +44,6 @@ docker push farnforyou/internship-system:v1
 
 > [!IMPORTANT]
 > ค่า `NEXT_PUBLIC_` ต่างๆ ถูกฝังไว้ในอิมเมจเรียบร้อยแล้ว (URL: https://intern.ttmedpsu.org) เพื่อนไม่สามารถเปลี่ยน URL ได้จากการแก้ .env (ต้อง Build ใหม่เท่านั้น)
+=======
+
+>>>>>>> 380538ba5d390a74f1a4f1c83779eaeacce0b005
