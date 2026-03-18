@@ -165,7 +165,7 @@ export default function SplitHomePage() {
 
                     <div className="flex items-center gap-4 pt-4">
                         <div className="h-1 w-12 bg-indigo-500 rounded-full"></div>
-                        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.4em]">Faculty of Thai Med</p>
+                        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.4em]">The Faculty of Traditional Thai Medicine</p>
                     </div>
                 </div>
             </div>
@@ -182,10 +182,35 @@ export default function SplitHomePage() {
                         <span className="text-xl font-black text-slate-900 tracking-tighter">INTERN<span className="text-indigo-600">Ship</span></span>
                     </div>
 
+                    {/* Login Section */}
+                    <div className="space-y-6">
+                        <h2 className="text-[16px] font-black text-slate-400 uppercase tracking-[0.25em]">เข้าสู่ระบบ</h2>
+                        <button
+                            onClick={handleLineLogin}
+                            className="w-full relative group overflow-hidden"
+                        >
+                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-indigo-800 transition-all duration-300 group-hover:scale-105 rounded-[2.5rem]"></div>
+                            <div className="relative p-6 lg:p-10 flex items-center justify-between">
+                                <div className="flex items-center gap-5 text-left">
+                                    <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
+                                        <LogIn size={32} className="text-white" />
+                                    </div>
+                                    <div className="text-white">
+                                        <h3 className="text-xl lg:text-2xl font-black leading-none">เข้าสู่ระบบเฉพาะอาจารย์และพี่เลี้ยง</h3>
+                                        <p className="text-indigo-200 text-[10px] lg:text-xs font-bold mt-2 uppercase tracking-widest opacity-80 group-hover:opacity-100 transition-opacity">สำหรับพี่เลี้ยงและอาจารย์ที่ลงทะเบียนแล้ว</p>
+                                    </div>
+                                </div>
+                                <div className="hidden sm:flex w-14 h-14 rounded-full bg-white/10 items-center justify-center text-white border border-white/10 group-hover:bg-white group-hover:text-indigo-600 transition-all duration-300">
+                                    <ArrowRight size={24} />
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+
                     {/* Registration Section */}
                     <div className="space-y-6">
                         <div className="flex items-center justify-between">
-                            <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">เริ่มต้นใช้งาน / Registration</h2>
+                            <h2 className="text-[16px] font-black text-slate-400 uppercase tracking-[0.25em]">ลงทะเบียนใหม่สำหรับผู้ใช้งานใหม่</h2>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
@@ -199,9 +224,9 @@ export default function SplitHomePage() {
                                     <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 mb-6 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-300">
                                         <GraduationCap size={28} />
                                     </div>
-                                    <h3 className="text-lg lg:text-xl font-black text-slate-800">นักศึกษา</h3>
+                                    <h3 className="text-lg lg:text-xl font-black text-slate-800">ลงทะเบียนใหม่สำหรับนักศึกษา</h3>
                                     <p className="text-xs text-slate-400 font-bold mt-2 flex items-center gap-1 group-hover:text-indigo-600 transition-colors">
-                                        ลงทะเบียนผ่าน PSU SSO <ChevronRight size={14} />
+                                        PSU Passport <ChevronRight size={14} />
                                     </p>
                                 </div>
                             </button>
@@ -216,7 +241,7 @@ export default function SplitHomePage() {
                                     <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 mb-6 group-hover:bg-emerald-600 group-hover:text-white transition-all duration-300">
                                         <UserPlus size={28} />
                                     </div>
-                                    <h3 className="text-lg lg:text-xl font-black text-slate-800">พี่เลี้ยง / อาจารย์</h3>
+                                    <h3 className="text-lg lg:text-xl font-black text-slate-800"> ลงทะเบียนสำหรับพี่เลี้ยง / อาจารย์</h3>
                                     <p className="text-xs text-slate-400 font-bold mt-2 flex items-center gap-1 group-hover:text-emerald-600 transition-colors">
                                         ลงทะเบียนใหม่ผ่าน LINE <ChevronRight size={14} />
                                     </p>
@@ -225,33 +250,10 @@ export default function SplitHomePage() {
                         </div>
                     </div>
 
-                    {/* Login Section */}
-                    <div className="space-y-6">
-                        <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.25em]">เข้าสู่ระบบ / Already Registered</h2>
-                        <button
-                            onClick={handleLineLogin}
-                            className="w-full relative group overflow-hidden"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-indigo-800 transition-all duration-300 group-hover:scale-105 rounded-[2.5rem]"></div>
-                            <div className="relative p-6 lg:p-10 flex items-center justify-between">
-                                <div className="flex items-center gap-5 text-left">
-                                    <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20">
-                                        <LogIn size={32} className="text-white" />
-                                    </div>
-                                    <div className="text-white">
-                                        <h3 className="text-xl lg:text-2xl font-black leading-none">LINE Login</h3>
-                                        <p className="text-indigo-200 text-[10px] lg:text-xs font-bold mt-2 uppercase tracking-widest opacity-80 group-hover:opacity-100 transition-opacity">สำหรับพี่เลี้ยงและอาจารย์ที่ลงทะเบียนแล้ว</p>
-                                    </div>
-                                </div>
-                                <div className="hidden sm:flex w-14 h-14 rounded-full bg-white/10 items-center justify-center text-white border border-white/10 group-hover:bg-white group-hover:text-indigo-600 transition-all duration-300">
-                                    <ArrowRight size={24} />
-                                </div>
-                            </div>
-                        </button>
-                    </div>
+                    
 
                     {/* Debug Mode (Local Dev only) */}
-                    {isDev && (
+                    {/* {isDev && (
                         <div className="p-6 bg-amber-50/50 rounded-[2.5rem] border border-amber-200/50 border-dashed">
                             <div className="flex items-center gap-2 mb-4">
                                 <ShieldCheck size={14} className="text-amber-600" />
@@ -289,7 +291,7 @@ export default function SplitHomePage() {
                             </div>
                             <p className="text-[9px] text-amber-500 mt-2 font-bold uppercase italic opacity-70">* ใช้สำหรับจำลองการ Login เพื่อความรวดเร็วในการพัฒนาบนเครื่อง Local</p>
                         </div>
-                    )}
+                    )} */}
 
                     {/* Bottom Actions */}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-6 border-t border-slate-200 pt-10">

@@ -1,71 +1,45 @@
-# 🌿 Thai Traditional Medicine Personnel System
-ระบบจัดการบุคลากร (อาจารย์นิเทศและพี่เลี้ยงแหล่งฝึก) คณะการแพทย์แผนไทย
-Powered by **Next.js 14 (App Router)**, **Tailwind CSS**, and **Supabase**.
+# 🌿 Thai Traditional Medicine Personnel System (TTMED)
+
+ระบบจัดการบุคลากร คณะการแพทย์แผนไทย มหาวิทยาลัยสงขลานครินทร์
 
 ---
 
-## 🛠 สำหรับเพื่อนสาย Frontend (Getting Started)
+## 🚀 วิธีการติดตั้งสำหรับเพื่อน (Image-based Deployment)
 
-เพื่อให้รันโปรเจกต์และเห็นข้อมูลจริงจาก Database ตัวเดียวกัน ให้ทำตามขั้นตอนดังนี้ครับ:
+ถ้าคุณต้องการติดตั้งระบบโดยดึงอิมเมจจาก Docker Hub มาใช้เลย ให้ทำตามนี้ครับ:
 
-### 1. Clone & Install
-ดึงโค้ดและติดตั้ง Library ที่จำเป็นทั้งหมด:
+### 1. ไฟล์ที่จำเป็น
+เพื่อนคนรันต้องการแค่ 2 ไฟล์นี้ครับ (ไม่ต้องใช้ Source Code):
+- `docker-compose.yml`
+- `.env.local`
+
+### 2. ตั้งค่า Environment
+สร้างไฟล์ `.env.local` แล้วใส่ค่า **Secret Keys** ของเพื่อน:
+```env
+SUPABASE_SERVICE_ROLE_KEY=your_friend_service_role_key
+LINE_CHANNEL_ACCESS_TOKEN=your_friend_line_token
+```
+
+### 3. สั่งรัน
+รันคำสั่งเดียว ระบบจะดึงอิมเมจจาก Docker Hub มาให้เอง:
 ```bash
-git clone [URL_ของ_GIT_เรา]
-cd [ชื่อโฟลเดอร์โปรเจกต์]
-npm install
-2. Setup Environment Variables
-เนื่องจากเราไม่ได้เอาไฟล์ .env ขึ้น Git (เพื่อความปลอดภัย) เพื่อนต้องสร้างไฟล์ใหม่ชื่อ .env.local ไว้ที่โฟลเดอร์นอกสุด (Root) แล้วใส่ค่าดังนี้:
-
-Code snippet
-# ทักมาขอค่า URL และ Key ที่เรานะ!
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-3. Run Development Server
-รันคำสั่งเพื่อเริ่มทำงาน:
-
-Bash
-npm run dev
-เปิดเบราว์เซอร์ไปที่: http://localhost:3000
-
-📂 โครงสร้างโปรเจกต์ (Project Structure)
-src/app/ : ไฟล์หน้าเว็บหลัก (Page.tsx)
-
-/admin/manage : หน้า Dashboard จัดการอนุมัติบุคลากร (ตาราง/การ์ด/Modal)
-
-/register : หน้าฟอร์มลงทะเบียนสำหรับผู้ใช้งานใหม่
-
-src/components/ : คอมโพเนนต์ UI ต่างๆ (Card, Modal, Layout)
-
-public/ : ไฟล์ Static เช่น รูปภาพ และโลโก้ต่างๆ
-
-🎨 UI & Design Specs
-Styling: ใช้ Tailwind CSS เป็นหลัก
-
-Icons: ใช้ Lucide React
-
-Components: ใช้ Shadcn UI (เช่น Dialog, Tabs, Button)
-
-Alerts: ใช้ SweetAlert2 สำหรับ Popup แจ้งเตือน
-
-📋 สิ่งที่เพื่อนช่วยดูได้เลย (Frontend Tasks)
-Responsive Design: ฝากเช็กหน้าตารางและหน้าการ์ดในมือถือหน่อย ว่าบีบไปไหม
-
-UI Polishing: ถ้าอยากปรับสี ปรับความมน (Rounded) หรือเพิ่ม Animation สามารถแก้ได้ที่ page.tsx ในแต่ละหน้าได้เลย
-
-Modal UI: ส่วนของ PersonnelDetailModal สามารถแต่งเพิ่มให้สวยกว่าเดิมได้ตามสบาย
-
-⚠️ ข้อควรระวัง
-Database: โปรเจกต์นี้เชื่อมต่อกับ Supabase จริง ข้อมูลที่กดลบหรืออนุมัติจะส่งผลต่อ Database ทันที
-
-Storage: การอัปโหลดรูปจะวิ่งเข้า Bucket avatars ในเครื่องเรา
-
-🙏 สงสัยตรงไหน หรือรันไม่ขึ้น ทักแชทถามเราได้ตลอดเลยนะเพื่อน!
-
+docker-compose up -d
+```
+*ระบบจะเริ่มทำงานที่ [http://localhost:3000](http://localhost:3000)*
 
 ---
 
-### คำแนะนำเพิ่มเติมสำหรับคุณ:
-อย่าลืมส่งค่า **URL** และ **Anon Key** ของ Supabase ให้เพื่อนทางแชทส่วนตัวนะครับ และถ้าคุณมีการปรับโครงสร้างฐานข้อมูลเพิ่มในอนาคต (เช่น เพิ่มคอลัมน์ใหม่) อย่าลืมบอกเพื่อนให้รู้ด้วยนะ เพื่อนจะได้แก้หน้า Frontend ให้รับข้อมูลใหม่ได้ครับ
+## 🛠 สำหรับคนพัฒนา (Build & Push)
 
-**ตอนนี้มีส่วนไหนที่คุณอยากปรับแก้ก่อนส่ง Git ให้เพื่อนไหมครับ? หรืออยากให้ผมช่วยร่าง "หน้า Dashboar
+หากมีการแก้ไขโค้ดและต้องการอัปเดตอิมเมจขึ้น Hub:
+
+```bash
+# 1. Build ใหม่
+docker build -t farnforyou/internship-system:v1 .
+
+# 2. Push ขึ้น Hub
+docker push farnforyou/internship-system:v1
+```
+
+> [!IMPORTANT]
+> ค่า `NEXT_PUBLIC_` ต่างๆ ถูกฝังไว้ในอิมเมจเรียบร้อยแล้ว (URL: https://intern.ttmedpsu.org) เพื่อนไม่สามารถเปลี่ยน URL ได้จากการแก้ .env (ต้อง Build ใหม่เท่านั้น)
