@@ -36,40 +36,61 @@ export async function GET(req: Request) {
             availableYears = years.length === 0 ? [currentYearBS] : years.sort((a, b) => b.localeCompare(a))
         }
 
-        // --- STEP 1: หารายชื่อนักศึกษาที่เรียงตามโรงพยาบาล ---
-        // เราต้องดึง Student IDs ทั้งหมดที่ผ่าน Filter แล้วเรียงตาม Site Name
+        // --- STEP 1: หารายชื่อนักศึกษาที่ผ่านการ Filter ---
         let baseFilterQuery = supabase
-            .from('student_assignments')
+            .from('students')
             .select(`
-                student_id,
-                training_sites!inner(site_name),
-                students!inner(student_code, first_name, last_name, training_year)
+                id,
+                student_code,
+                first_name,
+                last_name,
+                training_year,
+                student_assignments!left(
+                    rotation_id,
+                    site_id,
+                    training_sites(site_name, province)
+                )
             `, { count: 'exact' })
 
-        if (selectedYear) baseFilterQuery = baseFilterQuery.eq('students.training_year', selectedYear)
-        if (rotationId) baseFilterQuery = baseFilterQuery.eq('rotation_id', rotationId)
-        if (batch) baseFilterQuery = baseFilterQuery.like('students.student_code', `${batch}%`)
-
+        // ✅ LOGIC: ถ้ามีการค้นหา (Search) ให้ข้ามฟิลเตอร์อื่นๆ เพื่อให้เป็น Global Search
         if (search) {
-            // ค้นหาโรงพยาบาล
-            const { data: matchedSites } = await supabase.from('training_sites').select('id').ilike('site_name', `%${search}%`)
-            const siteIds = matchedSites?.map(s => s.id) || []
+            // 1. ค้นหาจากโรงพยาบาลก่อน
+            const { data: sites } = await supabase.from('training_sites')
+                .select('id')
+                .or(`site_name.ilike.%${search}%,province.ilike.%${search}%`)
+            const siteIds = sites?.map(s => s.id) || []
+            
+            let studentIdsFromHospital: number[] = []
+            if (siteIds.length > 0) {
+                const { data: asms } = await supabase.from('student_assignments').select('student_id').in('site_id', siteIds)
+                studentIdsFromHospital = asms?.map(a => a.student_id) || []
+            }
 
-            const searchConditions = [
-                `students.student_code.ilike.%${search}%`,
-                `students.first_name.ilike.%${search}%`,
-                `students.last_name.ilike.%${search}%`
+            // 2. สร้างเงื่อนไข Global Search (ชื่อ, นามสกุล, รหัส, หรือ ID ที่มาจากโรงพยาบาล)
+            let searchConditions = [
+                `student_code.ilike.%${search}%`,
+                `first_name.ilike.%${search}%`,
+                `last_name.ilike.%${search}%`
             ]
-            if (siteIds.length > 0) searchConditions.push(`site_id.in.(${siteIds.join(',')})`)
-
+            if (studentIdsFromHospital.length > 0) {
+                searchConditions.push(`id.in.(${studentIdsFromHospital.join(',')})`)
+            }
             baseFilterQuery = baseFilterQuery.or(searchConditions.join(','))
+            
+            // หมายเหตุ: เมื่อค้นหา เราจะไม่บังคับติดฟิลเตอร์ Year/Batch/Rotation เพื่อให้เจอตัวตนจริง
+        } else {
+            // ❌ ถ้าไม่มีการค้นหา ให้ใช้ฟิลเตอร์ปกติ
+            if (selectedYear) baseFilterQuery = baseFilterQuery.eq('training_year', selectedYear)
+            if (batch) baseFilterQuery = baseFilterQuery.like('student_code', `${batch}%`)
+            if (rotationId) {
+                baseFilterQuery = baseFilterQuery.eq('student_assignments.rotation_id', rotationId)
+                baseFilterQuery = baseFilterQuery.not('student_assignments', 'is', null)
+            }
         }
 
-        // ดึง IDs ทั้งหมดเพื่อทำ Pagination และ Sorting ที่แม่นยำ
-        // เรียงตามชื่อ รพ. (Site Name) และตามด้วยรหัสนักศึกษา
+        // ดึงข้อมูลรายชื่อตามลำดับ
         const { data: allMemberIds, count } = await baseFilterQuery
-            .order('site_name', { foreignTable: 'training_sites', ascending: true })
-            .order('student_code', { foreignTable: 'students', ascending: true })
+            .order('student_code', { ascending: true })
 
         if (!allMemberIds || allMemberIds.length === 0) {
             // Master data for empty response
@@ -81,9 +102,8 @@ export async function GET(req: Request) {
             return apiSuccess({ students: [], totalCount: 0, sites: sitesRes.data || [], mentors: mentorsRes.data || [], availableYears, availableRotations: rotRes.data || [] })
         }
 
-        // --- FIXED: Count unique student IDs instead of rows ---
-        const uniqueStudentIds = [...new Set(allMemberIds.map(m => m.student_id))]
-        const totalCount = uniqueStudentIds.length
+        const uniqueStudentIds = [...new Set(allMemberIds.map(m => m.id))]
+        const totalCount = count || uniqueStudentIds.length
 
         // ทำ Pagination บน Memory (หรือจะใช้ IDs ชุดนี้ไป Query ต่อ)
         const pagedIds = uniqueStudentIds.slice(from, to + 1)
@@ -108,7 +128,7 @@ export async function GET(req: Request) {
 
         if (stError) throw stError
 
-        // ต้อง Re-sort ตัวแปร students ให้เรียงตามลำดับ pagedIds ที่เราเตรียมไว้ (เพื่อรักษาลำดับ รพ.)
+        // Re-sort ตัวแปร students ให้เรียงตามลำดับ pagedIds 
         const sortedStudents = pagedIds.map(id => students.find(s => s.id === id)).filter(Boolean)
 
         // ดึง master data

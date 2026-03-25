@@ -170,25 +170,26 @@ export default function StudentManagement() {
     const getDisplayAssignment = (student: any) => {
         if (!student.student_assignments || student.student_assignments.length === 0) return null;
 
-        let targetAssignments = student.student_assignments;
+        const searchLower = searchTerm?.toLowerCase().trim();
 
-        // 1. ถ้าเลือก Filter ผลัด
-        if (selectedRotationFilter !== 'all') {
-            // คืนค่า "วิชาแรกที่เจอ" ในผลัดที่เลือก
-            return targetAssignments.find((as: any) => String(as.rotation_id) === String(selectedRotationFilter));
-        }
-
-        // 2. ถ้ามีการค้นหา
-        if (searchTerm.trim() !== "") {
-            const searchLower = searchTerm.toLowerCase().trim();
-            return targetAssignments.find((asm: any) =>
+        // 1. ถ้ามีการค้นหา ให้พยายามหาผลัดที่ชื่อ รพ. หรือ จังหวัด ตรงกันก่อน (ถ้าเราตั้งใจเสิร์ชหา รพ.)
+        if (searchLower) {
+            const matchedAsm = student.student_assignments.find((asm: any) =>
                 asm.training_sites?.site_name?.toLowerCase().includes(searchLower) ||
                 asm.training_sites?.province?.toLowerCase().includes(searchLower)
             );
+            // ถ้าเจอ (หมายถึงเราน่าจะค้นหาด้วยชื่อ รพ.) ให้แสดงผลัดนั้นเลย
+            if (matchedAsm) return matchedAsm;
         }
 
-        // 3. ค่าเริ่มต้น: คืนค่าวิชาแรกของผลัดแรก
-        return targetAssignments[0];
+        // 2. ถ้ามีฟิลเตอร์ผลัด ให้แสดงผลัดที่เลือก
+        if (selectedRotationFilter !== 'all') {
+            const foundByRot = student.student_assignments.find((as: any) => String(as.rotation_id) === String(selectedRotationFilter));
+            if (foundByRot) return foundByRot;
+        }
+
+        // 3. ค่าเริ่มต้น: คืนค่าวิชาแรกของผลัดแรกที่เจอ (จะแสดงขึ้นมาถ้าเราเสิร์ชด้วย "ชื่อคน" แล้วหา รพ. ที่แมตช์ชื่อคนไม่เจอ)
+        return student.student_assignments[0];
     }
 
     // --- ส่วน filteredStudents (คงเดิม แต่แนะนำให้ตรวจสอบให้แน่ใจว่าใช้ logic นี้) ---
@@ -219,23 +220,31 @@ export default function StudentManagement() {
     //     return (matchesBasicInfo || matchesAssignments) && matchesYear && matchesRotation;
     // });
 
-    const filteredStudents = students.filter(s => {
+    const filteredStudents = useMemo(() => {
         const searchLower = searchTerm?.toLowerCase().trim();
+        
+        // กรองรุ่นรหัส (Batch)
+        const matchesBatchFilter = selectedBatchFilter === 'all' || students.some(s => s.student_code?.substring(0, 2) === selectedBatchFilter);
 
-        const matchesBasicInfo =
-            s.student_code?.toLowerCase().includes(searchLower) ||
-            s.first_name?.toLowerCase().includes(searchLower) ||
-            s.last_name?.toLowerCase().includes(searchLower);
+        return students.filter(s => {
+            // ถ้าไม่มีการค้นหา และไม่มีการเลือกฟิลเตอร์หน้าเครื่อง (ยกเว้นปีที่ทำใน API) ให้ผ่านหมด
+            if (!searchLower) return true;
 
-        // ✅ กรองรุ่นรหัส (Batch) จากข้อมูลที่มีอยู่แล้วในเครื่อง
-        const matchesBatch = selectedBatchFilter === 'all' || s.student_code?.substring(0, 2) === selectedBatchFilter;
+            const matchesBasicInfo =
+                s.student_code?.toLowerCase().includes(searchLower) ||
+                s.first_name?.toLowerCase().includes(searchLower) ||
+                s.last_name?.toLowerCase().includes(searchLower);
 
-        const matchesRotation = selectedRotationFilter === 'all' ||
-            s.student_assignments?.some((as: any) => String(as.rotation_id) === String(selectedRotationFilter));
+            const matchesHospital = s.student_assignments?.some((asm: any) => 
+                asm.training_sites?.site_name?.toLowerCase().includes(searchLower) ||
+                asm.training_sites?.province?.toLowerCase().includes(searchLower)
+            );
 
-        return matchesBasicInfo && matchesBatch && matchesRotation;
-
-    });
+            // หมายเหตุ: เมื่อมีการค้นหาในช่อง Search เราจะเน้นผลลัพธ์จาก Search เป็นหลัก 
+            // (Backend กรองปีมาให้แล้ว แต่เราปล่อย Search ให้เจือจางในหน้าเบราว์เซอร์เพื่อนความแม่นยำ)
+            return (matchesBasicInfo || matchesHospital);
+        });
+    }, [students, searchTerm]);
 
     // ดึงรุ่นนักศึกษาทั้งหมด (2 ตัวแรกของรหัส) มาสร้างตัวเลือก
     const studentYears = Array.from(
@@ -535,7 +544,7 @@ export default function StudentManagement() {
                             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                             <input
                                 placeholder="ค้นหา ชื่อ-นามสกุล, รหัสนักศึกษา หรือ โรงพยาบาล..."
-                                className="w-full h-14 pl-14 pr-6 rounded-[1.5rem] border-2 border-slate-50 bg-white font-bold text-sm focus:border-blue-500 focus:ring-0 outline-none transition-all placeholder:text-slate-300"
+                                className="w-full h-14 pl-14 pr-6 rounded-[1.5rem] border-2 border-slate-50 bg-white font-bold text-sm focus:border-blue-500 focus:ring-0 outline-none transition-all placeholder:text-slate-300 shadow-sm"
                                 value={searchTerm}
                                 onChange={(e) => {
                                     setSearchTerm(e.target.value);
