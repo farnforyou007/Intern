@@ -30,47 +30,64 @@ export async function POST(req: Request) {
         }
 
         const { sub: lineUserId, name, picture } = lineData
-        // We use a "Shadow Email" and "Shadow Password" based on the unique LINE User ID
-        // and a server-side secret to securely bridge LINE to Supabase Auth.
         const shadowEmail = `${lineUserId}@line.ttmed.com`
         const shadowPassword = `${lineUserId}${process.env.NEXT_PUBLIC_JWT_SECRET || 'fallback_secret'}`
+        let loginEmail = shadowEmail
 
         const supabase = await createServerSupabase()
 
-        // 2. Attempt Login
-        let { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-            email: shadowEmail,
-            password: shadowPassword
-        })
+        // 1.5. Robust Lookup: Find existing user by line_user_id
+        const { data: supervisorRecord } = await supabase
+            .from('supervisors')
+            .select('user_id')
+            .eq('line_user_id', lineUserId)
+            .maybeSingle()
 
-        let session = loginData?.session
-
-        // 3. If Login fails (first time), Create the user using Service Role
-        if (loginError && loginError.message.includes('Invalid login credentials')) {
-            if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-                return NextResponse.json({
-                    success: false,
-                    error: 'Authentication failed. Please notify admin to configure SERVICE_ROLE_KEY.'
-                }, { status: 500 })
-            }
-
+        if (supervisorRecord?.user_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
             const supabaseAdmin = createClient(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
                 process.env.SUPABASE_SERVICE_ROLE_KEY!,
                 { auth: { autoRefreshToken: false, persistSession: false } }
             )
 
-            const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+            const { data: { user: authUser }, error: getError } = await supabaseAdmin.auth.admin.getUserById(supervisorRecord.user_id)
+
+            if (!getError && authUser?.email) {
+                loginEmail = authUser.email
+            }
+        }
+
+        // 2. Attempt Login
+        let { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+            email: loginEmail,
+            password: shadowPassword
+        })
+
+        let session = loginData?.session
+
+        // 3. If Login fails (account deleted or first time), Create the user
+        if (loginError && loginError.message.includes('Invalid login credentials')) {
+            const supabaseAdmin = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.SUPABASE_SERVICE_ROLE_KEY!,
+                { auth: { autoRefreshToken: false, persistSession: false } }
+            )
+
+            const { data: { user: newUser }, error: createError } = await supabaseAdmin.auth.admin.createUser({
                 email: shadowEmail,
                 password: shadowPassword,
                 email_confirm: true,
-                user_metadata: { full_name: name, avatar_url: picture, line_user_id: lineUserId },
+                user_metadata: { 
+                    full_name: name, 
+                    name: name, // redundantly store for compatibility
+                    avatar_url: picture, 
+                    line_user_id: lineUserId 
+                },
                 app_metadata: { provider: 'line' }
             })
 
             if (createError) throw createError
 
-            // Login again after creation
             const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
                 email: shadowEmail,
                 password: shadowPassword
@@ -82,7 +99,27 @@ export async function POST(req: Request) {
             throw loginError
         }
 
-        // 4. Link User ID to Database and Sync Roles
+        // 4. Robust Metadata Sync: Always ensure metadata has LINE info
+        if (session?.user && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+            const { user } = session
+            const supabaseAdmin = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.SUPABASE_SERVICE_ROLE_KEY!,
+                { auth: { autoRefreshToken: false, persistSession: false } }
+            )
+
+            await supabaseAdmin.auth.admin.updateUserById(user.id, {
+                user_metadata: {
+                    ...(user.user_metadata || {}),
+                    full_name: name || user.user_metadata?.full_name || user.user_metadata?.name,
+                    name: name || user.user_metadata?.name || user.user_metadata?.full_name,
+                    avatar_url: picture || user.user_metadata?.avatar_url,
+                    line_user_id: lineUserId
+                }
+            })
+        }
+
+        // 5. Link User ID to Database and Sync Roles
         if (session?.user) {
             const { user } = session
 
@@ -109,9 +146,9 @@ export async function POST(req: Request) {
                         process.env.SUPABASE_SERVICE_ROLE_KEY!,
                         { auth: { autoRefreshToken: false, persistSession: false } }
                     )
-                    // We AWAIT this update to ensure Middleware has it on the next request
                     await supabaseAdmin.auth.admin.updateUserById(user.id, {
                         user_metadata: {
+                            ...(user.user_metadata || {}),
                             role: supervisor.role,
                             is_verified: supervisor.is_verified,
                             line_user_id: lineUserId
@@ -119,20 +156,20 @@ export async function POST(req: Request) {
                     })
                 }
 
-                // Update link if missing
-                if (!supervisor.user_id) {
+                // Update link if missing or changed (e.g. after re-creation)
+                if (supervisor.user_id !== user.id) {
                     await supabase
                         .from('supervisors')
                         .update({ user_id: user.id })
                         .eq('id', supervisor.id)
                 }
 
-                return NextResponse.json({ success: true, redirectTo })
+                return NextResponse.json({ success: true, redirectTo, user, session })
             }
         }
 
         // If no supervisor record found, send to register
-        return NextResponse.json({ success: true, redirectTo: '/register' })
+        return NextResponse.json({ success: true, redirectTo: '/register', user: session?.user, session })
 
     } catch (error: any) {
         console.error('LINE Auth Bridge Error:', error)

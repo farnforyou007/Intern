@@ -35,6 +35,7 @@ function RegisterForm() {
     const [file, setFile] = useState<File | null>(null)
     const [lineUserId, setLineUserId] = useState<string | null>(null)
     const [lineDisplayName, setLineDisplayName] = useState<string>('')
+    const [linePictureUrl, setLinePictureUrl] = useState<string>('')
 
     // --- State สำหรับแยกประเภทผู้ใช้ ---
     const [userType, setUserType] = useState<'supervisor' | 'teacher'>('supervisor')
@@ -44,6 +45,7 @@ function RegisterForm() {
     const [searchTerm, setSearchTerm] = useState('')
     const [isDropdownOpen, setIsDropdownOpen] = useState(false)
     const [selectedSite, setSelectedSite] = useState<any>(null)
+    const [isAuthenticating, setIsAuthenticating] = useState(true) // New state
     const dropdownRef = useRef<HTMLDivElement>(null)
 
     // --- State สำหรับวิชาที่รับผิดชอบ ---
@@ -61,78 +63,119 @@ function RegisterForm() {
 
     useEffect(() => {
         const initLiff = async () => {
+            setIsAuthenticating(true);
             try {
-                // 1. Check for User (Debug or Existing)
+                // 1. Check for User ID (Debug or Search Params)
                 const lineId = await getLineUserId(searchParams);
+                const isDebug = searchParams.get('debug') || localStorage.getItem('debug_mode');
+                const { data: { user } } = await supabase.auth.getUser();
 
-                if (lineId) {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    const sessionLineId = user?.user_metadata?.line_user_id || user?.app_metadata?.line_user_id;
-
-                    // ✅ ถ้ามี Session เดิมแต่ ID ไม่ตรงกัน (สลับการเทส) ให้ล้างก่อน
-                    if (user && sessionLineId && sessionLineId !== lineId) {
-                        console.log("Identity mismatch, signing out...", { sessionLineId, lineId });
+                // ✅ 1.1 ตรวจสอบความถูกต้องของ Session (ถ้ามี Session อยู่ต้องเป็นของ LINE คนเดิม)
+                if (user && lineId) {
+                    const sessionLineId = user.user_metadata?.line_user_id || user.app_metadata?.line_user_id;
+                    
+                    // ถ้าใน Session ไม่มี LINE ID (เช่น ล็อกอินแอดมินค้างไว้) 
+                    // หรือมีแต่ไม่ตรงกับคนปัจจุบัน ให้ Logout ทันทีเพื่อเริ่มใหม่
+                    if (!sessionLineId || sessionLineId !== lineId) {
+                        console.log("Session conflict, signing out...", { sessionLineId, lineId });
                         await supabase.auth.signOut();
                         window.location.reload();
                         return;
                     }
+                }
 
-                    if (!user) {
-                        const isDebug = searchParams.get('debug') || localStorage.getItem('debug_mode');
-                        const debugName = searchParams.get('name') || `DEBUG_USER_${lineId.slice(-4)}`;
+                // 2. ถ้าไม่มี User Session หรือ ข้อมูล Metadata ไม่ครบ ให้ทำการ Bridge
+                // (ถ้ามี session แต่ขาด line_user_id ให้ถือว่าต้องซ่อมแซมข้อมูลผ่าน Bridge)
+                const sessionLineId = user?.user_metadata?.line_user_id || user?.app_metadata?.line_user_id;
+                
+                if (!user || !sessionLineId) {
+                    const debugName = searchParams.get('name') || `DEBUG_USER_${lineId?.slice(-4) || 'UNKNOWN'}`;
 
-                        if (isDebug && isDebug !== 'clear') {
-                            // Debug Bridge
-                            const res = await fetch('/api/auth/debug', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                    lineUserId: lineId,
-                                    name: debugName
-                                })
-                            });
-                            if (res.ok) {
-                                const { data: { user: newUser } } = await supabase.auth.getUser();
-                                if (newUser) {
-                                    setLineDisplayName(newUser.user_metadata.full_name || debugName);
-                                    setLineUserId(newUser.user_metadata.line_user_id || lineId);
-                                }
-                            }
-                        } else {
-                            // Real LINE Bridge
-                            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
-                            if (liff.isLoggedIn()) {
-                                const idToken = liff.getIDToken();
-                                const res = await fetch('/api/auth/line', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ idToken })
-                                });
-                                if (res.ok) {
-                                    const { data: { user: newUser } } = await supabase.auth.getUser();
-                                    if (newUser) {
-                                        setLineDisplayName(newUser.user_metadata.full_name || '');
-                                        setLineUserId(newUser.user_metadata.line_user_id || null);
-                                    }
-                                }
-                            } else {
-                                liff.login({ redirectUri: window.location.href });
+                    if (isDebug && isDebug !== 'clear' && lineId) {
+                        // Debug Bridge
+                        const res = await fetch('/api/auth/debug', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ lineUserId: lineId, name: debugName })
+                        });
+                        if (res.ok) {
+                            const { user: newUser } = await res.json();
+                            if (newUser) {
+                                // ดึงชื่อจากหลายแหล่งเพื่อให้ชัวร์
+                                const displayName = newUser.user_metadata?.full_name || 
+                                                  newUser.user_metadata?.name || 
+                                                  newUser.user_metadata?.display_name || 
+                                                  debugName;
+                                setLineDisplayName(displayName);
+                                setLineUserId(newUser.user_metadata?.line_user_id || lineId);
                             }
                         }
                     } else {
-                        // Session already established
-                        setLineDisplayName(user.user_metadata.full_name || user.user_metadata.display_name || 'User');
-                        setLineUserId(user.user_metadata.line_user_id || lineId);
+                        // Real LINE Bridge
+                        if (!liff.id) {
+                            await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+                        }
+
+                        if (liff.isLoggedIn()) {
+                            const idToken = liff.getIDToken();
+                            const res = await fetch('/api/auth/line', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ idToken })
+                            });
+
+                            // ✅ ดึงข้อมูลจากคำตอบของเซิร์ฟเวอร์
+                            let bridgeUser = null;
+                            if (res.ok) {
+                                const data = await res.json();
+                                bridgeUser = data.user;
+                            }
+
+                            // ✅ Final Fail-safe: ถ้าเซิร์ฟเวอร์ไม่คืนข้อมูลมา หรือข้อมูลไม่ครบ ให้ดึงจาก LIFF โดยตรง
+                            const liffProfile = await liff.getProfile();
+                            const finalName = bridgeUser?.user_metadata?.full_name || 
+                                            bridgeUser?.user_metadata?.name || 
+                                            bridgeUser?.user_metadata?.display_name || 
+                                            liffProfile.displayName;
+                            const finalId = bridgeUser?.user_metadata?.line_user_id || 
+                                          bridgeUser?.app_metadata?.line_user_id || 
+                                          liffProfile.userId;
+
+                            setLineDisplayName(finalName);
+                            setLineUserId(finalId);
+                            setLinePictureUrl(bridgeUser?.user_metadata?.avatar_url || liffProfile.pictureUrl || '');
+                        } else {
+                            // ถ้าไม่ได้ล็อกอินใน LINE ให้บังคับล็อกอิน
+                            liff.login({ redirectUri: window.location.href });
+                            return;
+                        }
                     }
                 } else {
-                    // No ID found and not logged in - trigger LIFF
-                    await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
-                    if (!liff.isLoggedIn()) {
-                        liff.login({ redirectUri: window.location.href });
+                    // Session established and has Metadata
+                    let displayName = user.user_metadata?.full_name || 
+                                      user.user_metadata?.name || 
+                                      user.user_metadata?.display_name || 
+                                      'User';
+                    
+                    // เพิ่มเติม: ถ้าเป็นอีเมลจริง (ไม่ใช่ shadow) อาจจะไม่มีชื่อจาก LINE ติดมาในชุดเก่า
+                    // ให้ลองดึงจาก LIFF ซ่อมแซมอีกรอบเพื่อความชัวร์
+                    if (displayName === 'User' && !isDebug) {
+                        try {
+                            if (liff.isLoggedIn()) {
+                                const liffProfile = await liff.getProfile();
+                                displayName = liffProfile.displayName;
+                            }
+                        } catch(e) {}
                     }
+
+                    setLineDisplayName(displayName);
+                    setLineUserId(sessionLineId);
+                    setLinePictureUrl(user.user_metadata?.avatar_url || '');
                 }
             } catch (err) {
                 console.error("Auth Init Error", err)
+            } finally {
+                setIsAuthenticating(false);
             }
         }
         initLiff()
@@ -209,9 +252,38 @@ function RegisterForm() {
     //             console.error("LIFF Initialization failed", err);
     //             // ถ้าพังในคอมพิวเตอร์ (ไม่ใช่ LINE) อาจจะไม่ผ่านขั้นตอนล่าง
     //         }
-    //     }
+    //    // };
     //     initLiff();
     // }, []);
+
+    const handleResetAuth = async () => {
+        const result = await Swal.fire({
+            title: 'ต้องการเริ่มเข้าสู่ระบบใหม่?',
+            text: "ระบบจะทำการ Logout และล้างข้อมูลแคชชั่วคราวในเครื่องของคุณ",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3b82f6',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: 'ยืนยัน',
+            cancelButtonText: 'ยกเลิก'
+        });
+
+        if (result.isConfirmed) {
+            setIsAuthenticating(true);
+            try {
+                await supabase.auth.signOut();
+                localStorage.removeItem('debug_mode');
+                if (liff.isLoggedIn()) {
+                    liff.logout();
+                }
+                sessionStorage.clear();
+                window.location.reload();
+            } catch (error) {
+                console.error("Reset Error:", error);
+                window.location.reload();
+            }
+        }
+    };
 
     useEffect(() => {
         const fetchMasterData = async () => {
@@ -337,6 +409,15 @@ function RegisterForm() {
         }
     }
 
+    if (isAuthenticating) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC]">
+                <Loader2 className="animate-spin text-blue-600 mb-4" size={40} />
+                <p className="text-slate-500 font-bold animate-pulse">กำลังยืนยันตัวตน LINE...</p>
+            </div>
+        )
+    }
+
     return (
         <div className="min-h-screen bg-[#F8FAFC] p-6 pb-20 font-sans">
             <div className="max-w-md mx-auto space-y-8">
@@ -368,14 +449,27 @@ function RegisterForm() {
 
                     {/* ส่วนที่แก้ไข: เพิ่ม mt-6 และ justify-center */}
                     {lineDisplayName && (
-                        <div className="flex items-center justify-center gap-2 mt-8 mb-4 p-3 bg-emerald-50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2 mx-auto max-w-[280px]">
-                            <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
-                                <UserCircle2 size={18} />
+                        <div className="flex items-center justify-center gap-2 mt-8 mb-4 p-3 bg-emerald-50 rounded-2xl border border-emerald-100 animate-in fade-in slide-in-from-top-2 mx-auto max-w-[300px] relative group">
+                            <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0 overflow-hidden border-2 border-white shadow-sm">
+                                {linePictureUrl ? (
+                                    <img src={linePictureUrl} alt="profile" className="w-full h-full object-cover" />
+                                ) : (
+                                    <UserCircle2 size={24} />
+                                )}
                             </div>
-                            <p className="text-[11px] font-bold text-emerald-700 text-left">
-                                เชื่อมต่อกับบัญชี LINE: <br />
-                                <span className="font-black text-emerald-900">{lineDisplayName}</span>
-                            </p>
+                            <div className="flex-1">
+                                <p className="text-[10px] font-bold text-emerald-600/70 leading-none mb-1">เชื่อมต่อบัญชี LINE แล้ว</p>
+                                <p className="text-[14px] font-black text-emerald-900 leading-tight truncate max-w-[150px]">{lineDisplayName}</p>
+                                <p className="text-[9px] font-mono text-emerald-600/60 truncate max-w-[150px]">{lineUserId}</p>
+                            </div>
+                            <button 
+                                onClick={handleResetAuth}
+                                className="shrink-0 p-2 bg-white hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-all border border-emerald-100 shadow-sm flex flex-col items-center gap-0.5"
+                                title="ล้างแคชและเข้าใหม่"
+                            >
+                                <Loader2 size={12} className="rotate-45" />
+                                <span className="text-[8px] font-bold leading-none">เริ่มใหม่</span>
+                            </button>
                         </div>
                     )}
                 </div>

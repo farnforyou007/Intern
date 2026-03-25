@@ -40,13 +40,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Unauthorized. Please login via LINE first.' }, { status: 401 })
         }
 
-        const lineUserId = user.user_metadata.line_user_id || user.app_metadata.line_user_id;
-        const lineDisplayName = user.user_metadata.full_name || user.user_metadata.display_name || user.user_metadata.name || 'Unknown User';
+        const lineUserId = user.user_metadata?.line_user_id || user.app_metadata?.line_user_id || user.user_metadata?.sub;
+        const lineDisplayName = user.user_metadata?.full_name || user.user_metadata?.display_name || user.user_metadata?.name || 'Unknown User';
 
         console.log('Registering Supervisor:', {
             lineUserId,
             lineDisplayName,
-            userId: user.id
+            userId: user.id,
+            formEmail: email
         });
 
         if (!lineUserId) {
@@ -109,6 +110,26 @@ export async function POST(request: Request) {
         if (subjectInserts.length > 0) {
             const { error: subError } = await supabase.from('supervisor_subjects').insert(subjectInserts)
             if (subError) throw subError
+        }
+
+        // 3. Sync Real Email to Supabase Auth
+        // เราเปลี่ยนจาก shadow email ให้เป็น email จริงที่กรอกมาในฟอร์ม
+        if (email && email.includes('@')) {
+            try {
+                const { supabaseAdmin } = await import('@/lib/supabase-admin')
+                const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+                    email: email,
+                    email_confirm: true // ยืนยันให้เลยเพราะผ่านการเช็คจาก LINE มาแล้วเบื้องต้น หรือถือว่ากรอกเอง
+                })
+                if (authUpdateError) {
+                    console.error('Failed to sync email to Auth:', authUpdateError.message)
+                    // ไม่ throw error เพื่อให้การลงทะเบียนหลักยังถือว่าสำเร็จ
+                } else {
+                    console.log('Successfully synced real email to Auth:', email)
+                }
+            } catch (err) {
+                console.error('Error importing supabaseAdmin:', err)
+            }
         }
 
         return NextResponse.json({ success: true, data: supervisor })
