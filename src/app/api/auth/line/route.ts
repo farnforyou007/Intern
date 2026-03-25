@@ -70,38 +70,60 @@ export async function POST(req: Request) {
 
         let session = loginData?.session
 
-        // 3. If Login fails (account deleted or first time), Create the user
-        if (loginError && loginError.message.includes('Invalid login credentials')) {
+        // 3. If Login fails (account deleted, first time, or password mismatch), Create or Repair the user
+        if (loginError) {
             const supabaseAdmin = createClient(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
                 process.env.SUPABASE_SERVICE_ROLE_KEY!,
                 { auth: { autoRefreshToken: false, persistSession: false } }
             )
 
-            const { data: { user: newUser }, error: createError } = await supabaseAdmin.auth.admin.createUser({
-                email: shadowEmail,
-                password: shadowPassword,
-                email_confirm: true,
-                user_metadata: { 
-                    full_name: name, 
-                    name: name, // redundantly store for compatibility
-                    avatar_url: picture, 
-                    line_user_id: lineUserId 
-                },
-                app_metadata: { provider: 'line' }
-            })
+            // Check if user actually exists in Auth
+            const { data: { users }, error: listError } = await supabaseAdmin.auth.admin.listUsers()
+            const existingAuthUser = users.find(u => u.email === shadowEmail || u.email === loginEmail)
 
-            if (createError) throw createError
+            if (existingAuthUser) {
+                console.log('User exists but login failed (likely password mismatch). Repairing password...');
+                // Repair Password: Update to current shadow password logic
+                const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, {
+                    password: shadowPassword,
+                    email_confirm: true
+                })
+                if (updateError) throw updateError
 
-            const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
-                email: shadowEmail,
-                password: shadowPassword
-            })
+                // Retry login
+                const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
+                    email: existingAuthUser.email!,
+                    password: shadowPassword
+                })
+                if (retryError) throw retryError
+                session = retryData?.session
+            } else if (loginError.message.includes('Invalid login credentials')) {
+                // Truly a new user
+                const { data: { user: newUser }, error: createError } = await supabaseAdmin.auth.admin.createUser({
+                    email: shadowEmail,
+                    password: shadowPassword,
+                    email_confirm: true,
+                    user_metadata: { 
+                        full_name: name, 
+                        name: name,
+                        avatar_url: picture, 
+                        line_user_id: lineUserId 
+                    },
+                    app_metadata: { provider: 'line' }
+                })
 
-            if (retryError) throw retryError
-            session = retryData?.session
-        } else if (loginError) {
-            throw loginError
+                if (createError) throw createError
+
+                const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
+                    email: shadowEmail,
+                    password: shadowPassword
+                })
+                if (retryError) throw retryError
+                session = retryData?.session
+            } else {
+                throw loginError
+            }
         }
 
         // 4. Robust Metadata Sync: Always ensure metadata has LINE info

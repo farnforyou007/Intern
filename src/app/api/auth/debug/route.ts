@@ -45,7 +45,7 @@ export async function POST(req: Request) {
             }
         }
 
-        // 1. Attempt Login
+        // 2. Attempt Login
         let { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
             email: loginEmail,
             password: shadowPassword
@@ -53,37 +53,46 @@ export async function POST(req: Request) {
 
         let session = loginData?.session
 
-        // 2. If Login fails, create user using Service Role
-        if (loginError && loginError.message.includes('Invalid login credentials')) {
+        if (loginError) {
             const supabaseAdmin = createClient(
                 process.env.NEXT_PUBLIC_SUPABASE_URL!,
                 process.env.SUPABASE_SERVICE_ROLE_KEY!,
                 { auth: { autoRefreshToken: false, persistSession: false } }
             )
 
-            const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-                email: shadowEmail,
-                password: shadowPassword,
-                email_confirm: true,
-                user_metadata: {
-                    full_name: name || 'Debug User',
-                    avatar_url: 'https://cdn-icons-png.flaticon.com/512/0/93.png',
-                    line_user_id: lineUserId
-                },
-                app_metadata: { provider: 'line' }
-            })
+            // Check if user exists
+            const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
+            const existingAuthUser = users.find(u => u.email === shadowEmail || u.email === loginEmail)
 
-            if (createError) throw createError
-
-            // Login after creation (initial email)
-            const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
-                email: shadowEmail,
-                password: shadowPassword
-            })
-            if (retryError) throw retryError
-            session = retryData?.session
-        } else if (loginError) {
-            throw loginError
+            if (existingAuthUser) {
+                // Repair password
+                await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, {
+                    password: shadowPassword,
+                    email_confirm: true
+                })
+                const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
+                    email: existingAuthUser.email!,
+                    password: shadowPassword
+                })
+                if (retryError) throw retryError
+                session = retryData?.session
+            } else if (loginError.message.includes('Invalid login credentials')) {
+                const { data: { user: newUser }, error: createError } = await supabaseAdmin.auth.admin.createUser({
+                    email: shadowEmail,
+                    password: shadowPassword,
+                    email_confirm: true,
+                    user_metadata: { full_name: name, line_user_id: lineUserId },
+                })
+                if (createError) throw createError
+                const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
+                    email: shadowEmail,
+                    password: shadowPassword
+                })
+                if (retryError) throw retryError
+                session = retryData?.session
+            } else {
+                throw loginError
+            }
         }
 
         // 3. Robust Metadata Sync: Always update metadata with latest info
