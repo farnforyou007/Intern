@@ -10,9 +10,14 @@ export async function POST(req: Request) {
         if (!idToken) throw new Error('ID Token is required')
 
         // 1. Verify LINE Token
-        // The LIFF ID starts with the Channel ID
-        const channelId = process.env.NEXT_PUBLIC_LIFF_ID?.split('-')[0];
-        if (!channelId) throw new Error('NEXT_PUBLIC_LIFF_ID is not configured')
+        const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+        if (!liffId) {
+            console.error('Missing NEXT_PUBLIC_LIFF_ID');
+            throw new Error('NEXT_PUBLIC_LIFF_ID is not configured');
+        }
+
+        const channelId = liffId.split('-')[0];
+        console.log('Verifying LINE token for Channel ID:', channelId);
 
         const lineRes = await fetch('https://api.line.me/oauth2/v2.1/verify', {
             method: 'POST',
@@ -25,8 +30,8 @@ export async function POST(req: Request) {
 
         const lineData = await lineRes.json()
         if (!lineRes.ok) {
-            console.error('LINE Verification Failed:', lineData)
-            throw new Error(lineData.error_description || 'Invalid LINE token')
+            console.error('LINE Verification Failed:', { lineData, channelId });
+            throw new Error(`LINE Verifier: ${lineData.error_description || 'Invalid LINE token'}`);
         }
 
         const { sub: lineUserId, name, picture } = lineData
@@ -172,7 +177,19 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, redirectTo: '/register', user: session?.user, session })
 
     } catch (error: any) {
-        console.error('LINE Auth Bridge Error:', error)
-        return NextResponse.json({ success: false, error: error.message }, { status: 401 })
+        console.error('LINE Auth Bridge Detailed Error:', {
+            message: error.message,
+            stack: error.stack,
+            env: {
+                hasLiffId: !!process.env.NEXT_PUBLIC_LIFF_ID,
+                hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+                hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL
+            }
+        })
+        return NextResponse.json({ 
+            success: false, 
+            error: error.message,
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+        }, { status: 401 })
     }
 }
