@@ -49,6 +49,13 @@ export default function SplitHomePage() {
                 // 3. ถ้าไม่มี Supabase Session แต่ Login LIFF ไว้แล้ว -> ทำการ Bridge สิทธิ
                 if (liff.isLoggedIn()) {
                     const idToken = liff.getIDToken();
+
+                    // ป้องกัน idToken เป็น null (token หมดอายุ) → บังคับ login ใหม่
+                    if (!idToken) {
+                        liff.login({ redirectUri: window.location.href });
+                        return;
+                    }
+
                     const res = await fetch('/api/auth/line', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -81,6 +88,13 @@ export default function SplitHomePage() {
             }
 
             const idToken = liff.getIDToken()
+
+            // ป้องกัน idToken เป็น null → บังคับ login ใหม่เพื่อรับ token ใหม่
+            if (!idToken) {
+                liff.login({ redirectUri: window.location.href })
+                return
+            }
+
             const res = await fetch('/api/auth/line', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -91,11 +105,13 @@ export default function SplitHomePage() {
                 const data = await res.json()
                 router.replace(data.redirectTo || '/')
             } else {
-                router.push('/register')
+                // Bridge ล้มเหลว → ลอง login ใหม่แทนการเด้งไป register ทันที
+                liff.login({ redirectUri: window.location.href })
             }
         } catch (err) {
             console.error("Login failed", err)
-            router.push('/register')
+            // เกิด error → ลอง login ใหม่แทนการเด้งไป register
+            try { liff.login({ redirectUri: window.location.href }) } catch { router.push('/register') }
         }
     }
 
@@ -250,10 +266,10 @@ export default function SplitHomePage() {
                         </div>
                     </div>
 
-                    
+
 
                     {/* Debug Mode (Local Dev only) */}
-                    {/* {isDev && (
+                    {isDev && (
                         <div className="p-6 bg-amber-50/50 rounded-[2.5rem] border border-amber-200/50 border-dashed">
                             <div className="flex items-center gap-2 mb-4">
                                 <ShieldCheck size={14} className="text-amber-600" />
@@ -291,7 +307,7 @@ export default function SplitHomePage() {
                             </div>
                             <p className="text-[9px] text-amber-500 mt-2 font-bold uppercase italic opacity-70">* ใช้สำหรับจำลองการ Login เพื่อความรวดเร็วในการพัฒนาบนเครื่อง Local</p>
                         </div>
-                    )} */}
+                    )}
 
                     {/* Bottom Actions */}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-6 border-t border-slate-200 pt-10">

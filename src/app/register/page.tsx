@@ -46,6 +46,7 @@ function RegisterForm() {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false)
     const [selectedSite, setSelectedSite] = useState<any>(null)
     const [isAuthenticating, setIsAuthenticating] = useState(true) // New state
+    const [authError, setAuthError] = useState<string | null>(null) // Error message for auth failures
     const dropdownRef = useRef<HTMLDivElement>(null)
 
     // --- State สำหรับวิชาที่รับผิดชอบ ---
@@ -64,6 +65,7 @@ function RegisterForm() {
     useEffect(() => {
         const initLiff = async () => {
             setIsAuthenticating(true);
+            setAuthError(null);
             try {
                 // 1. Check for User ID (Debug or Search Params)
                 const lineId = await getLineUserId(searchParams);
@@ -172,8 +174,9 @@ function RegisterForm() {
                     setLineUserId(sessionLineId);
                     setLinePictureUrl(user.user_metadata?.avatar_url || '');
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.error("Auth Init Error", err)
+                setAuthError(err?.message || 'ไม่สามารถยืนยันตัวตนได้ กรุณาลองใหม่อีกครั้ง');
             } finally {
                 setIsAuthenticating(false);
             }
@@ -355,7 +358,7 @@ function RegisterForm() {
 
             const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(fileName);
 
-            // 2. ส่งข้อมูลไปที่ API
+            // 2. ส่งข้อมูลไปที่ API (✅ ส่ง lineUserId ไปด้วยเพื่อเป็น Fallback กรณี Cookie หาย)
             const res = await fetch('/api/register/supervisor', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -368,7 +371,8 @@ function RegisterForm() {
                     province: userType === 'supervisor' ? selectedSite?.province : 'มหาวิทยาลัย',
                     role: userType,
                     selectedSubjects,
-                    selectedSubSubjects
+                    selectedSubSubjects,
+                    lineUserId // ✅ Fallback identity
                 })
             })
 
@@ -470,6 +474,53 @@ function RegisterForm() {
                                 <Loader2 size={12} className="rotate-45" />
                                 <span className="text-[8px] font-bold leading-none">เริ่มใหม่</span>
                             </button>
+                        </div>
+                    )}
+
+                    {/* ✅ แสดงข้อความเมื่อไม่มี LINE Identity (หลังจาก Auth เสร็จแล้ว) */}
+                    {!lineDisplayName && !isAuthenticating && (
+                        <div className="flex flex-col items-center gap-3 mt-8 mb-4 p-5 bg-red-50 rounded-2xl border border-red-100 animate-in fade-in slide-in-from-top-2 mx-auto max-w-[320px]">
+                            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-500">
+                                <UserCircle2 size={28} />
+                            </div>
+                            <p className="text-sm font-bold text-red-700 text-center">
+                                {authError || 'ยังไม่ได้เชื่อมต่อบัญชี LINE'}
+                            </p>
+                            <p className="text-xs text-red-500/70 text-center">
+                                กรุณาเข้าใช้งานผ่านแอป LINE เพื่อลงทะเบียน
+                            </p>
+                            <div className="flex gap-2 mt-1">
+                                <button
+                                    onClick={async () => {
+                                        setIsAuthenticating(true);
+                                        setAuthError(null);
+                                        try {
+                                            if (!liff.id) {
+                                                await liff.init({ liffId: process.env.NEXT_PUBLIC_LIFF_ID! });
+                                            }
+                                            if (!liff.isLoggedIn()) {
+                                                liff.login({ redirectUri: window.location.href });
+                                            } else {
+                                                // ถ้า LIFF ล็อกอินอยู่แล้วแต่ Bridge พัง ให้ลองใหม่
+                                                window.location.reload();
+                                            }
+                                        } catch (e) {
+                                            setAuthError('ไม่สามารถเชื่อมต่อ LINE ได้ กรุณาลองใหม่');
+                                            setIsAuthenticating(false);
+                                        }
+                                    }}
+                                    className="px-5 py-2.5 bg-[#06C755] text-white rounded-xl font-bold text-sm shadow-md hover:bg-[#05b34d] transition-all active:scale-95 flex items-center gap-2"
+                                >
+                                    <UserCircle2 size={16} />
+                                    เข้าสู่ระบบ LINE
+                                </button>
+                                <button
+                                    onClick={handleResetAuth}
+                                    className="px-4 py-2.5 bg-white text-slate-500 rounded-xl font-bold text-sm border border-slate-200 hover:bg-slate-50 transition-all active:scale-95"
+                                >
+                                    เริ่มใหม่
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -631,7 +682,7 @@ function RegisterForm() {
                         </div>
                     </div>
 
-                    <button disabled={loading} className="w-full h-16 bg-slate-900 text-white rounded-[2rem] font-black text-xl shadow-xl active:scale-95 transition-all disabled:bg-slate-300 flex items-center justify-center gap-3">
+                    <button disabled={loading || !lineUserId} className="w-full h-16 bg-slate-900 text-white rounded-[2rem] font-black text-xl shadow-xl active:scale-95 transition-all disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center gap-3">
                         {loading ? <Loader2 className="animate-spin" /> : "ยืนยันการลงทะเบียน"}
                     </button>
                 </form>

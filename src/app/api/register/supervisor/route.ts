@@ -30,17 +30,45 @@ export async function POST(request: Request) {
             province,
             role,
             selectedSubjects,
-            selectedSubSubjects
+            selectedSubSubjects,
+            lineUserId: clientLineUserId // ✅ รับ lineUserId จาก Client เพื่อใช้เป็น Fallback
         } = body
 
         const supabase = await createServerSupabase()
-        const { data: { user } } = await supabase.auth.getUser()
+        let { data: { user } } = await supabase.auth.getUser()
+
+        // ----------------------------------------------------------------
+        // ✅ FALLBACK: ถ้า Cookie Session หาย (เช่น HTTP หรือมือถือบางรุ่น)
+        // ให้ใช้ Admin Client ค้นหา user จาก lineUserId ที่ Client ส่งมาแทน
+        // ----------------------------------------------------------------
+        if (!user && clientLineUserId && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+            console.log('Cookie session lost. Attempting fallback lookup for LINE ID:', clientLineUserId);
+
+            const { createClient } = await import('@supabase/supabase-js')
+            const supabaseAdmin = createClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.SUPABASE_SERVICE_ROLE_KEY!,
+                { auth: { autoRefreshToken: false, persistSession: false } }
+            )
+
+            // ค้นหา user จาก metadata (line_user_id)
+            const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
+            const foundUser = users?.find(u =>
+                u.user_metadata?.line_user_id === clientLineUserId ||
+                u.app_metadata?.line_user_id === clientLineUserId
+            )
+
+            if (foundUser) {
+                user = foundUser as any
+                console.log('Fallback: Found user via Admin lookup:', foundUser.id);
+            }
+        }
 
         if (!user) {
             return NextResponse.json({ success: false, error: 'Unauthorized. Please login via LINE first.' }, { status: 401 })
         }
 
-        const lineUserId = user.user_metadata?.line_user_id || user.app_metadata?.line_user_id || user.user_metadata?.sub;
+        const lineUserId = user.user_metadata?.line_user_id || user.app_metadata?.line_user_id || user.user_metadata?.sub || clientLineUserId;
         const lineDisplayName = user.user_metadata?.full_name || user.user_metadata?.display_name || user.user_metadata?.name || 'Unknown User';
 
         console.log('Registering Supervisor:', {
@@ -112,25 +140,32 @@ export async function POST(request: Request) {
             if (subError) throw subError
         }
 
-        // 3. Sync Real Email to Supabase Auth
-        // เราเปลี่ยนจาก shadow email ให้เป็น email จริงที่กรอกมาในฟอร์ม
-        if (email && email.includes('@')) {
-            try {
-                const { supabaseAdmin } = await import('@/lib/supabase-admin')
-                const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-                    email: email,
-                    email_confirm: true // ยืนยันให้เลยเพราะผ่านการเช็คจาก LINE มาแล้วเบื้องต้น หรือถือว่ากรอกเอง
-                })
-                if (authUpdateError) {
-                    console.error('Failed to sync email to Auth:', authUpdateError.message)
-                    // ไม่ throw error เพื่อให้การลงทะเบียนหลักยังถือว่าสำเร็จ
-                } else {
-                    console.log('Successfully synced real email to Auth:', email)
+        // 3. Sync Real Email + Role to Supabase Auth
+        // เราเปลี่ยนจาก shadow email ให้เป็น email จริง + ใส่ role เข้าไปด้วยเลย
+        try {
+            const { supabaseAdmin } = await import('@/lib/supabase-admin')
+            const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+                ...(email && email.includes('@') ? { email: email, email_confirm: true } : {}),
+                user_metadata: {
+                    ...(user.user_metadata || {}),
+                    role: role,                   // ✅ ใส่ role ทันทีตอนลงทะเบียน
+                    is_verified: false,           // ✅ ยังไม่ได้อนุมัติ
+                    line_user_id: lineUserId,
+                    full_name: fullName || user.user_metadata?.full_name
+                },
+                app_metadata: {
+                    provider: 'line'              // ✅ บังคับ provider = 'line'
                 }
-            } catch (err) {
-                console.error('Error importing supabaseAdmin:', err)
+            })
+            if (authUpdateError) {
+                console.error('Failed to sync metadata to Auth:', authUpdateError.message)
+            } else {
+                console.log('Successfully synced email + role to Auth:', { email, role })
             }
+        } catch (err) {
+            console.error('Error importing supabaseAdmin:', err)
         }
+
 
         return NextResponse.json({ success: true, data: supervisor })
     } catch (error: any) {

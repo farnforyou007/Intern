@@ -5,6 +5,13 @@ import { createServerSupabase } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 export async function POST(req: Request) {
+    // ✅ Lazy Admin Client — สร้างตอน runtime เท่านั้น (ไม่สร้างตอน build ป้องกัน Docker พัง)
+    const getAdmin = () => createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+
     try {
         const { idToken } = await req.json()
         if (!idToken) throw new Error('ID Token is required')
@@ -42,25 +49,21 @@ export async function POST(req: Request) {
         const supabase = await createServerSupabase()
 
         // 1.5. Robust Lookup: Find existing user by line_user_id
-        const { data: supervisorRecord } = await supabase
+        // ✅ ใช้ supabaseAdmin เพราะขั้นตอนนี้ยังไม่มี Session (ก่อน signInWithPassword)
+        const { data: supervisorRecord } = await getAdmin()
             .from('supervisors')
             .select('user_id')
             .eq('line_user_id', lineUserId)
             .maybeSingle()
 
-        if (supervisorRecord?.user_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-            const supabaseAdmin = createClient(
-                process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.SUPABASE_SERVICE_ROLE_KEY!,
-                { auth: { autoRefreshToken: false, persistSession: false } }
-            )
-
-            const { data: { user: authUser }, error: getError } = await supabaseAdmin.auth.admin.getUserById(supervisorRecord.user_id)
+        if (supervisorRecord?.user_id) {
+            const { data: { user: authUser }, error: getError } = await getAdmin().auth.admin.getUserById(supervisorRecord.user_id)
 
             if (!getError && authUser?.email) {
                 loginEmail = authUser.email
             }
         }
+
 
         // 2. Attempt Login
         let { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
@@ -104,11 +107,11 @@ export async function POST(req: Request) {
                     email: shadowEmail,
                     password: shadowPassword,
                     email_confirm: true,
-                    user_metadata: { 
-                        full_name: name, 
+                    user_metadata: {
+                        full_name: name,
                         name: name,
-                        avatar_url: picture, 
-                        line_user_id: lineUserId 
+                        avatar_url: picture,
+                        line_user_id: lineUserId
                     },
                     app_metadata: { provider: 'line' }
                 })
@@ -150,20 +153,67 @@ export async function POST(req: Request) {
         if (session?.user) {
             const { user } = session
 
-            // Check supervisors table
-            const { data: supervisor } = await supabase
+            console.log('🔍 [Bridge] Looking up supervisor:', {
+                lineUserId,
+                authUserId: user.id,
+                loginEmail
+            })
+
+            // ✅ ใช้ supabaseAdmin เพื่อข้าม RLS (แก้ปัญหา user_id ไม่ตรงหลังซ่อมรหัสผ่าน)
+            const { data: supervisor, error: supervisorError } = await getAdmin()
                 .from('supervisors')
                 .select('id, user_id, role, is_verified')
                 .eq('line_user_id', lineUserId)
                 .maybeSingle()
 
-            if (supervisor) {
+            if (supervisorError) {
+                console.error('❌ [Bridge] Supervisor lookup error:', supervisorError.message);
+            }
+
+            // 🔄 Fallback: ถ้าค้นด้วย line_user_id ไม่เจอ → ลองค้นด้วย user_id
+            let finalSupervisor = supervisor
+            if (!finalSupervisor && !supervisorError) {
+                console.log('⚠️ [Bridge] Supervisor not found by line_user_id, trying user_id fallback...', { lineUserId, authUserId: user.id })
+
+                const { data: fallbackSv, error: fallbackError } = await getAdmin()
+                    .from('supervisors')
+                    .select('id, user_id, role, is_verified, line_user_id')
+                    .eq('user_id', user.id)
+                    .maybeSingle()
+
+                if (fallbackError) {
+                    console.error('❌ [Bridge] Fallback lookup error:', fallbackError.message);
+                }
+
+                if (fallbackSv) {
+                    console.log('✅ [Bridge] Found via user_id fallback! Repairing line_user_id...', {
+                        supervisorId: fallbackSv.id,
+                        oldLineUserId: fallbackSv.line_user_id,
+                        newLineUserId: lineUserId
+                    })
+                    // Auto-repair: อัพเดท line_user_id ให้ตรงกับที่ LINE ส่งมาจริง
+                    await getAdmin()
+                        .from('supervisors')
+                        .update({ line_user_id: lineUserId })
+                        .eq('id', fallbackSv.id)
+                    finalSupervisor = fallbackSv
+                }
+            }
+
+            console.log('📋 [Bridge] Supervisor lookup result:', {
+                found: !!finalSupervisor,
+                supervisorId: finalSupervisor?.id,
+                supervisorRole: finalSupervisor?.role,
+                isVerified: finalSupervisor?.is_verified
+            })
+
+            if (finalSupervisor) {
                 // Determine target redirect path
                 let redirectTo = '/register'
-                if (!supervisor.is_verified) {
-                    redirectTo = supervisor.role === 'teacher' ? '/teacher/pending' : '/supervisor/pending'
+                if (!finalSupervisor.is_verified) {
+                    redirectTo = finalSupervisor.role === 'teacher' ? '/teacher/pending' : '/supervisor/pending'
                 } else {
-                    redirectTo = supervisor.role === 'teacher' ? '/teacher/dashboard' : '/supervisor/dashboard'
+                    redirectTo = finalSupervisor.role === 'teacher' ? '/teacher/dashboard' : '/supervisor/dashboard'
                 }
 
                 // Sync critical role data to Supabase Metadata for Middleware protection
@@ -176,19 +226,20 @@ export async function POST(req: Request) {
                     await supabaseAdmin.auth.admin.updateUserById(user.id, {
                         user_metadata: {
                             ...(user.user_metadata || {}),
-                            role: supervisor.role,
-                            is_verified: supervisor.is_verified,
+                            role: finalSupervisor.role,
+                            is_verified: finalSupervisor.is_verified,
                             line_user_id: lineUserId
                         }
                     })
                 }
 
                 // Update link if missing or changed (e.g. after re-creation)
-                if (supervisor.user_id !== user.id) {
-                    await supabase
+                if (finalSupervisor.user_id !== user.id) {
+                    console.log('🔧 [Bridge] Updating supervisor user_id link:', { old: finalSupervisor.user_id, new: user.id });
+                    await getAdmin()
                         .from('supervisors')
                         .update({ user_id: user.id })
-                        .eq('id', supervisor.id)
+                        .eq('id', finalSupervisor.id)
                 }
 
                 return NextResponse.json({ success: true, redirectTo, user, session })
@@ -196,6 +247,11 @@ export async function POST(req: Request) {
         }
 
         // If no supervisor record found, send to register
+        console.log('📭 [Bridge] No supervisor record found for this user. Redirecting to /register', {
+            hasSession: !!session?.user,
+            authUserId: session?.user?.id,
+            lineUserId: lineData?.sub
+        })
         return NextResponse.json({ success: true, redirectTo: '/register', user: session?.user, session })
 
     } catch (error: any) {
@@ -208,10 +264,10 @@ export async function POST(req: Request) {
                 hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL
             }
         })
-        return NextResponse.json({ 
-            success: false, 
+        return NextResponse.json({
+            success: false,
             error: error.message,
-            details: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+            details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         }, { status: 401 })
     }
 }
