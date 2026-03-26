@@ -590,7 +590,8 @@ export default function SupervisorStudentList() {
                         {configYear ? (
                             <div className="bg-amber-50 border border-amber-200 p-6 rounded-[2rem] mx-auto max-w-sm">
                                 <AlertCircle size={36} className="mx-auto mb-3 text-amber-500" />
-                                <p className="font-black text-amber-800 text-sm">ไม่พบรายชื่อนักศึกษา</p>
+                                <p className="font-black text-amber-800 text-sm">ไม่พบรายชื่อนักศึกษาที่รับผิดชอบ</p>
+                                <p className="font-medium text-amber-800 text-[11px]">คุณสามารถเพิ่มนักศึกษาที่รับผิดชอบได้ที่ → แถบ "นศ. ทั้งหมด"</p>
                                 <p className="text-xs text-amber-600 font-medium mt-1">ในรอบปีการศึกษา {configYear}</p>
                             </div>
                         ) : (

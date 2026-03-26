@@ -98,6 +98,12 @@ export default function SupervisorDashboard() {
             console.error("Dashboard Fetch Error:", error);
         } finally {
             setLoading(false);
+
+            // แสดง Tour อัตโนมัติเมื่อเข้ามาครั้งแรก
+            if (!localStorage.getItem('supervisor_tour_seen')) {
+                localStorage.setItem('supervisor_tour_seen', 'true');
+                setTimeout(() => setShowTour(true), 800);
+            }
         }
     };
 
@@ -270,7 +276,7 @@ export default function SupervisorDashboard() {
                 </div> */}
 
                 <div className="p-2 relative z-10 grid grid-cols-2 gap-3">
-                    <KPICard label="นศ. ในความดูแล" value={stats.total} icon={<Users size={16} />} color="bg-white/10 text-white" />
+                    <KPICard label="นักศึกษาที่รับผิดชอบ" value={stats.total} icon={<Users size={16} />} color="bg-white/10 text-white" />
                     <KPICard label="ประเมินครบ" value={stats.evaluated} icon={<CheckCircle size={16} />} color="bg-emerald-500/40 text-emerald-100" />
                     <KPICard label="ประเมินบางส่วน" value={stats.partial} icon={<Clock size={16} />} color="bg-amber-500/40 text-amber-100" />
                     <KPICard label="ยังไม่ประเมิน" value={stats.pending} icon={<AlertCircle size={16} />} color="bg-rose-500/40 text-rose-100" />
@@ -306,7 +312,8 @@ export default function SupervisorDashboard() {
                 </div>
             </div> */}
 
-            {/* --- Notification Bar (Facebook-style) --- */}
+            {/* --- Notification Bar (Facebook-style) — ซ่อนเมื่อยังไม่มี นศ. --- */}
+            {stats.total > 0 && (
             <div className="px-6 -mt-8 relative z-20">
                 <div className={`rounded-[2.5rem] shadow-xl shadow-slate-200/60 border transition-colors overflow-hidden ${alertStatus === 'overdue' ? 'bg-red-50 border-red-100' : 'bg-white border-slate-50'}`}>
                     {/* Main notification row */}
@@ -390,17 +397,28 @@ export default function SupervisorDashboard() {
                     )}
                 </div>
             </div>
+            )}
 
-            {/* 🔒 แจ้งเตือนเมื่อไม่มีนักศึกษาในปีปัจจุบัน */}
+            {/* 🔒 แจ้งเตือนเมื่อไม่มีนักศึกษาในความดูแล */}
             {
-                configYear && stats.total === 0 && !loading && (
-                    <div className="mx-6 mt-6 bg-amber-50 border border-amber-200 p-5 rounded-[2rem] flex items-start gap-4">
-                        <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600 shrink-0">
-                            <AlertCircle size={24} />
-                        </div>
-                        <div>
-                            <p className="text-sm font-black text-amber-800">ไม่พบรายชื่อนักศึกษา</p>
-                            <p className="text-xs text-amber-600 font-medium mt-0.5">ในรอบปีการศึกษา {configYear} ยังไม่มีนักศึกษาที่อยู่ในความดูแลของคุณ</p>
+                stats.total === 0 && !loading && (
+                    <div className="mx-6 -mt-6 relative z-20">
+                        <div className="bg-white border border-slate-100 p-6 rounded-[2.5rem] shadow-xl shadow-slate-200/60 text-center">
+                            <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500 mx-auto mb-4">
+                                <Users size={32} />
+                            </div>
+                            <p className="text-sm font-black text-slate-800">ไม่พบรายชื่อนักศึกษาที่รับผิดชอบ</p>
+                            <p className="text-xs text-slate-400 font-medium mt-1.5 leading-relaxed">
+                                สามารถเพิ่มนักศึกษาที่รับผิดชอบได้ที่เมนู<br />"รายชื่อนักศึกษา" → แถบ "นศ. ทั้งหมด"
+                            </p>
+                            <button
+                                onClick={() => router.push('/supervisor/students')}
+                                className="mt-4 bg-[#064e3b] text-white text-xs font-black px-6 py-3 rounded-2xl shadow-lg active:scale-95 transition-all hover:bg-[#043e2f] inline-flex items-center gap-2"
+                            >
+                                <Users size={14} />
+                                ไปที่รายชื่อนักศึกษา
+                                <ChevronRight size={14} />
+                            </button>
                         </div>
                     </div>
                 )
