@@ -200,7 +200,7 @@ export default function ForgotPasswordPage() {
                     <ForgotPasswordForm />
                 </Suspense>
 
-                <Link href="/login" className="flex items-center justify-center gap-2 mt-8 text-sm text-slate-500 hover:text-slate-800 transition-colors">
+                <Link href="/auth/login" className="flex items-center justify-center gap-2 mt-8 text-sm text-slate-500 hover:text-slate-800 transition-colors">
                     <ArrowLeft className="w-4 h-4" /> กลับหน้าเข้าสู่ระบบ
                 </Link>
             </div>

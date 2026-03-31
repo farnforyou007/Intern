@@ -375,22 +375,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             });
         }
 
-        // 2. เคลียร์ Storage ทั้งหมดทันที (ตามที่ผู้ใช้แนะนำ)
+        // 2. เคลียร์ Storage ทั้งหมด
         localStorage.clear();
         sessionStorage.clear();
 
-        // 3. signOut แบบ timeout
+        // 3. เรียก API Logout ฝั่ง Server เพื่อลบคุกกี้ HttpOnly
         try {
             await Promise.race([
-                supabase.auth.signOut({ scope: 'local' }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('signOut timeout')), 2000))
+                fetch('/api/auth/logout', { method: 'POST' }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Logout API timeout')), 3000))
             ]);
         } catch (e) {
-            console.warn('signOut skipped or timed out:', e);
+            console.warn('Server-side logout skipped or timed out:', e);
         }
 
-        // 4. บังคับเปลี่ยนหน้าและล้าง Cache เบราว์เซอร์
-        window.location.href = '/';
+        // 4. signOut ฝั่ง Client (Local)
+        try {
+            await supabase.auth.signOut({ scope: 'local' });
+        } catch (e) {
+            console.warn('Client-side signOut failed:', e);
+        }
+
+        // 5. บังคับเปลี่ยนหน้าไปยังหน้า Login ของ Admin โดยตรง (เพื่อเลี่ยง Middleware Redirect Loop ที่หน้าแรก)
+        window.location.href = '/auth/login';
     };
 
     // ฟังก์ชันรีเซ็ตเวลา (Timer)

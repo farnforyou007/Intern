@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   // ส่วนของ Open Graph (เวลาแชร์ลิงก์ใน LINE/Facebook จะมีรูปและคำอธิบายสวยๆ)
   openGraph: {
     title: "TTMED Internship System",
-    description: "ระบบจัดการการฝึกงาน คณะการแพทย์แผนไทย ม.สงขลานครินทร์",
+    description: "ระบบประเมินฝึกงาน คณะการแพทย์แผนไทย ม.สงขลานครินทร์",
     url: 'https://ttmed-intern.vercel.app', // ใส่ URL เว็บคุณที่นี่
     siteName: 'TTMED Internship System',
     images: [

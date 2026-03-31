@@ -281,278 +281,230 @@ export default function EvaluationSummary() {
     const paginatedData = data // Server-side already paginated it
 
 
-    const handleExportExcel = () => {
-        const workbook = XLSX.utils.book_new();
+    const handleExportExcel = async () => {
+        Swal.fire({
+            title: 'กำลังเตรียมข้อมูลสำหรับ Export...',
+            html: 'กรุณารอสักครู่ ระบบกำลังดึงข้อมูลทั้งหมดของปีการศึกษานี้',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
 
-        const evaluationSettings: { [key: string]: { short: string, color: string } } = {
-            'แบบประเมินการบันทึก (เล่ม)': { short: 'เล่ม', color: 'E2F2E9' },
-            'แบบประเมินฝึกประสบการณ์': { short: 'ฝึกงาน', color: 'E0E7FF' },
-            'แบบประเมินบุคลิกภาพ': { short: 'บุคลิก', color: 'FEF3C7' },
-            'การประเมินทักษะ': { short: 'ทักษะ', color: 'FCE7F3' }
-        };
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const lineUserId = await getLineUserId(urlParams);
+            if (!lineUserId) return;
 
-        const defaultColor = 'F3F4F6';
-        const summaryColor = '105030';
+            const params = new URLSearchParams();
+            params.append('lineUserId', lineUserId);
+            if (subjectId) params.append('subjectId', subjectId);
+            if (selectedTrainingYear) params.append('selectedTrainingYear', selectedTrainingYear);
+            if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
+            if (selectedBatch !== 'all') params.append('batch', selectedBatch);
+            params.append('sortField', sortField);
+            params.append('sortOrder', sortOrder);
+            params.append('page', '1');
+            params.append('limit', '9999'); // ดึงทั้งหมด
 
-        if (data.length > 0) {
-            const allEvalTitles = Array.from(new Set(data.flatMap(d => d.evaluations.map((e: any) => e.title))));
-            // --- เพิ่มส่วนนี้ก่อนเริ่มลูป allEvalTitles ---
+            const res = await fetch(`/api/teacher/evaluations?${params.toString()}`);
+            const result = await res.json();
 
-            // --- ส่วนการสร้างชีทสรุปผลรวม (Summary Sheet) ---
-
-            // 1. กำหนดตัวย่อสำหรับหัวข้อคอลัมน์
-            const shortNames: { [key: string]: string } = {
-                'แบบประเมินการบันทึกเล่ม': 'เล่ม',
-                'แบบประเมินบุคลิกภาพ (ANC)': 'บุคลิก ANC',
-                'แบบประเมินบุคลิกภาพ (LR)': 'บุคลิก LR',
-                'แบบประเมินบุคลิกภาพ (PP)': 'บุคลิก PP',
-                'แบบประเมินการฝึก (PP)': 'การฝึก PP',
-                'แบบประเมินการฝึก (LR)': 'การฝึก LR',
-                'แบบประเมินการฝึก (ANC)': 'การฝึก ANC' // เพิ่มเผื่อไว้ให้ครบ
-            };
-
-            const summaryData = data.map(item => {
-                const row: any = {
-                    'รหัสนักศึกษา': item.student?.student_code,
-                    'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
-                    'สถานที่ฝึก': item.place?.site_name || '-',
-                };
-
-                let totalNetScore = 0;
-
-                item.evaluations.forEach((evalItem: any) => {
-                    // ใช้ชื่อย่อที่กำหนดไว้ ถ้าไม่มีให้ตัดคำว่า "แบบประเมิน" ออก
-                    const shortName = shortNames[evalItem.title] || evalItem.title.replace('แบบประเมินการ', '').trim();
-
-                    const maxScore = (evalItem.answers?.length || 0) * 5;
-                    const netScore = evalItem.rawScore ? (evalItem.rawScore / maxScore) * (evalItem.weight * 100) : 0;
-
-                    row[shortName] = netScore !== 0 ? netScore.toFixed(2) : '-';
-                    totalNetScore += netScore;
-                });
-
-                row['รวมสุทธิ (100)'] = totalNetScore.toFixed(2);
-                row['สถานะ (>50)'] = totalNetScore >= 50 ? 'ผ่าน' : 'รอประเมิน'; // หรือเงื่อนไขอื่นๆ
-
-                return row;
-            });
-
-            const summaryWorksheet = XLSX.utils.json_to_sheet(summaryData);
-
-            // 2. ปรับความกว้างคอลัมน์ (Column Widths)
-            // wch คือจำนวนตัวอักษรโดยประมาณ
-            summaryWorksheet['!cols'] = [
-                { wch: 12 }, // รหัสนักศึกษา
-                { wch: 30 }, // ชื่อ-นามสกุล
-                { wch: 40 }, // สถานที่ฝึก
-                { wch: 20 }, // เล่ม
-                { wch: 15 }, // บุคลิก ANC
-                { wch: 15 }, // บุคลิก LR
-                { wch: 15 }, // บุคลิก PP
-                { wch: 15 }, // การฝึก PP
-                { wch: 15 }, // การฝึก LR
-                { wch: 20 }, // รวมสุทธิ
-                { wch: 20 }, // สถานะ
-            ];
-
-            // 3. ตกแต่ง Header ให้สวยงาม (สีเขียวเข้ม ตัวอักษรขาว)
-            const range = XLSX.utils.decode_range(summaryWorksheet['!ref'] || 'A1');
-            for (let C = range.s.c; C <= range.e.c; ++C) {
-                const addr = XLSX.utils.encode_cell({ r: 0, c: C });
-                if (!summaryWorksheet[addr]) continue;
-                summaryWorksheet[addr].s = {
-                    fill: { fgColor: { rgb: "105030" } },
-                    font: { color: { rgb: "FFFFFF" }, bold: true },
-                    alignment: { horizontal: "center", vertical: "center" },
-                    border: {
-                        top: { style: "thin", color: { rgb: "000000" } },
-                        bottom: { style: "thin", color: { rgb: "000000" } }
-                    }
-                };
+            if (!result.success || !result.data?.data) {
+                Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถดึงข้อมูลสำหรับ Export ได้', 'error');
+                return;
             }
 
-            XLSX.utils.book_append_sheet(workbook, summaryWorksheet, "สรุปผลคะแนนรวม");
+            const exportData = result.data.data;
+            const workbook = XLSX.utils.book_new();
 
-            // --- จากนั้นค่อยตามด้วยลูป allEvalTitles เดิมของคุณ ---
-            allEvalTitles.forEach(title => {
-                const config = evaluationSettings[title] || { short: title.replace('แบบประเมิน', '').trim(), color: defaultColor };
-                const sheetData: any[] = [];
+            const evaluationSettings: { [key: string]: { short: string, color: string } } = {
+                'แบบประเมินการบันทึก (เล่ม)': { short: 'เล่ม', color: 'E2F2E9' },
+                'แบบประเมินฝึกประสบการณ์': { short: 'ฝึกงาน', color: 'E0E7FF' },
+                'แบบประเมินบุคลิกภาพ': { short: 'บุคลิก', color: 'FEF3C7' },
+                'การประเมินทักษะ': { short: 'ทักษะ', color: 'FCE7F3' }
+            };
 
-                // data.forEach(item => {
-                //     const isMulti = item.mentorCount > 1;
+            const defaultColor = 'F3F4F6';
+            const summaryColor = '105030';
 
-                //     if (isMulti && item.supervisorEvaluations) {
-                //         // 🆕 แยกแถวรายพี่เลี้ยง
-                //         item.supervisorEvaluations.forEach((sv: any) => {
-                //             const svEval = sv.evaluations.find((e: any) => e.title === title);
-                //             const row: any = {
-                //                 'รหัสประจำตัว': item.student?.student_code,
-                //                 'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
-                //             };
-                //             if (svEval) {
-                //                 svEval.answers.forEach((ans: any, idx: number) => {
-                //                     row[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
-                //                 });
-                //                 const maxCur = (svEval.answers?.length || 0) * 5;
-                //                 row[`รวม ${config.short} (ดิบ/เต็ม)`] = `${svEval.rawScore}/${maxCur}`;
-                //                 row[`สุทธิหมวดนี้ (${(svEval.weight * 100)}%)`] = svEval.rawScore ? ((svEval.rawScore / maxCur) * (svEval.weight * 100)).toFixed(2) : 'N/A';
-                //                 row['ข้อเสนอแนะ'] = svEval.comment || '-';
-                //             }
-                //             row['ผู้ประเมิน'] = sv.supervisorName;
-                //             row['_rowType'] = 'mentor'; // marker สำหรับไฮไลท์
-                //             sheetData.push(row);
-                //         });
+            if (exportData.length > 0) {
+                const allEvalTitles = Array.from(new Set(exportData.flatMap((d: any) => d.evaluations.map((e: any) => e.title))));
 
-                //         // 🆕 แถวเฉลี่ย
-                //         const avgEval = item.evaluations.find((e: any) => e.title === title);
-                //         const avgRow: any = {
-                //             'รหัสประจำตัว': item.student?.student_code,
-                //             'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
-                //         };
-                //         if (avgEval) {
-                //             avgEval.answers.forEach((ans: any, idx: number) => {
-                //                 avgRow[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
-                //             });
-                //             const maxCur = (avgEval.answers?.length || 0) * 5;
-                //             avgRow[`รวม ${config.short} (ดิบ/เต็ม)`] = `${avgEval.rawScore}/${maxCur}`;
-                //             avgRow[`สุทธิหมวดนี้ (${(avgEval.weight * 100)}%)`] = avgEval.rawScore ? ((avgEval.rawScore / maxCur) * (avgEval.weight * 100)).toFixed(2) : 'N/A';
-                //             avgRow['ข้อเสนอแนะ'] = avgEval.comment || '-';
-                //         }
-                //         avgRow['ผู้ประเมิน'] = `⭐ เฉลี่ย (${item.mentorCount} คน)`;
-                //         avgRow['_rowType'] = 'average'; // marker สำหรับไฮไลท์
-                //         sheetData.push(avgRow);
+                const shortNames: { [key: string]: string } = {
+                    'แบบประเมินการบันทึกเล่ม': 'เล่ม',
+                    'แบบประเมินบุคลิกภาพ (ANC)': 'บุคลิก ANC',
+                    'แบบประเมินบุคลิกภาพ (LR)': 'บุคลิก LR',
+                    'แบบประเมินบุคลิกภาพ (PP)': 'บุคลิก PP',
+                    'แบบประเมินการฝึก (PP)': 'การฝึก PP',
+                    'แบบประเมินการฝึก (LR)': 'การฝึก LR',
+                    'แบบประเมินการฝึก (ANC)': 'การฝึก ANC'
+                };
 
-                //     } else {
-                //         // พี่เลี้ยงคนเดียว — แสดงเหมือนเดิม
-                //         const currentEval = item.evaluations.find((e: any) => e.title === title);
-                //         const row: any = {
-                //             'รหัสประจำตัว': item.student?.student_code,
-                //             'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
-                //         };
-                //         if (currentEval) {
-                //             currentEval.answers.forEach((ans: any, idx: number) => {
-                //                 row[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
-                //             });
-                //             const maxCur = (currentEval.answers?.length || 0) * 5;
-                //             row[`รวม ${config.short} (ดิบ/เต็ม)`] = currentEval.rawScore !== null ? `${currentEval.rawScore}/${maxCur}` : 'N/A';
-                //             row[`สุทธิหมวดนี้ (${(currentEval.weight * 100)}%)`] = currentEval.rawScore ? ((currentEval.rawScore / maxCur) * (currentEval.weight * 100)).toFixed(2) : 'N/A';
-                //             row['ข้อเสนอแนะ'] = currentEval?.comment || '-';
-                //         }
-                //         row['ผู้ประเมิน'] = item.supervisorEvaluations?.[0]?.supervisorName || '-';
-                //         sheetData.push(row);
-                //     }
-                // });
+                const summaryData = exportData.map((item: any) => {
+                    const row: any = {
+                        'รหัสนักศึกษา': item.student?.student_code,
+                        'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
+                        'สถานที่ฝึก': item.place?.site_name || '-',
+                    };
 
-                // ภายใน allEvalTitles.forEach และ data.forEach
-                data.forEach(item => {
-                    // 1. หาว่าใน "แบบประเมินหัวข้อนี้" มีพี่เลี้ยงประเมินมากี่คน
-                    const relevantEvals = item.supervisorEvaluations?.filter((sv: any) =>
-                        sv.evaluations.some((e: any) => e.title === title && e.rawScore !== null)
-                    ) || [];
+                    let totalNetScore = 0;
+                    let latestDate: Date | null = null;
 
-                    const hasMultipleEvaluators = relevantEvals.length > 1;
+                    item.evaluations.forEach((evalItem: any) => {
+                        const shortName = shortNames[evalItem.title] || evalItem.title.replace('แบบประเมินการ', '').trim();
+                        const maxScore = (evalItem.answers?.length || 0) * 5;
+                        const netScore = evalItem.rawScore ? (evalItem.rawScore / maxScore) * (evalItem.weight * 100) : 0;
+                        row[shortName] = netScore !== 0 ? netScore.toFixed(2) : '-';
+                        totalNetScore += netScore;
 
-                    // 2. ถ้ามีคนประเมินมากกว่า 1 คน ให้แยกแถวรายคน + แถวเฉลี่ย
-                    if (hasMultipleEvaluators) {
-                        // --- 🆕 ส่วนแสดงแถวรายพี่เลี้ยง (เฉพาะคนที่มีคะแนน) ---
-                        relevantEvals.forEach((sv: any) => {
-                            const svEval = sv.evaluations.find((e: any) => e.title === title);
+                        if (evalItem.evaluatedAt) {
+                            const d = new Date(evalItem.evaluatedAt);
+                            if (!latestDate || d > latestDate) latestDate = d;
+                        }
+                    });
+
+                    row['รวมสุทธิ (100)'] = totalNetScore.toFixed(2);
+                    const dateObj = latestDate as Date | null;
+                    row['ประเมินล่าสุดเมื่อ'] = dateObj ? dateObj.toLocaleDateString('th-TH') : '-';
+                    row['สถานะ (>50)'] = totalNetScore >= 50 ? 'ผ่าน' : 'รอประเมิน';
+                    return row;
+                });
+
+                const summaryWorksheet = XLSX.utils.json_to_sheet(summaryData);
+                summaryWorksheet['!cols'] = [
+                    { wch: 12 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 15 },
+                    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 20 },
+                ];
+
+                const range = XLSX.utils.decode_range(summaryWorksheet['!ref'] || 'A1');
+                for (let C = range.s.c; C <= range.e.c; ++C) {
+                    const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+                    if (!summaryWorksheet[addr]) continue;
+                    summaryWorksheet[addr].s = {
+                        fill: { fgColor: { rgb: "105030" } },
+                        font: { color: { rgb: "FFFFFF" }, bold: true },
+                        alignment: { horizontal: "center", vertical: "center" },
+                        border: {
+                            top: { style: "thin", color: { rgb: "000000" } },
+                            bottom: { style: "thin", color: { rgb: "000000" } }
+                        }
+                    };
+                }
+
+                XLSX.utils.book_append_sheet(workbook, summaryWorksheet, "สรุปผลคะแนนรวม");
+
+                allEvalTitles.forEach((title: any) => {
+                    const titleStr = title as string;
+                    const config = evaluationSettings[titleStr] || { short: titleStr.replace('แบบประเมิน', '').trim(), color: defaultColor };
+                    const sheetData: any[] = [];
+
+                    exportData.forEach((item: any) => {
+                        const relevantEvals = item.supervisorEvaluations?.filter((sv: any) =>
+                            sv.evaluations.some((e: any) => e.title === title && e.rawScore !== null)
+                        ) || [];
+
+                        const hasMultipleEvaluators = relevantEvals.length > 1;
+
+                        if (hasMultipleEvaluators) {
+                            relevantEvals.forEach((sv: any) => {
+                                const svEval = sv.evaluations.find((e: any) => e.title === title);
+                                const row: any = {
+                                    'รหัสประจำตัว': item.student?.student_code,
+                                    'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
+                                    'สถานที่ฝึก': item.place?.site_name || '-',
+                                };
+                                if (svEval) {
+                                    svEval.answers.forEach((ans: any, idx: number) => {
+                                        row[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
+                                    });
+                                    const maxCur = (svEval.answers?.length || 0) * 5;
+                                    row[`รวม ${config.short} (ดิบ/เต็ม)`] = `${svEval.rawScore}/${maxCur}`;
+                                    row[`สุทธิหมวดนี้ (${(svEval.weight * 100)}%)`] = svEval.rawScore ? ((svEval.rawScore / maxCur) * (svEval.weight * 100)).toFixed(2) : 'N/A';
+                                    row['วันที่ประเมิน'] = svEval.evaluatedAt ? new Date(svEval.evaluatedAt).toLocaleDateString('th-TH') : '-';
+                                    row['ข้อเสนอแนะ'] = svEval.comment || '-';
+                                }
+                                row['ผู้ประเมิน'] = sv.supervisorName;
+                                row['_rowType'] = 'mentor';
+                                sheetData.push(row);
+                            });
+
+                            const avgEval = item.evaluations.find((e: any) => e.title === title);
+                            const avgRow: any = {
+                                'รหัสประจำตัว': item.student?.student_code,
+                                'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
+                                'สถานที่ฝึก': item.place?.site_name || '-',
+                            };
+                            if (avgEval) {
+                                avgEval.answers.forEach((ans: any, idx: number) => {
+                                    avgRow[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
+                                });
+                                const maxCur = (avgEval.answers?.length || 0) * 5;
+                                avgRow[`รวม ${config.short} (ดิบ/เต็ม)`] = `${avgEval.rawScore}/${maxCur}`;
+                                avgRow[`สุทธิหมวดนี้ (${(avgEval.weight * 100)}%)`] = avgEval.rawScore ? ((avgEval.rawScore / maxCur) * (avgEval.weight * 100)).toFixed(2) : 'N/A';
+                                avgRow['วันที่ประเมินล่าสุด'] = avgEval.evaluatedAt ? new Date(avgEval.evaluatedAt).toLocaleDateString('th-TH') : '-';
+                                avgRow['ข้อเสนอแนะ'] = avgEval.comment || '-';
+                            }
+                            avgRow['ผู้ประเมิน'] = `⭐ เฉลี่ย (${relevantEvals.length} คน)`;
+                            avgRow['_rowType'] = 'average';
+                            sheetData.push(avgRow);
+                        } else {
+                            const currentEval = item.evaluations.find((e: any) => e.title === title);
                             const row: any = {
                                 'รหัสประจำตัว': item.student?.student_code,
                                 'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
                                 'สถานที่ฝึก': item.place?.site_name || '-',
                             };
-                            if (svEval) {
-                                svEval.answers.forEach((ans: any, idx: number) => {
+                            if (currentEval) {
+                                currentEval.answers.forEach((ans: any, idx: number) => {
                                     row[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
                                 });
-                                const maxCur = (svEval.answers?.length || 0) * 5;
-                                row[`รวม ${config.short} (ดิบ/เต็ม)`] = `${svEval.rawScore}/${maxCur}`;
-                                row[`สุทธิหมวดนี้ (${(svEval.weight * 100)}%)`] = svEval.rawScore ? ((svEval.rawScore / maxCur) * (svEval.weight * 100)).toFixed(2) : 'N/A';
-                                row['ข้อเสนอแนะ'] = svEval.comment || '-';
+                                const maxCur = (currentEval.answers?.length || 0) * 5;
+                                row[`รวม ${config.short} (ดิบ/เต็ม)`] = currentEval.rawScore !== null ? `${currentEval.rawScore}/${maxCur}` : 'N/A';
+                                row[`สุทธิหมวดนี้ (${(currentEval.weight * 100)}%)`] = currentEval.rawScore ? ((currentEval.rawScore / maxCur) * (currentEval.weight * 100)).toFixed(2) : 'N/A';
+                                row['วันที่ประเมิน'] = currentEval.evaluatedAt ? new Date(currentEval.evaluatedAt).toLocaleDateString('th-TH') : '-';
+                                row['ข้อเสนอแนะ'] = currentEval?.comment || '-';
                             }
-                            row['ผู้ประเมิน'] = sv.supervisorName;
-                            row['_rowType'] = 'mentor';
+                            row['ผู้ประเมิน'] = relevantEvals[0]?.supervisorName || '-';
                             sheetData.push(row);
-                        });
-
-                        // --- 🆕 ส่วนแสดงแถวเฉลี่ย (เฉพาะเมื่อมี 2 คนขึ้นไปประเมินใบนี้) ---
-                        const avgEval = item.evaluations.find((e: any) => e.title === title);
-                        const avgRow: any = {
-                            'รหัสประจำตัว': item.student?.student_code,
-                            'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
-                            'สถานที่ฝึก': item.place?.site_name || '-',
-
-                        };
-                        if (avgEval) {
-                            avgEval.answers.forEach((ans: any, idx: number) => {
-                                avgRow[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
-                            });
-                            const maxCur = (avgEval.answers?.length || 0) * 5;
-                            avgRow[`รวม ${config.short} (ดิบ/เต็ม)`] = `${avgEval.rawScore}/${maxCur}`;
-                            avgRow[`สุทธิหมวดนี้ (${(avgEval.weight * 100)}%)`] = avgEval.rawScore ? ((avgEval.rawScore / maxCur) * (avgEval.weight * 100)).toFixed(2) : 'N/A';
-                            avgRow['ข้อเสนอแนะ'] = avgEval.comment || '-';
                         }
-                        avgRow['ผู้ประเมิน'] = `⭐ เฉลี่ย (${relevantEvals.length} คน)`;
-                        avgRow['_rowType'] = 'average';
-                        sheetData.push(avgRow);
+                    });
 
-                    } else {
-                        // --- กรณีประเมินคนเดียว หรือ ไม่มีใครประเมินเลยในใบนี้ ---
-                        const currentEval = item.evaluations.find((e: any) => e.title === title);
-                        const row: any = {
-                            'รหัสประจำตัว': item.student?.student_code,
-                            'ชื่อ-นามสกุล': `${item.student?.first_name} ${item.student?.last_name}`,
-                            'สถานที่ฝึก': item.place?.site_name || '-',
+                    const rowTypes = sheetData.map(r => r._rowType || 'normal');
+                    sheetData.forEach(r => delete r._rowType);
 
-                        };
-                        // console.log('Current Item:', item)
-                        if (currentEval) {
-                            currentEval.answers.forEach((ans: any, idx: number) => {
-                                row[`ข้อที่ ${idx + 1}`] = ans.score || 'N/A';
-                            });
-                            const maxCur = (currentEval.answers?.length || 0) * 5;
-                            row[`รวม ${config.short} (ดิบ/เต็ม)`] = currentEval.rawScore !== null ? `${currentEval.rawScore}/${maxCur}` : 'N/A';
-                            row[`สุทธิหมวดนี้ (${(currentEval.weight * 100)}%)`] = currentEval.rawScore ? ((currentEval.rawScore / maxCur) * (currentEval.weight * 100)).toFixed(2) : 'N/A';
-                            row['ข้อเสนอแนะ'] = currentEval?.comment || '-';
+                    const worksheet = XLSX.utils.json_to_sheet(sheetData);
+                    applyStyles(worksheet, evaluationSettings, defaultColor, summaryColor, 'detail');
+
+                    const wsRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+                    rowTypes.forEach((type, rowIdx) => {
+                        if (type === 'normal') return;
+                        const bgColor = type === 'average' ? 'E8F5E9' : 'FFF8E1';
+                        const fontWeight = type === 'average';
+                        for (let C = wsRange.s.c; C <= wsRange.e.c; ++C) {
+                            const addr = XLSX.utils.encode_cell({ r: rowIdx + 1, c: C });
+                            if (!worksheet[addr]) worksheet[addr] = { v: '', t: 's' };
+                            worksheet[addr].s = {
+                                ...(worksheet[addr].s || {}),
+                                fill: { fgColor: { rgb: bgColor } },
+                                font: { bold: fontWeight, color: { rgb: type === 'average' ? '1B5E20' : '000000' } }
+                            };
                         }
-                        // แสดงชื่อผู้ประเมินคนแรกที่เจอ (ถ้ามี)
-                        row['ผู้ประเมิน'] = relevantEvals[0]?.supervisorName || '-';
-                        sheetData.push(row);
-                    }
+                    });
+
+                    XLSX.utils.book_append_sheet(workbook, worksheet, config.short.substring(0, 31));
                 });
+            }
 
-                // ลบ _rowType ก่อนสร้าง sheet แต่เก็บไว้ใช้ highlight
-                const rowTypes = sheetData.map(r => r._rowType || 'normal');
-                sheetData.forEach(r => delete r._rowType);
-
-                const worksheet = XLSX.utils.json_to_sheet(sheetData);
-                applyStyles(worksheet, evaluationSettings, defaultColor, summaryColor, 'detail');
-
-                // 🆕 Highlight แถวพี่เลี้ยงและเฉลี่ย
-                const wsRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-                rowTypes.forEach((type, rowIdx) => {
-                    if (type === 'normal') return;
-                    const bgColor = type === 'average' ? 'E8F5E9' : 'FFF8E1'; // เขียวอ่อน = เฉลี่ย, เหลืองอ่อน = พี่เลี้ยง
-                    const fontWeight = type === 'average';
-                    for (let C = wsRange.s.c; C <= wsRange.e.c; ++C) {
-                        const addr = XLSX.utils.encode_cell({ r: rowIdx + 1, c: C }); // +1 เพราะ header อยู่แถว 0
-                        if (!worksheet[addr]) worksheet[addr] = { v: '', t: 's' };
-                        worksheet[addr].s = {
-                            ...(worksheet[addr].s || {}),
-                            fill: { fgColor: { rgb: bgColor } },
-                            font: { bold: fontWeight, color: { rgb: type === 'average' ? '1B5E20' : '000000' } }
-                        };
-                    }
-                });
-
-                XLSX.utils.book_append_sheet(workbook, worksheet, config.short.substring(0, 31));
-            });
+            const fileName = exportData.length > 0 ? exportData[0].subjectName : 'สรุปผลรวม';
+            XLSX.writeFile(workbook, `Report_${fileName}_${new Date().toLocaleDateString()}.xlsx`);
+            Swal.close();
+        } catch (error) {
+            console.error('Export Excel error:', error);
+            Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถสร้างไฟล์ Excel ได้', 'error');
         }
-
-        const fileName = data.length > 0 ? data[0].subjectName : 'สรุปผลรวม';
-        XLSX.writeFile(workbook, `Report_${fileName}_${new Date().toLocaleDateString()}.xlsx`);
     };
+
 
     // 🚩 ปรับฟังก์ชันใส่สีและขนาดคอลัมน์
     const applyStyles = (worksheet: any, settings: any, defColor: string, sumColor: string, mode: 'summary' | 'detail') => {
@@ -995,7 +947,7 @@ export default function EvaluationSummary() {
                                     onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                                     className="bg-white border-none shadow-sm rounded-xl px-3 py-1.5 text-xs font-black text-slate-600 outline-none focus:ring-2 ring-indigo-500 cursor-pointer transition-all hover:shadow-md"
                                 >
-                                    {[5, 10, 20, 50].map(val => <option key={val} value={val}>{val}</option>)}
+                                    {[5, 10, 20, 50, 100, 500].map(val => <option key={val} value={val}>{val}</option>)}
                                 </select>
                                 <p className="text-xs font-bold text-slate-400 ml-2">
                                     {totalCount === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, totalCount)} จาก {totalCount} รายการ

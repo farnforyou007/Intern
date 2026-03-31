@@ -16,6 +16,14 @@ export async function POST(req: Request) {
         const { idToken } = await req.json()
         if (!idToken) throw new Error('ID Token is required')
 
+        // 🔍 Diagnostic: ตรวจสอบว่า SERVICE_ROLE_KEY มีจริงไหมตอน runtime
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+        console.log('🔑 [Bridge] ENV Diagnostic:', {
+            hasServiceRole: !!serviceRoleKey,
+            serviceRoleKeyLength: serviceRoleKey?.length || 0,
+            serviceRoleKeyPrefix: serviceRoleKey?.substring(0, 20) || 'MISSING'
+        })
+
         // 1. Verify LINE Token
         const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
         if (!liffId) {
@@ -159,49 +167,80 @@ export async function POST(req: Request) {
                 loginEmail
             })
 
-            // ✅ ใช้ supabaseAdmin เพื่อข้าม RLS (แก้ปัญหา user_id ไม่ตรงหลังซ่อมรหัสผ่าน)
-            const { data: supervisor, error: supervisorError } = await getAdmin()
-                .from('supervisors')
-                .select('id, user_id, role, is_verified')
-                .eq('line_user_id', lineUserId)
-                .maybeSingle()
+            // ✅ ลำดับที่ 1: ใช้ supabaseAdmin (bypass RLS)
+            let finalSupervisor = null as any
+            let adminWorked = false
 
-            if (supervisorError) {
-                console.error('❌ [Bridge] Supervisor lookup error:', supervisorError.message);
-            }
-
-            // 🔄 Fallback: ถ้าค้นด้วย line_user_id ไม่เจอ → ลองค้นด้วย user_id
-            let finalSupervisor = supervisor
-            if (!finalSupervisor && !supervisorError) {
-                console.log('⚠️ [Bridge] Supervisor not found by line_user_id, trying user_id fallback...', { lineUserId, authUserId: user.id })
-
-                const { data: fallbackSv, error: fallbackError } = await getAdmin()
+            if (serviceRoleKey) {
+                const { data: supervisor, error: supervisorError } = await getAdmin()
                     .from('supervisors')
-                    .select('id, user_id, role, is_verified, line_user_id')
-                    .eq('user_id', user.id)
+                    .select('id, user_id, role, is_verified')
+                    .eq('line_user_id', lineUserId)
                     .maybeSingle()
 
-                if (fallbackError) {
-                    console.error('❌ [Bridge] Fallback lookup error:', fallbackError.message);
+                if (supervisorError) {
+                    console.error('❌ [Bridge] Admin lookup error:', supervisorError.message);
+                } else if (supervisor) {
+                    finalSupervisor = supervisor
+                    adminWorked = true
+                } else {
+                    // Fallback: ค้นด้วย user_id
+                    const { data: fallbackSv, error: fallbackError } = await getAdmin()
+                        .from('supervisors')
+                        .select('id, user_id, role, is_verified, line_user_id')
+                        .eq('user_id', user.id)
+                        .maybeSingle()
+
+                    if (fallbackError) {
+                        console.error('❌ [Bridge] Admin user_id fallback error:', fallbackError.message);
+                    } else if (fallbackSv) {
+                        finalSupervisor = fallbackSv
+                        adminWorked = true
+                        await getAdmin().from('supervisors').update({ line_user_id: lineUserId }).eq('id', fallbackSv.id)
+                    }
+                }
+            }
+
+            // ✅ ลำดับที่ 2: ถ้า Admin Client ไม่เจอ → ใช้ Session Client (ไม่ต้องพึ่ง SERVICE_ROLE_KEY)
+            if (!finalSupervisor) {
+                console.log('🔄 [Bridge] Admin lookup returned null, trying SESSION-based fallback...')
+
+                // ค้นด้วย line_user_id ผ่าน session client
+                const { data: sessionSv, error: sessionErr } = await supabase
+                    .from('supervisors')
+                    .select('id, user_id, role, is_verified')
+                    .eq('line_user_id', lineUserId)
+                    .maybeSingle()
+
+                if (sessionErr) {
+                    console.error('❌ [Bridge] Session line_user_id lookup error:', sessionErr.message);
                 }
 
-                if (fallbackSv) {
-                    console.log('✅ [Bridge] Found via user_id fallback! Repairing line_user_id...', {
-                        supervisorId: fallbackSv.id,
-                        oldLineUserId: fallbackSv.line_user_id,
-                        newLineUserId: lineUserId
-                    })
-                    // Auto-repair: อัพเดท line_user_id ให้ตรงกับที่ LINE ส่งมาจริง
-                    await getAdmin()
+                if (sessionSv) {
+                    console.log('✅ [Bridge] Found via SESSION client (line_user_id)!')
+                    finalSupervisor = sessionSv
+                } else {
+                    // Fallback สุดท้าย: ค้นด้วย user_id ผ่าน session client
+                    const { data: sessionFb, error: sessionFbErr } = await supabase
                         .from('supervisors')
-                        .update({ line_user_id: lineUserId })
-                        .eq('id', fallbackSv.id)
-                    finalSupervisor = fallbackSv
+                        .select('id, user_id, role, is_verified')
+                        .eq('user_id', user.id)
+                        .maybeSingle()
+
+                    if (sessionFbErr) {
+                        console.error('❌ [Bridge] Session user_id fallback error:', sessionFbErr.message);
+                    }
+
+                    if (sessionFb) {
+                        console.log('✅ [Bridge] Found via SESSION client (user_id)!')
+                        finalSupervisor = sessionFb
+                    }
                 }
             }
 
             console.log('📋 [Bridge] Supervisor lookup result:', {
                 found: !!finalSupervisor,
+                method: adminWorked ? 'admin_client' : (finalSupervisor ? 'session_client' : 'none'),
                 supervisorId: finalSupervisor?.id,
                 supervisorRole: finalSupervisor?.role,
                 isVerified: finalSupervisor?.is_verified
@@ -216,30 +255,58 @@ export async function POST(req: Request) {
                     redirectTo = finalSupervisor.role === 'teacher' ? '/teacher/dashboard' : '/supervisor/dashboard'
                 }
 
-                // Sync critical role data to Supabase Metadata for Middleware protection
-                if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-                    const supabaseAdmin = createClient(
-                        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-                        { auth: { autoRefreshToken: false, persistSession: false } }
-                    )
-                    await supabaseAdmin.auth.admin.updateUserById(user.id, {
-                        user_metadata: {
-                            ...(user.user_metadata || {}),
+                // 🔄 Sync critical role data to Auth Metadata (REQUIRED for Middleware)
+                // 1. Try Admin Sync (Bypasses any Auth restrictions)
+                if (serviceRoleKey) {
+                    try {
+                        const supabaseAdmin = createClient(
+                            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                            serviceRoleKey,
+                            { auth: { autoRefreshToken: false, persistSession: false } }
+                        )
+                        await supabaseAdmin.auth.admin.updateUserById(user.id, {
+                            user_metadata: {
+                                ...(user.user_metadata || {}),
+                                role: finalSupervisor.role,
+                                is_verified: finalSupervisor.is_verified,
+                                line_user_id: lineUserId
+                            }
+                        })
+                        console.log('✅ [Bridge] Metadata synced via ADMIN')
+                    } catch (e: any) {
+                        console.error('⚠️ [Bridge] Admin metadata sync failed:', e.message)
+                    }
+                }
+
+                // 2. Fallback: User-Level Sync (Always works if logged in, doesn't need service key)
+                try {
+                    await supabase.auth.updateUser({
+                        data: {
                             role: finalSupervisor.role,
                             is_verified: finalSupervisor.is_verified,
                             line_user_id: lineUserId
                         }
                     })
+                    console.log('✅ [Bridge] Metadata synced via SESSION fallback')
+                } catch (e: any) {
+                    console.error('⚠️ [Bridge] Session metadata sync failed:', e.message)
                 }
 
                 // Update link if missing or changed (e.g. after re-creation)
                 if (finalSupervisor.user_id !== user.id) {
                     console.log('🔧 [Bridge] Updating supervisor user_id link:', { old: finalSupervisor.user_id, new: user.id });
-                    await getAdmin()
-                        .from('supervisors')
-                        .update({ user_id: user.id })
-                        .eq('id', finalSupervisor.id)
+                    // Try admin update first, then session update
+                    if (serviceRoleKey) {
+                        await getAdmin()
+                            .from('supervisors')
+                            .update({ user_id: user.id })
+                            .eq('id', finalSupervisor.id)
+                    } else {
+                        await supabase
+                            .from('supervisors')
+                            .update({ user_id: user.id })
+                            .eq('id', finalSupervisor.id)
+                    }
                 }
 
                 return NextResponse.json({ success: true, redirectTo, user, session })

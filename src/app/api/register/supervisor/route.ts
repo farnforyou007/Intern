@@ -158,12 +158,28 @@ export async function POST(request: Request) {
                 }
             })
             if (authUpdateError) {
-                console.error('Failed to sync metadata to Auth:', authUpdateError.message)
+                console.error('Failed to sync metadata to Auth via Admin:', authUpdateError.message)
+                // ✅ Fallback: Try User-Level Sync (Always works if logged in)
+                const { createServerSupabase } = await import('@/lib/supabase-server')
+                const supabase = await createServerSupabase()
+                const { error: sessionUpdateError } = await supabase.auth.updateUser({
+                    data: {
+                        role: role,
+                        is_verified: false,
+                        line_user_id: lineUserId,
+                        full_name: fullName || user.user_metadata?.full_name
+                    }
+                })
+                if (sessionUpdateError) {
+                    console.error('❌ Failed to sync metadata via Session:', sessionUpdateError.message)
+                } else {
+                    console.log('✅ Metadata synced via Session fallback')
+                }
             } else {
-                console.log('Successfully synced email + role to Auth:', { email, role })
+                console.log('Successfully synced email + role to Auth via Admin:', { email, role })
             }
         } catch (err) {
-            console.error('Error importing supabaseAdmin:', err)
+            console.error('Error during metadata sync:', err)
         }
 
 

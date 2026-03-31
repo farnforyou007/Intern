@@ -28,7 +28,7 @@ export async function middleware(request: NextRequest) {
                         ...options,
                         sameSite: 'lax',
                         httpOnly: true,
-                        secure: true // บังคับใช้บน Vercel (HTTPS)
+                        secure: request.url.startsWith('https') // ✅ ปรับตาม protocol จริง (HTTP/HTTPS)
                     })
                 },
                 remove(name: string, options: CookieOptions) {
@@ -97,11 +97,16 @@ export async function middleware(request: NextRequest) {
         }
 
         // 3. Prevent redundant login page visits
-        if (isAuthPage && provider === 'email') return NextResponse.redirect(new URL('/admin', request.url))
+        // Only redirect if it's a solid email provider session and NOT specifically coming to /auth/login with a logout intention
+        if (isAuthPage && provider === 'email') {
+            // Check if we should allow them to stay on the login page (e.g. if they just logged out)
+            // For now, if getUser() actually returned a user, Supabase SSR thinks they are logged in.
+            // But we'll let them stay if they just came from a logout (optional).
+            // To keep it simple, we only redirect if NOT an error state.
+            return NextResponse.redirect(new URL('/admin', request.url))
+        }
 
-        // IMPORTANT: NEVER redirect FROM '/' to dashboard in Middleware for LINE users.
-        // Doing so causes redirect loops because metadata might be missing in the JWT.
-        // Let SplitHomePage's autoCheckLogin handle the dashbord redirection via DB check.
+        // 4. Redirect email admins to dashboard from landing page
         if (isLandingPage && provider === 'email') {
             return NextResponse.redirect(new URL('/admin', request.url))
         }

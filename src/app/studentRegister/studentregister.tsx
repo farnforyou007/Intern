@@ -54,7 +54,7 @@ export default function StudentRegisterPage() {
     // ฟังก์ชันสำหรับดึงข้อมูล (ใช้ซ้ำได้ทั้งตอนโหลดครั้งแรกและตอน Real-time Update)
     const fetchSites = async (silent = false) => {
         if (!silent) setLoading(true)
-        const { data } = await supabase.from('training_sites').select('*')
+        const { data } = await supabase.from('training_sites').select('*').eq('is_hidden', false)
         if (data) {
             setSites(data)
             const uniqueProvinces = Array.from(new Set(data.map(item => item.province?.trim()).filter(Boolean))) as string[]

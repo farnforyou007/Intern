@@ -3,7 +3,7 @@ version: '3.8'
 services:
   internship-app:
     # ดึงอิมเมจจาก Docker Hub โดยตรง (ไม่ต้อง Build เอง)
-    image: farnforyou/internship-system:v1
+    image: farnforyou/internship-system:v9
     container_name: internship-app
     ports:
       - "3000:3000"

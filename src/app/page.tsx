@@ -64,7 +64,15 @@ export default function SplitHomePage() {
 
                     const data = await res.json();
                     if (res.ok && data.redirectTo) {
-                        router.replace(data.redirectTo);
+                        // ✅ Set session ฝั่ง client เพื่อให้ cookie ถูก set ใน LINE browser
+                        if (data.session?.access_token && data.session?.refresh_token) {
+                            await supabase.auth.setSession({
+                                access_token: data.session.access_token,
+                                refresh_token: data.session.refresh_token
+                            })
+                        }
+                        // ✅ ใช้ full page navigation เพื่อให้ cookie ถูกส่งไปกับ middleware
+                        window.location.href = data.redirectTo;
                         return;
                     }
                 }
@@ -103,7 +111,15 @@ export default function SplitHomePage() {
 
             if (res.ok) {
                 const data = await res.json()
-                router.replace(data.redirectTo || '/')
+                // ✅ Set session ฝั่ง client เพื่อให้ cookie ถูก set ใน LINE browser
+                if (data.session?.access_token && data.session?.refresh_token) {
+                    await supabase.auth.setSession({
+                        access_token: data.session.access_token,
+                        refresh_token: data.session.refresh_token
+                    })
+                }
+                // ✅ ใช้ full page navigation เพื่อให้ cookie ถูกส่งไปกับ middleware
+                window.location.href = data.redirectTo || '/'
             } else {
                 // Bridge ล้มเหลว → ลอง login ใหม่แทนการเด้งไป register ทันที
                 liff.login({ redirectUri: window.location.href })

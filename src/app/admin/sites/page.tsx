@@ -12,8 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import {
     Plus, Edit2, Trash2, MapPin, Search, X,
     Hospital, CalendarDays, ChevronRight, ChevronLeft,
-    FileText, StickyNote
+    FileText, StickyNote, EyeOff, Eye
 } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import Swal from 'sweetalert2'
 import {
     Tooltip,
@@ -61,6 +63,7 @@ export default function SitesPageV2() {
     const [province, setProvince] = useState('')
     const [note, setNote] = useState('') // เพิ่ม state หมายเหตุ
     const [provinceSearch, setProvinceSearch] = useState('')
+    const [isHidden, setIsHidden] = useState(false)
     const [errors, setErrors] = useState({
         siteName: false,
         province: false
@@ -135,12 +138,14 @@ export default function SitesPageV2() {
             setInviteCode(site.invite_code || '');
             setProvince(site.province || '');
             setNote(site.note || '');
+            setIsHidden(site.is_hidden || false);
         } else {
             setSelectedSite(null);
             setSiteName('');
             setInviteCode('');
             setProvince('');
             setNote('');
+            setIsHidden(false);
         }
         setProvinceSearch('');
         setErrors({ siteName: false, province: false });
@@ -160,7 +165,8 @@ export default function SitesPageV2() {
             site_name: siteName,
             invite_code: inviteCode || 'PENDING', // ใส่ค่า default ถ้ายังไม่มี
             province: province,
-            note: note // ส่งค่าหมายเหตุ
+            note: note,
+            is_hidden: isHidden
         }
 
         try {
@@ -210,6 +216,35 @@ export default function SitesPageV2() {
             } catch (error: any) {
                 Swal.fire('Error', error.message, 'error')
             }
+        }
+    }
+
+    const handleToggleHide = async (site: any) => {
+        const newStatus = !site.is_hidden;
+        try {
+            const res = await fetch('/api/admin/sites', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save',
+                    siteId: site.id,
+                    payload: { is_hidden: newStatus }
+                })
+            })
+            const result = await res.json()
+            if (!result.success) throw new Error(result.error)
+
+            setSites(prev => prev.map(item =>
+                item.id === site.id ? { ...item, is_hidden: newStatus } : item
+            ))
+            Swal.fire({
+                icon: 'success',
+                title: newStatus ? 'ซ่อนแหล่งฝึกแล้ว' : 'แสดงแหล่งฝึกแล้ว',
+                timer: 1000,
+                showConfirmButton: false
+            })
+        } catch (error: any) {
+            Swal.fire('Error', error.message, 'error')
         }
     }
 
@@ -353,7 +388,14 @@ export default function SitesPageV2() {
                                 paginatedSites.map((site) => (
                                     <TableRow key={site.id} className="hover:bg-slate-50/50 transition-colors group">
                                         <TableCell className="px-8 py-5">
-                                            <div className="font-bold text-slate-800 text-lg leading-tight">{site.site_name}</div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="font-bold text-slate-800 text-lg leading-tight">{site.site_name}</div>
+                                                {site.is_hidden && (
+                                                    <Badge variant="secondary" className="bg-amber-100 text-amber-600 border-none font-bold text-[10px] uppercase flex gap-1 items-center">
+                                                        <EyeOff size={10} /> Hidden
+                                                    </Badge>
+                                                )}
+                                            </div>
                                             <div className="flex items-center gap-4 mt-1.5">
                                                 <div className="flex items-center gap-1 text-slate-400">
                                                     <MapPin size={13} className="text-amber-500" />
@@ -377,6 +419,24 @@ export default function SitesPageV2() {
                                         </TableCell>
                                         <TableCell className="text-right px-8">
                                             <div className="flex justify-end gap-1">
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className={`h-10 w-10 rounded-xl transition-colors ${site.is_hidden ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-50' : 'text-slate-300 hover:text-blue-600 hover:bg-blue-50'}`}
+                                                                onClick={() => handleToggleHide(site)}
+                                                            >
+                                                                {site.is_hidden ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                            </Button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent className="font-bold text-xs">
+                                                            {site.is_hidden ? 'แสดงแหล่งฝึก' : 'ซ่อนแหล่งฝึก'}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+
                                                 <Button variant="ghost" size="icon" className="h-10 w-10 text-slate-300 hover:text-blue-600 rounded-xl" onClick={() => onOpenModal(site)}>
                                                     <Edit2 size={18} />
                                                 </Button>
@@ -515,6 +575,25 @@ export default function SitesPageV2() {
                                 placeholder="เช่น ติดต่อคุณหมอสมชาย, อยู่ติดกับวัดเก่า ฯลฯ"
                                 className="w-full min-h-[120px] p-5 rounded-2xl text-lg font-medium border-2 bg-slate-50/50 border-slate-100 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300"
                             />
+                        </div>
+                        {/* ช่องซ่อนแหล่งฝึก */}
+                        <div className="flex items-center space-x-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                            <Checkbox 
+                                id="isHidden" 
+                                checked={isHidden} 
+                                onCheckedChange={(checked) => setIsHidden(checked === true)}
+                            />
+                            <div className="grid gap-1.5 leading-none">
+                                <label
+                                    htmlFor="isHidden"
+                                    className="text-sm font-black leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer text-slate-700"
+                                >
+                                    ซ่อนแหล่งฝึกนี้
+                                </label>
+                                <p className="text-[10px] font-bold text-slate-400">
+                                    หากเปิดใช้ แหล่งฝึกนี้จะไม่แสดงในหน้าลงทะเบียนสำหรับนักศึกษา
+                                </p>
+                            </div>
                         </div>
                     </div>
 
